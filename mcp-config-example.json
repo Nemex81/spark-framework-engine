@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "sparkFrameworkEngine": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "/path/to/spark-framework-engine/spark-framework-engine.py"
+      ],
+      "env": {
+        "WORKSPACE_FOLDER": "${workspaceFolder}"
+      }
+    }
+  }
+}
