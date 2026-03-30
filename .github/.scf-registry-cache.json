@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-03-30T15:17:00Z",
+  "packages": [
+    {
+      "id": "scf-pycode-crafter",
+      "repo_url": "https://github.com/Nemex81/scf-pycode-crafter",
+      "latest_version": "1.0.0",
+      "description": "Pacchetto SCF per progetti Python — agenti, skill e instruction per Copilot Agent mode",
+      "engine_min_version": "1.0.0",
+      "status": "active",
+      "tags": ["python", "development", "copilot", "agenti"]
+    }
+  ]
+}
