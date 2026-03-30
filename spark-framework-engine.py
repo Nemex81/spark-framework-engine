@@ -707,7 +707,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 5 list + 5 template + 6 scf:// singletons (16 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 13 MCP tools."""
+        """Register all 15 MCP tools."""
         inventory = self._inventory
         executor = self._executor
 
