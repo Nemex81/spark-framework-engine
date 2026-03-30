@@ -46,7 +46,9 @@ tra protocollo e parser è rotto in silenzio.
 - Estendere `parse_markdown_frontmatter()` per riconoscere due formati lista YAML:
   1. Inline: `skills: [python, gamedev]` → `["python", "gamedev"]`
   2. Block: chiave seguita da righe con `  - valore` → `["valore1", "valore2"]`
+- Usare `unittest` (standard library) come framework di test, senza introdurre dipendenze esterne.
 - Aggiungere test unitari per entrambi i formati.
+- Coprire nei test anche input malformati e frontmatter assente o incompleto.
 - Non introdurre dipendenza da `PyYAML` o librerie esterne per mantenere il motore leggero.
   Parsing manuale con regex è sufficiente per il sottoinsieme YAML usato da SCF.
 
@@ -61,7 +63,7 @@ tra protocollo e parser è rotto in silenzio.
 ma non fornisce una specifica tecnica. Senza di essa il tool di installazione intelligente non
 può essere implementato in modo coerente.
 
-**Specifica proposta:**
+**1) Specifica (validabile nel repo corrente):**
 
 **Nome file:** `.github/.scf-manifest.json`
 **Formato:** JSON array di oggetti, uno per file SCF installato.
@@ -69,34 +71,44 @@ può essere implementato in modo coerente.
 Schema di ogni voce:
 ```json
 {
+  "schema_version": "1.0",
   "file": "agents/developer.md",
   "package": "scf-pack-gamedev",
   "package_version": "1.2.0",
   "installed_at": "2026-03-30T12:00:00Z",
-  "sha256": "abc123...",
-  "user_modified": false
+  "sha256": "abc123..."
 }
 ```
 
 **Campi:**
+- `schema_version`: versione dello schema del manifesto (stringa, obbligatorio)
 - `file`: percorso relativo alla root di `.github/` (stringa, obbligatorio)
 - `package`: nome identificativo del pacchetto di origine (stringa, obbligatorio)
 - `package_version`: versione del pacchetto al momento dell'installazione (stringa semver, obbligatorio)
 - `installed_at`: timestamp ISO 8601 UTC (stringa, obbligatorio)
 - `sha256`: hash SHA-256 del contenuto del file al momento dell'installazione (stringa, obbligatorio)
-- `user_modified`: true se il file è stato modificato rispetto all'hash di installazione (booleano)
+- `user_modified`: valore calcolato on-demand confrontando l'hash salvato nel manifesto con l'hash corrente del file su disco; non viene persistito nel file
 
 **Rilevamento modifiche:** confronto SHA-256 tra hash salvato nel manifesto e hash corrente del file
 su disco. Il calcolo avviene on-demand al momento dell'aggiornamento, non continuamente.
 Il mtime del filesystem non viene usato (inaffidabile su Windows con OneDrive/cloud sync).
 
+**Comportamento dei casi speciali:**
+- **File rimosso localmente:** la voce resta nel manifesto fino al prossimo aggiornamento o verifica esplicita, dove viene marcata come file mancante e trattata come divergenza da risolvere.
+- **File rinominato localmente:** non viene inferito automaticamente come rename; il vecchio percorso risulta mancante e il nuovo file risulta non gestito finché l'utente o il tool non aggiorna il manifesto esplicitamente.
+- **Disinstallazione di pacchetto:** il motore rimuove dal manifesto tutte le voci associate al pacchetto e cancella solo i file ancora allineati all'hash installato; i file modificati dall'utente vengono preservati e segnalati come residui locali.
+
 **Perché non git diff:** richiederebbe che il workspace sia un git repo e che il motore abbia
 accesso a git — dipendenza esterna non garantita. SHA-256 è self-contained.
 
-**Intervento:**
+**2) Implementazione locale (nel motore):**
 - Aggiungere la specifica del manifesto a `SCF-PROJECT-DESIGN.md` come nuova sezione.
 - Implementare `ManifestManager` in `spark-framework-engine.py`: lettura, scrittura,
-  aggiornamento di singole voci, calcolo SHA-256, rilevamento `user_modified`.
+  aggiornamento di singole voci, calcolo SHA-256 e valutazione on-demand di `user_modified`.
+
+**3) Infrastruttura esterna (repo o servizi separati):**
+- Nessuna infrastruttura esterna richiesta per la v1 del manifesto.
+- Criterio di accettazione indipendente: il formato deve essere documentato e implementabile interamente nel repo del motore, senza dipendenze su servizi remoti.
 
 **File da modificare:** `SCF-PROJECT-DESIGN.md`, `spark-framework-engine.py`
 
@@ -108,7 +120,7 @@ accesso a git — dipendenza esterna non garantita. SHA-256 è self-contained.
 definisce il formato del file indice, lo schema dei campi, il protocollo di interrogazione
 del motore, né il comportamento in caso di mancata connessione.
 
-**Specifica proposta:**
+**1) Specifica (validabile nel repo corrente):**
 
 **Repo:** `scf-registry` (GitHub, pubblico, read-only per utenti)
 **File indice:** `registry.json` nella root del repo
@@ -132,22 +144,29 @@ Schema del file indice:
 }
 ```
 
-**Protocollo di interrogazione:** HTTP GET sul raw URL di GitHub
+**Protocollo di interrogazione v1:** HTTP GET sul raw URL di GitHub
 (`https://raw.githubusercontent.com/Nemex81/scf-registry/main/registry.json`).
-Nessun clone locale, nessuna autenticazione richiesta per lettura.
+Nessun clone locale, nessuna autenticazione richiesta per lettura. La v1 supporta solo
+pacchetti pubblici raggiungibili senza credenziali.
 
 **Comportamento offline:** se la richiesta fallisce (timeout 5s), il motore usa l'ultima
 copia locale cachata in `.github/.scf-registry-cache.json`. Se non esiste nemmeno quella,
 restituisce errore esplicito senza crashare.
 
-**Scoperta diretta (pacchetti privati):** il motore accetta anche URL diretto al `registry.json`
-di un repo privato come parametro al tool di installazione, bypassando il registry centrale.
+**Repo privati:** fuori scope per la v1. Il supporto a registry o pacchetti privati resta
+un'estensione futura documentata ma non implementata. Se l'utente fornisce una URL privata
+senza autenticazione valida, il motore deve restituire errore esplicito e non deve tentare
+in modo implicito l'accesso a raw URL privati.
 
-**Intervento:**
+**2) Implementazione locale (nel motore):**
 - Aggiungere la specifica del registry a `SCF-PROJECT-DESIGN.md`.
-- Creare il repo `scf-registry` con `registry.json` iniziale (vuoto con schema valido).
 - Implementare `RegistryClient` in `spark-framework-engine.py`: fetch con timeout, cache locale,
   fallback offline.
+
+**3) Infrastruttura esterna (repo o servizi separati):**
+- Creare il repo `scf-registry` con `registry.json` iniziale (vuoto con schema valido).
+- Trattare `scf-registry` come milestone esterna con criteri di accettazione indipendenti dal motore.
+- Criterio di accettazione indipendente: il motore deve funzionare anche in assenza del repo, restituendo un errore esplicito o usando la cache locale se disponibile.
 
 **File da modificare:** `SCF-PROJECT-DESIGN.md`, `spark-framework-engine.py`
 **Repo da creare:** `scf-registry`
@@ -159,29 +178,40 @@ di un repo privato come parametro al tool di installazione, bypassando il regist
 ### B1 — Definire lo schema di versioning del motore
 
 **Problema:** Il documento promette "verifica della compatibilità dei file esistenti con il nuovo
-protocollo" e "migrazione assistita", ma non esiste uno schema di versioning del motore né una
-definizione di cosa significa "incompatibile".
+protocollo" e "migrazione assistita", ma non separa chiaramente la versione interna del motore
+dalla versione del protocollo SCF usata dal workspace. Senza questa distinzione, il concetto di
+compatibilità resta ambiguo.
 
-**Schema proposto:** Semver standard (`MAJOR.MINOR.PATCH`).
+**Schema proposto:** semver standard (`MAJOR.MINOR.PATCH`) applicato separatamente a
+`engine_version` e `protocol_version`.
 
-**Semantica:**
-- `PATCH`: bugfix, nessun impatto sul protocollo SCF → nessuna migrazione necessaria.
-- `MINOR`: nuovi campi opzionali o nuovi tipi di file → degradazione graziosa automatica,
-  nessuna migrazione obbligatoria.
-- `MAJOR`: campi obbligatori rinominati, tipi di file rimossi, struttura cartelle cambiata
-  → migrazione assistita proposta al primo avvio.
+**Versioni distinte:**
+- `engine_version`: versione interna di `spark-framework-engine`, vive nel repo del motore come costante Python `ENGINE_VERSION` in `spark-framework-engine.py`.
+- `protocol_version`: versione del protocollo SCF dichiarata dal workspace e dai pacchetti, vive in `.github/FRAMEWORK_CHANGELOG.md` del workspace.
 
-**Dove vive la versione del motore:** campo `engine_version` in
-`.github/FRAMEWORK_CHANGELOG.md` (già letto dal motore) come prima riga con formato
-`# [X.Y.Z] - YYYY-MM-DD`. Questo allinea il versioning del motore con il file già monitorato.
+**Semantica di `engine_version`:**
+- `PATCH`: bugfix o miglioramenti interni del server, nessun cambio al contratto di protocollo.
+- `MINOR`: nuove capacità del motore compatibili all'indietro, senza richiedere migrazione dei file SCF esistenti.
+- `MAJOR`: cambi strutturali del motore o dell'API locale del server che possono richiedere adeguamenti nel codice del motore o nei tool che lo integrano.
+
+**Semantica di `protocol_version`:**
+- `PATCH`: chiarimenti o correzioni senza impatto sul formato SCF.
+- `MINOR`: nuovi campi opzionali o nuovi tipi di file con degradazione graziosa automatica.
+- `MAJOR`: campi obbligatori rinominati, tipi di file rimossi o struttura cartelle cambiata; richiede migrazione assistita o adattamento esplicito.
+
+**Regola di compatibilità:** la compatibilità va verificata confrontando la `protocol_version`
+richiesta dal pacchetto con la `protocol_version` del workspace, non con la versione interna del server.
+La `engine_version` serve a tracciare l'evoluzione del motore, ma non definisce da sola la compatibilità
+dei file SCF installati.
 
 **Intervento:**
 - Aggiungere la sezione versioning a `SCF-PROJECT-DESIGN.md`.
-- Creare `.github/FRAMEWORK_CHANGELOG.md` nel repo `spark-framework-engine` come template
-  di riferimento per i progetti che usano SCF.
+- Introdurre `ENGINE_VERSION` in `spark-framework-engine.py` come costante esplicita del motore.
+- Usare `.github/FRAMEWORK_CHANGELOG.md` come riferimento per la `protocol_version` del workspace
+  e dei pacchetti, non come contenitore della versione interna del motore.
 
 **File da modificare:** `SCF-PROJECT-DESIGN.md`
-**File da creare:** `.github/FRAMEWORK_CHANGELOG.md` (template)
+**File da modificare in implementazione successiva:** `spark-framework-engine.py`, `.github/FRAMEWORK_CHANGELOG.md`
 
 ---
 
@@ -193,11 +223,10 @@ definizione di cosa significa "incompatibile".
 ma non scalabile con molti file SCF installati.
 
 **Intervento:**
-- Aggiungere un dizionario `_cache` e un flag `_cache_valid` a `FrameworkInventory`.
-- Esporre un metodo `invalidate_cache()` chiamabile dal tool di installazione dopo
-  modifiche al `.github/`.
-- Nessuna invalidazione automatica basata su tempo: il motore è stateless tra sessioni,
-  la cache vive solo per la durata del processo.
+- Trattare questo intervento come ottimizzazione successiva, non come prerequisito architetturale.
+- Basare la cache su snapshot `stat()` dei percorsi radice rilevanti (`.github/`, sottocartelle SCF e `scripts/`), così da invalidarla quando cambia lo stato del filesystem.
+- Non affidare l'invalidazione al solo tool di installazione: modifiche manuali nel workspace devono poter invalidare la cache alla chiamata successiva.
+- La cache resta opzionale e può essere implementata dopo la Fase 3.
 
 **File da modificare:** `spark-framework-engine.py`
 
@@ -230,7 +259,6 @@ Fase 1 (prerequisiti documentali):
 
 Fase 2 (correzioni al motore):
   → A2: fix parser frontmatter + test unitari
-  → C1: caching FrameworkInventory
   → C2: note portabilità nel codice
 
 Fase 3 (nuova infrastruttura):
@@ -238,6 +266,9 @@ Fase 3 (nuova infrastruttura):
   → A3 (parte 2): implementa ManifestManager nel motore
   → A4 (parte 3): implementa RegistryClient nel motore
   → tool di installazione intelligente (scf_install_package, scf_update_packages)
+
+Fase 4 (ottimizzazioni successive):
+  → C1: caching FrameworkInventory con snapshot stat() dei percorsi radice
 ```
 
 ---
