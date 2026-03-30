@@ -39,10 +39,12 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 
 ENGINE_VERSION: str = "1.2.0"
 
+
 # ---------------------------------------------------------------------------
-# Filenames
+# Changelogs directory
 # ---------------------------------------------------------------------------
-_FRAMEWORK_CHANGELOG_FILENAME: str = "FRAMEWORK_CHANGELOG.md"
+_CHANGELOGS_SUBDIR: str = "changelogs"
+_LEGACY_FRAMEWORK_CHANGELOG_FILENAME: str = "FRAMEWORK_CHANGELOG.md"
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -179,15 +181,15 @@ def parse_markdown_frontmatter(content: str) -> dict[str, Any]:
     return result
 
 
-def extract_framework_version(changelog_path: Path) -> str:
-    f"""Extract the latest framework version from {_FRAMEWORK_CHANGELOG_FILENAME}."""
+def _extract_version_from_changelog(changelog_path: Path) -> str:
+    """Extract the latest version string from a changelog markdown file."""
     if not changelog_path.is_file():
-        _log.warning("%s not found: %s", _FRAMEWORK_CHANGELOG_FILENAME, changelog_path)
+        _log.warning("Changelog not found: %s", changelog_path)
         return "unknown"
     try:
         text = changelog_path.read_text(encoding="utf-8")
     except OSError as exc:
-        _log.error("Cannot read %s: %s", _FRAMEWORK_CHANGELOG_FILENAME, exc)
+        _log.error("Cannot read changelog %s: %s", changelog_path, exc)
         return "unknown"
     pattern = re.compile(
         r"^\s*#{1,3}\s+\[?(v?[\d]+\.[\d]+\.[\d]+[^\]\s]*)\]?",
@@ -304,8 +306,33 @@ class FrameworkInventory:
         path = self._ctx.github_root / "AGENTS.md"
         return self._build_framework_file(path, "index") if path.is_file() else None
 
-    def get_framework_version(self) -> str:
-        return extract_framework_version(self._ctx.github_root / _FRAMEWORK_CHANGELOG_FILENAME)
+    def get_package_changelog(self, package_id: str) -> str | None:
+        """Return the changelog text for a package, with legacy fallback when unambiguous."""
+        changelog_path = self._ctx.github_root / _CHANGELOGS_SUBDIR / f"{package_id}.md"
+        try:
+            if changelog_path.is_file():
+                return changelog_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            _log.warning("Cannot read package changelog %s: %s", changelog_path, exc)
+            return None
+
+        legacy_changelog_path = self._ctx.github_root / _LEGACY_FRAMEWORK_CHANGELOG_FILENAME
+        installed_versions = ManifestManager(self._ctx.github_root).get_installed_versions()
+        if legacy_changelog_path.is_file() and len(installed_versions) == 1 and package_id in installed_versions:
+            _log.warning(
+                "Using deprecated legacy changelog path for package %s: %s",
+                package_id,
+                legacy_changelog_path,
+            )
+            try:
+                return legacy_changelog_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                _log.warning(
+                    "Cannot read legacy package changelog %s: %s",
+                    legacy_changelog_path,
+                    exc,
+                )
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -316,11 +343,13 @@ class FrameworkInventory:
 def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventory) -> dict[str, Any]:
     profile = inventory.get_project_profile()
     initialized: bool = bool(profile.metadata.get("initialized", False)) if profile else False
+    manifest = ManifestManager(context.github_root)
     return {
         "workspace_root": str(context.workspace_root),
         "github_root": str(context.github_root),
         "initialized": initialized,
-        "framework_version": inventory.get_framework_version(),
+        "engine_version": ENGINE_VERSION,
+        "installed_packages": manifest.get_installed_versions(),
         "agent_count": len(inventory.list_agents()),
         "skill_count": len(inventory.list_skills()),
         "instruction_count": len(inventory.list_instructions()),
@@ -425,6 +454,16 @@ class ManifestManager:
             if entry.get("file") == file_rel:
                 return self._is_user_modified(entry, self._github_root / file_rel)
         return None
+
+    def get_installed_versions(self) -> dict[str, str]:
+        """Return installed package versions keyed by package id."""
+        versions: dict[str, str] = {}
+        for entry in self.load():
+            package_id = str(entry.get("package", "")).strip()
+            package_version = str(entry.get("package_version", "")).strip()
+            if package_id and package_version:
+                versions[package_id] = package_version
+        return dict(sorted(versions.items()))
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -566,7 +605,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (14) and Tools (20)
+# SparkFrameworkEngine — Resources (14) and Tools (21)
 # ---------------------------------------------------------------------------
 
 
@@ -595,6 +634,7 @@ class SparkFrameworkEngine:
         """
         inventory = self._inventory
         ctx = self._ctx
+        manifest = ManifestManager(ctx.github_root)
 
         def _fmt_list(items: list[FrameworkFile], title: str) -> str:
             if not items:
@@ -685,7 +725,18 @@ class SparkFrameworkEngine:
 
         @self._mcp.resource("scf://framework-version")
         async def resource_framework_version() -> str:
-            return f"SPARK Framework Engine version: {inventory.get_framework_version()}"
+            installed_versions = manifest.get_installed_versions()
+            lines = [
+                f"SPARK Framework Engine version: {ENGINE_VERSION}",
+                "",
+                "Installed SCF packages:",
+            ]
+            if installed_versions:
+                for package_id, package_version in installed_versions.items():
+                    lines.append(f"- {package_id}: {package_version}")
+            else:
+                lines.append("- none")
+            return "\n".join(lines)
 
         @self._mcp.resource("scf://workspace-info")
         async def resource_workspace_info_res() -> str:
@@ -695,7 +746,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 20 MCP tools."""
+        """Register all 21 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -803,8 +854,11 @@ class SparkFrameworkEngine:
 
         @self._mcp.tool()
         async def scf_get_framework_version() -> dict[str, Any]:
-            f"""Return the latest SCF framework version from {_FRAMEWORK_CHANGELOG_FILENAME}."""
-            return {"framework_version": inventory.get_framework_version()}
+            """Return the engine version and installed SCF package versions."""
+            return {
+                "engine_version": ENGINE_VERSION,
+                "packages": manifest.get_installed_versions(),
+            }
 
         @self._mcp.tool()
         async def scf_get_workspace_info() -> dict[str, Any]:
@@ -1088,7 +1142,24 @@ class SparkFrameworkEngine:
                 "preserved_user_modified": preserved,
             }
 
-        _log.info("Tools registered: 20 total")
+        @self._mcp.tool()
+        async def scf_get_package_changelog(package_id: str) -> dict[str, Any]:
+            """Return the changelog content for one installed SCF package."""
+            content = inventory.get_package_changelog(package_id)
+            if content is None:
+                return {
+                    "error": f"Changelog not found for package '{package_id}'.",
+                    "package": package_id,
+                }
+            changelog_path = ctx.github_root / _CHANGELOGS_SUBDIR / f"{package_id}.md"
+            return {
+                "package": package_id,
+                "path": str(changelog_path),
+                "content": content,
+                "version": _extract_version_from_changelog(changelog_path),
+            }
+
+        _log.info("Tools registered: 21 total")
 
 
 # ---------------------------------------------------------------------------
