@@ -6,6 +6,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.2.0] — 30 marzo 2026
+
+### Added
+
+- **Agente di manutenzione SCF**: creato `.github/agents/spark-engine-maintainer.agent.md` con perimetro operativo, responsabilita' e regole di comportamento per la manutenzione del motore.
+- **Skill dedicate all'agente**: aggiunte 6 skill in formato standard `skill-name/SKILL.md`:
+	- `.github/skills/scf-coherence-audit/SKILL.md`
+	- `.github/skills/scf-changelog/SKILL.md`
+	- `.github/skills/scf-tool-development/SKILL.md`
+	- `.github/skills/scf-prompt-management/SKILL.md`
+	- `.github/skills/scf-release-check/SKILL.md`
+	- `.github/skills/scf-documentation/SKILL.md`
+- **Istruzioni operative dominio motore**: creato `.github/instructions/spark-engine-maintenance.instructions.md` con convenzioni su naming tool/prompt, contatori, versioning e policy di conferma.
+- **Entry point Copilot repository-scoped**: creato `.github/copilot-instructions.md` con regole di ingaggio e riferimenti agli artefatti del maintainer.
+
+### Notes
+
+- Introduzione non-breaking: la release aggiunge artefatti di governance e manutenzione senza alterare API MCP o comportamento runtime del motore.
+
 ## [1.1.0] — 30 marzo 2026
 
 ### Added
