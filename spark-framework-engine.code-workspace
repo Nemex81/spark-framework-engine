@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../scf-pycode-crafter"
+		},
+		{
+			"path": "../scf-registry"
 		}
 	],
 	"settings": {}
