@@ -1,0 +1,20 @@
+---
+type: prompt
+name: scf-status
+description: Mostra una panoramica completa dello stato SCF del workspace attivo.
+---
+
+Obiettivo: mostrare lo stato SCF corrente in una vista unica.
+
+Istruzioni operative:
+1. Esegui `scf_get_workspace_info()`.
+2. Esegui `scf_list_installed_packages()`.
+3. Esegui `scf_update_packages()`.
+4. Non modificare file o stato del workspace.
+
+Formato risposta:
+- Sezione `Workspace`: root attiva, initialized, framework_version.
+- Sezione `Asset SCF`: conteggi agent/skill/instruction/prompt.
+- Sezione `Pacchetti installati`: package, versione, numero file.
+- Sezione `Aggiornamenti`: up_to_date, update_available, not_in_registry.
+- Se non ci sono pacchetti installati, dillo esplicitamente.

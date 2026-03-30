@@ -67,7 +67,7 @@ logs/
 *.tmp
 
 # SCF-specific caches and manifests (generated/runtime files)
-#.github/.scf-manifest.json
-#.github/.scf-registry-cache.json
-.github/
+.github/.scf-manifest.json
+.github/.scf-registry-cache.json
+#.github/
 .scf-registry-cache.json
