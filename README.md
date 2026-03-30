@@ -87,7 +87,7 @@ scf://framework-version
 scf://workspace-info
 ```
 
-## Tools Disponibili (13)
+## Tools Disponibili (18)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -97,8 +97,13 @@ scf_list_prompts          scf_get_prompt(name)
 scf_get_project_profile   scf_get_global_instructions
 scf_get_model_policy      scf_get_framework_version
 scf_get_workspace_info
+scf_list_available_packages()
+scf_get_package_info(package_id)
+scf_list_installed_packages()
 scf_install_package(package_id)
-scf_update_packages
+scf_update_packages()
+scf_apply_updates(package_id | None)
+scf_remove_package(package_id)
 ```
 
 ---

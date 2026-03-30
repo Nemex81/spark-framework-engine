@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.0.0"
+ENGINE_VERSION: str = "1.1.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -233,7 +233,40 @@ class FrameworkInventory:
         return self._list_by_pattern(self._ctx.github_root / "agents", "*.md", "agent")
 
     def list_skills(self) -> list[FrameworkFile]:
-        return self._list_by_pattern(self._ctx.github_root / "skills", "*.skill.md", "skill")
+        """Discover SCF skills in both supported formats.
+
+        Format 1 (legacy): .github/skills/*.skill.md
+        Format 2 (standard): .github/skills/skill-name/SKILL.md
+
+        On name collisions, the legacy flat format takes precedence.
+        """
+        skills_root = self._ctx.github_root / "skills"
+
+        # Pass 1: legacy flat format.
+        flat = self._list_by_pattern(skills_root, "*.skill.md", "skill")
+        seen: set[str] = {ff.name.removesuffix(".skill") for ff in flat}
+
+        # Pass 2: standard Agent Skills format in subdirectories.
+        standard: list[FrameworkFile] = []
+        if skills_root.is_dir():
+            for skill_dir in sorted(skills_root.iterdir()):
+                skill_file = skill_dir / "SKILL.md"
+                if skill_dir.is_dir() and skill_file.is_file():
+                    ff = self._build_framework_file(skill_file, "skill")
+                    named_ff = FrameworkFile(
+                        name=skill_dir.name,
+                        path=ff.path,
+                        category=ff.category,
+                        summary=ff.summary,
+                        metadata=ff.metadata,
+                    )
+                    key = named_ff.name.removesuffix(".skill")
+                    if key not in seen:
+                        standard.append(named_ff)
+                        seen.add(key)
+
+        combined = flat + standard
+        return sorted(combined, key=lambda ff: ff.name)
 
     def list_instructions(self) -> list[FrameworkFile]:
         return self._list_by_pattern(self._ctx.github_root / "instructions", "*.instructions.md", "instruction")
