@@ -1151,7 +1151,12 @@ class SparkFrameworkEngine:
                     "error": f"Changelog not found for package '{package_id}'.",
                     "package": package_id,
                 }
-            changelog_path = ctx.github_root / _CHANGELOGS_SUBDIR / f"{package_id}.md"
+            changelog_path = self._ctx.github_root / _CHANGELOGS_SUBDIR / f"{package_id}.md"
+            if not changelog_path.is_file():
+                legacy_changelog_path = self._ctx.github_root / _LEGACY_FRAMEWORK_CHANGELOG_FILENAME
+                installed_versions = manifest.get_installed_versions()
+                if legacy_changelog_path.is_file() and len(installed_versions) == 1 and package_id in installed_versions:
+                    changelog_path = legacy_changelog_path
             return {
                 "package": package_id,
                 "path": str(changelog_path),
