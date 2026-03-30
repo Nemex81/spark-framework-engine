@@ -15,7 +15,7 @@ SCF è un ecosistema aperto di strumenti AI-native per programmatori. Non è un�
 
 Il server MCP universale. Legge qualsiasi `.github/` SCF-compatibile e serve agenti, skill, instruction e prompt on-demand al modello AI in Agent mode. Non conosce nessun dominio specifico — conosce solo la struttura SCF. Si installa una volta globalmente in VS Code e funziona su tutti i progetti automaticamente. Contiene il tool di installazione intelligente per bootstrap e aggiornamento dei pacchetti.
 
-**Stato attuale:** funzionante e testato. File `spark-framework-engine.py` nel repo dedicato `spark-framework-engine`, registrato globalmente in VS Code come server `sparkFrameworkEngine`. Python 3.10+, 16 Resource e 13 Tool registrati. Duplicati slash command eliminati.
+**Stato attuale:** funzionante e testato. File `spark-framework-engine.py` nel repo dedicato `spark-framework-engine`, registrato globalmente in VS Code come server `sparkFrameworkEngine`. Python 3.10+, 14 Resource e 13 Tool registrati. Duplicati slash command eliminati.
 
 ### Livello 2 — I Pacchetti Dominio (`scf-pack-*`)
 

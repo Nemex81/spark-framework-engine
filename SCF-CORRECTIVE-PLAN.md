@@ -300,30 +300,23 @@ se necessari, devono essere documentati come strumenti separati da eseguire manu
 
 **File da modificare:** `spark-framework-engine.py`, `SCF-PROJECT-DESIGN.md`, `README.md`
 
-**Stato:** ⏳ da implementare (prossimo passo)
+**Stato:** ✅ completato
 
 ---
 
 ## Prossimi passi operativi
 
 ```
-Passo 1 — Rimozione script dal motore (D1):
-  → Rimuovere ScriptExecutor, scf_run_script, scf_list_scripts
-  → Rimuovere resource scripts://list e scripts://{name}
-  → Aggiornare WorkspaceContext, WorkspaceLocator, build_workspace_info
-  → Aggiornare contatori in log, commenti e README
-  → Aggiornare SCF-PROJECT-DESIGN.md
-
-Passo 2 — Creare repo scf-registry:
+Passo 1 — Creare repo scf-registry:
   → Repo pubblico con README e registry.json iniziale (schema valido, packages: [])
   → Da questo momento RegistryClient trova il file senza errori di rete
 
-Passo 3 — Creare il primo scf-pack-*:
+Passo 2 — Creare il primo scf-pack-*:
   → Scegliere dominio (gamedev o accessibility)
   → Struttura .github/ completa con agenti, skill, instruction, prompt
   → Aggiungere voce in registry.json
 
-Passo 4 — Ottimizzazioni (Fase 4):
+Passo 3 — Ottimizzazioni (Fase 4):
   → C1: caching FrameworkInventory con snapshot stat()
 ```
 
@@ -341,8 +334,8 @@ Passo 4 — Ottimizzazioni (Fase 4):
 | B1 | Schema versioning motore | Media | ✅ completato |
 | C1 | Caching FrameworkInventory | Bassa | ⏳ da fare (Fase 4) |
 | C2 | Note portabilità prompt | Bassa | ✅ completato |
-| D1 | Rimozione script dal framework | Alta | ⏳ prossimo passo |
+| D1 | Rimozione script dal framework | Alta | ✅ completato |
 
 ---
 
-*Documento aggiornato il 30 marzo 2026 — v1.3: aggiunta decisione D1 rimozione script, aggiornati prossimi passi operativi.*
+*Documento aggiornato il 30 marzo 2026 — v1.4: D1 marcato completato, prossimi passi allineati allo stato reale (repo `scf-registry` ancora da creare).*

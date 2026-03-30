@@ -72,14 +72,13 @@ e serve on-demand al modello AI (in Agent mode) tutto il contenuto SCF trovato.
 
 ---
 
-## Resources Disponibili (16)
+## Resources Disponibili (14)
 
 ```
 agents://list             agents://{name}
 skills://list             skills://{name}
 instructions://list       instructions://{name}
 prompts://list            prompts://{name}
-scripts://list            scripts://{name}
 scf://global-instructions
 scf://project-profile
 scf://model-policy
@@ -95,10 +94,11 @@ scf_list_agents           scf_get_agent(name)
 scf_list_skills           scf_get_skill(name)
 scf_list_instructions     scf_get_instruction(name)
 scf_list_prompts          scf_get_prompt(name)
-scf_list_scripts          scf_run_script(script_name, args)
 scf_get_project_profile   scf_get_global_instructions
 scf_get_model_policy      scf_get_framework_version
 scf_get_workspace_info
+scf_install_package(package_id)
+scf_update_packages
 ```
 
 ---

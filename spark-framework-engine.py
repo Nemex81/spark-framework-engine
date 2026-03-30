@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import re
-import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -62,7 +61,6 @@ class WorkspaceContext:
 
     workspace_root: Path
     github_root: Path
-    scripts_root: Path
     engine_root: Path
 
 
@@ -102,18 +100,14 @@ class WorkspaceLocator:
             )
 
         github_root = workspace_root / ".github"
-        scripts_root = workspace_root / "scripts"
         engine_root = workspace_root / "spark-framework-engine"
 
         if not github_root.is_dir():
             _log.warning(".github/ not found in workspace: %s", github_root)
-        if not scripts_root.is_dir():
-            _log.warning("scripts/ not found in workspace: %s", scripts_root)
 
         return WorkspaceContext(
             workspace_root=workspace_root,
             github_root=github_root,
-            scripts_root=scripts_root,
             engine_root=engine_root,
         )
 
@@ -256,9 +250,6 @@ class FrameworkInventory:
         """
         return self._list_by_pattern(self._ctx.github_root / "prompts", "*.prompt.md", "prompt")
 
-    def list_scripts(self) -> list[FrameworkFile]:
-        return self._list_by_pattern(self._ctx.scripts_root, "*.py", "script")
-
     def get_project_profile(self) -> FrameworkFile | None:
         path = self._ctx.github_root / "project-profile.md"
         return self._build_framework_file(path, "config") if path.is_file() else None
@@ -290,14 +281,12 @@ def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventor
     return {
         "workspace_root": str(context.workspace_root),
         "github_root": str(context.github_root),
-        "scripts_root": str(context.scripts_root),
         "initialized": initialized,
         "framework_version": inventory.get_framework_version(),
         "agent_count": len(inventory.list_agents()),
         "skill_count": len(inventory.list_skills()),
         "instruction_count": len(inventory.list_instructions()),
         "prompt_count": len(inventory.list_prompts()),
-        "script_count": len(inventory.list_scripts()),
     }
 
 
@@ -505,67 +494,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# ScriptExecutor
-# ---------------------------------------------------------------------------
-
-_SCRIPT_TIMEOUT_SECONDS: int = 30
-
-
-class ScriptExecutor:
-    """Run selected scripts from scripts/ with allowlist, timeout and NVDA-safe output."""
-
-    _ALLOWLIST: frozenset[str] = frozenset({
-        "detect_agent.py",
-        "validate_gates.py",
-        "ci-local-validate.py",
-        "generate-changelog.py",
-        "sync-documentation.py",
-        "create-project-files.py",
-    })
-
-    def __init__(self, context: WorkspaceContext) -> None:
-        self._ctx = context
-
-    def run(self, script_name: str, args: list[str]) -> dict[str, Any]:
-        if script_name not in self._ALLOWLIST:
-            return {
-                "success": False,
-                "error": f"{script_name!r} is not in the allowed set. Allowed: {sorted(self._ALLOWLIST)}",
-                "stdout": "", "stderr": "", "returncode": -1,
-            }
-        script_path = self._ctx.scripts_root / script_name
-        if not script_path.is_file():
-            return {
-                "success": False,
-                "error": f"Script not found: {script_path}",
-                "stdout": "", "stderr": "", "returncode": -1,
-            }
-        cmd = [sys.executable, str(script_path)] + args
-        _log.info("Running script: %s %s", script_name, args)
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True,
-                timeout=_SCRIPT_TIMEOUT_SECONDS, cwd=str(self._ctx.workspace_root),
-            )
-        except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "error": f"Script timed out after {_SCRIPT_TIMEOUT_SECONDS}s: {script_name}",
-                "stdout": "", "stderr": "", "returncode": -1,
-            }
-        except OSError as exc:
-            return {
-                "success": False, "error": f"OS error running {script_name}: {exc}",
-                "stdout": "", "stderr": "", "returncode": -1,
-            }
-        return {
-            "success": result.returncode == 0,
-            "stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode,
-        }
-
-
-# ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (16) and Tools (15)
+# SparkFrameworkEngine — Resources (14) and Tools (13)
 # ---------------------------------------------------------------------------
 
 
@@ -579,14 +508,13 @@ class SparkFrameworkEngine:
     and via scf_list_prompts / scf_get_prompt tools for Agent mode consumption.
     """
 
-    def __init__(self, mcp: FastMCP, context: WorkspaceContext, inventory: FrameworkInventory, executor: ScriptExecutor) -> None:
+    def __init__(self, mcp: FastMCP, context: WorkspaceContext, inventory: FrameworkInventory) -> None:
         self._mcp = mcp
         self._ctx = context
         self._inventory = inventory
-        self._executor = executor
 
     def register_resources(self) -> None:
-        """Register all 16 MCP resources.
+        """Register all 14 MCP resources.
 
         Portability note: MCP Prompts are intentionally not registered here.
         VS Code handles .github/prompts/ natively as slash commands; alternative
@@ -658,18 +586,6 @@ class SparkFrameworkEngine:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Prompt '{name}' not found. Use prompts://list."
 
-        @self._mcp.resource("scripts://list")
-        async def resource_scripts_list() -> str:
-            return _fmt_list(inventory.list_scripts(), "SCF Scripts")
-
-        @self._mcp.resource("scripts://{name}")
-        async def resource_script_by_name(name: str) -> str:
-            query = name.lower().removesuffix(".py")
-            for ff in inventory.list_scripts():
-                if ff.name.lower() == query:
-                    return ff.path.read_text(encoding="utf-8", errors="replace")
-            return f"Script '{name}' not found. Use scripts://list."
-
         @self._mcp.resource("scf://global-instructions")
         async def resource_global_instructions() -> str:
             ff = inventory.get_global_instructions()
@@ -704,12 +620,11 @@ class SparkFrameworkEngine:
             info = build_workspace_info(ctx, inventory)
             return _fmt_workspace_info(info)
 
-        _log.info("Resources registered: 5 list + 5 template + 6 scf:// singletons (16 total)")
+        _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 15 MCP tools."""
+        """Register all 13 MCP tools."""
         inventory = self._inventory
-        executor = self._executor
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
             return {"name": ff.name, "path": str(ff.path), "category": ff.category, "summary": ff.summary, "metadata": ff.metadata}
@@ -780,17 +695,6 @@ class SparkFrameworkEngine:
                     result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
                     return result
             return {"error": f"Prompt '{name}' not found.", "available": [ff.name for ff in inventory.list_prompts()]}
-
-        @self._mcp.tool()
-        async def scf_list_scripts() -> dict[str, Any]:
-            """Return all scripts in scripts/ with allowlist status."""
-            items = inventory.list_scripts()
-            return {"count": len(items), "scripts": [{**_ff_to_dict(ff), "allowed": ff.path.name in ScriptExecutor._ALLOWLIST} for ff in items]}
-
-        @self._mcp.tool()
-        async def scf_run_script(script_name: str, args: list[str] | None = None) -> dict[str, Any]:
-            """Execute an allowlisted script from scripts/ and return captured output. Timeout: 30s."""
-            return executor.run(script_name, args or [])
 
         @self._mcp.tool()
         async def scf_get_project_profile() -> dict[str, Any]:
@@ -910,7 +814,7 @@ class SparkFrameworkEngine:
                     })
             return {"updates": updates, "total": len(updates)}
 
-        _log.info("Tools registered: 15 total")
+        _log.info("Tools registered: 13 total")
 
 
 # ---------------------------------------------------------------------------
@@ -927,14 +831,12 @@ def _build_app() -> FastMCP:
 
     inventory = FrameworkInventory(context)
     _log.info(
-        "Framework inventory: %d agents, %d skills, %d instructions, %d prompts, %d scripts",
+        "Framework inventory: %d agents, %d skills, %d instructions, %d prompts",
         len(inventory.list_agents()), len(inventory.list_skills()),
         len(inventory.list_instructions()), len(inventory.list_prompts()),
-        len(inventory.list_scripts()),
     )
 
-    executor = ScriptExecutor(context)
-    app = SparkFrameworkEngine(mcp, context, inventory, executor)
+    app = SparkFrameworkEngine(mcp, context, inventory)
     app.register_resources()
     app.register_tools()
 
