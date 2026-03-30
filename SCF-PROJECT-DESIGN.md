@@ -1,5 +1,5 @@
 # SCF — SPARK Code Framework
-## Documento di Progettazione Logica — v0.1 — 29 marzo 2026
+## Documento di Progettazione Logica — v0.2 — 30 marzo 2026
 
 ---
 
@@ -15,7 +15,7 @@ SCF è un ecosistema aperto di strumenti AI-native per programmatori. Non è un�
 
 Il server MCP universale. Legge qualsiasi `.github/` SCF-compatibile e serve agenti, skill, instruction e prompt on-demand al modello AI in Agent mode. Non conosce nessun dominio specifico — conosce solo la struttura SCF. Si installa una volta globalmente in VS Code e funziona su tutti i progetti automaticamente. Contiene il tool di installazione intelligente per bootstrap e aggiornamento dei pacchetti.
 
-**Stato attuale:** funzionante e testato. File `scf-mcp-server.py` presente nel repo `solitario-classico-accessibile`, Python 3.11, 16 Resource e 13 Tool registrati. Modifica per eliminare duplicati slash command già applicata.
+**Stato attuale:** funzionante e testato. File `spark-framework-engine.py` nel repo dedicato `spark-framework-engine`, registrato globalmente in VS Code come server `sparkFrameworkEngine`. Python 3.10+, 16 Resource e 13 Tool registrati. Duplicati slash command eliminati.
 
 ### Livello 2 — I Pacchetti Dominio (`scf-pack-*`)
 
@@ -25,7 +25,7 @@ Esempi previsti: `scf-pack-gamedev`, `scf-pack-writer`, `scf-pack-backend`, `scf
 
 ### Livello 3 — Il Registry (`scf-registry`)
 
-Indice centralizzato dei pacchetti pubblici. Read-only per gli utenti, modificabile solo dagli amministratori e dai creatori tramite Pull Request. Ogni voce contiene: nome identificativo, URL del repo, versione corrente, descrizione breve, compatibilità minima con il motore. Supporta anche discovery diretto tramite URL per pacchetti privati non registrati.
+Indice centralizzato dei pacchetti pubblici. Read-only per gli utenti, modificabile solo dagli amministratori e dai creatori tramite Pull Request. Ogni voce contiene: nome identificativo, URL del repo, versione corrente, descrizione breve, compatibilità minima con il motore. La v1 supporta solo pacchetti pubblici; il supporto a pacchetti privati è previsto come estensione futura.
 
 ---
 
@@ -140,14 +140,126 @@ Quando si aggiorna `spark-framework-engine`, al primo avvio il motore verifica l
 
 ---
 
+## Manifesto di Installazione — Specifica Tecnica
+
+**File:** `.github/.scf-manifest.json`
+**Formato:** JSON object con `schema_version` e array `entries`. Ogni voce traccia un file SCF installato da pacchetto.
+
+```json
+{
+  "schema_version": "1.0",
+  "entries": [
+    {
+      "file": "agents/developer.md",
+      "package": "scf-pack-gamedev",
+      "package_version": "1.2.0",
+      "installed_at": "2026-03-30T12:00:00Z",
+      "sha256": "abc123..."
+    }
+  ]
+}
+```
+
+**Campi di ogni voce `entries`:**
+- `file`: percorso relativo alla root di `.github/` (stringa, obbligatorio)
+- `package`: nome del pacchetto di origine (stringa, obbligatorio)
+- `package_version`: versione del pacchetto all'installazione (semver, obbligatorio)
+- `installed_at`: timestamp ISO 8601 UTC (stringa, obbligatorio)
+- `sha256`: hash SHA-256 del contenuto del file all'installazione (stringa, obbligatorio)
+
+**`user_modified`** è un valore calcolato on-demand confrontando l'hash salvato con l'hash corrente del file su disco. Non viene persistito nel manifesto.
+
+**Rilevamento modifiche:** confronto SHA-256 on-demand. Il `mtime` del filesystem non viene usato (inaffidabile su Windows con cloud sync). Non viene usato `git diff` (dipendenza esterna non garantita).
+
+**Gestione dei casi speciali:**
+- **File rimosso localmente:** la voce resta nel manifesto; alla prossima operazione viene marcata come file mancante e trattata come divergenza da risolvere.
+- **File rinominato localmente:** non inferito come rename automaticamente; il vecchio percorso risulta mancante, il nuovo non è gestito.
+- **Disinstallazione di pacchetto:** cancellazione dei file con hash invariato; file modificati dall'utente preservati e segnalati come residui locali.
+
+---
+
+## Registry — Specifica Tecnica
+
+**Repo:** `scf-registry` (GitHub, pubblico, read-only per utenti)
+**File indice:** `registry.json` nella root del repo
+
+```json
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-03-30T12:00:00Z",
+  "packages": [
+    {
+      "id": "scf-pack-gamedev",
+      "repo_url": "https://github.com/Nemex81/scf-pack-gamedev",
+      "latest_version": "1.0.0",
+      "description": "Pacchetto dominio per sviluppo videogiochi",
+      "engine_min_version": "1.0.0",
+      "status": "active",
+      "tags": ["gamedev", "unity", "pygame"]
+    }
+  ]
+}
+```
+
+**Protocollo di interrogazione v1:** HTTP GET sul raw URL di GitHub. Nessun clone locale, nessuna autenticazione. Supporta solo pacchetti pubblici raggiungibili senza credenziali.
+
+**Raw URL del registry:** `https://raw.githubusercontent.com/Nemex81/scf-registry/main/registry.json`
+
+**Comportamento offline:** se la richiesta fallisce (timeout 5s), il motore usa la cache in `.github/.scf-registry-cache.json`. Se non esiste nemmeno quella, errore esplicito senza crashare.
+
+**Repo privati (fuori scope v1):** se l'utente fornisce una URL non `raw.githubusercontent.com`, il motore restituisce errore esplicito. Nessun accesso implicito a URL private. Supporto previsto come estensione futura.
+
+---
+
+## Versioning del Motore e del Protocollo
+
+Sono gestite due versioni distinte con cicli di vita indipendenti.
+
+### `ENGINE_VERSION` — versione del motore
+
+Costante Python `ENGINE_VERSION` in `spark-framework-engine.py`. Segue semver `MAJOR.MINOR.PATCH`.
+
+- `PATCH`: bugfix interni, nessun cambio al contratto di protocollo.
+- `MINOR`: nuove capacità del motore compatibili all'indietro.
+- `MAJOR`: cambio strutturale del server o dell'API locale che può richiedere adeguamenti.
+
+### `protocol_version` — versione del protocollo SCF
+
+Dichiarata nel workspace tramite `.github/FRAMEWORK_CHANGELOG.md`. Segue semver `MAJOR.MINOR.PATCH`.
+
+- `PATCH`: chiarimenti o correzioni senza impatto sul formato SCF.
+- `MINOR`: nuovi campi opzionali o nuovi tipi di file; degradazione graziosa automatica.
+- `MAJOR`: campi obbligatori rinominati, tipi di file rimossi, struttura cartelle cambiata; richiede migrazione assistita.
+
+### Regola di compatibilità
+
+La compatibilità va verificata confrontando la `protocol_version` richiesta dal pacchetto con quella del workspace — **non** con la `ENGINE_VERSION` interna del server. La `ENGINE_VERSION` traccia l'evoluzione del motore; non definisce la compatibilità dei file SCF installati.
+
+---
+
+## Limiti noti e vincoli di portabilità
+
+### Prompt come risorse testuali, non MCP Prompts nativi
+
+I file `.github/prompts/*.prompt.md` non vengono registrati come artefatti MCP Prompt nativi. Questo è corretto per VS Code: i file compaiono già nel picker `/` come slash command nativi — registrarli di nuovo via MCP causerebbe duplicati.
+
+**Implicazione per client alternativi:** client MCP diversi da VS Code (Claude Desktop, altri IDE) vedono i prompt solo come risorse testuali generiche tramite `prompts://list` e `prompts://{name}`, non come artefatti MCP Prompt invocabili nativamente. Vincolo strutturale consapevole della v1.
+
+### Registry pubblico only in v1
+
+Il supporto a registry o repository privati non è implementato. Qualsiasi URL non `raw.githubusercontent.com` fornita senza autenticazione produce un errore esplicito, mai un tentativo silenzioso.
+
+---
+
 ## Prossimi Passi
 
-1. Estrarre `scf-mcp-server.py` dal repo `solitario-classico-accessibile` e portarlo in questo repo come motore principale
+1. ~~Estrarre `scf-mcp-server.py` dal repo `solitario-classico-accessibile` e portarlo in questo repo come motore principale~~ — **completato**
 2. Implementare il tool di installazione intelligente con logica diff e manifesto di installazione
 3. Creare repo `scf-registry` con file indice iniziale
 4. Costruire il primo pacchetto dominio come riferimento per la community
-5. Documentare il protocollo SCF come standard aperto nel repo
+5. Documentare il protocollo SCF come standard aperto nel repo — in corso (specifiche tecniche aggiunte in questo documento)
 
 ---
 
 *Documento generato il 29 marzo 2026 — fase di progettazione logica completata.*
+*Revisione del 30 marzo 2026 — aggiornati: A1 (stato attuale), A3 (manifesto), A4 (registry), B1 (versioning), C2 (limiti portabilità).*

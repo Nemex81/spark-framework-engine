@@ -1,5 +1,5 @@
 # SCF — Piano Correttivo
-## Documento di Implementazione — v1.0 — 30 marzo 2026
+## Documento di Implementazione — v1.2 — 30 marzo 2026
 
 Questo documento descrive tutte le anomalie identificate nell'analisi critica del progetto SCF
 e il piano operativo per risolverle prima di procedere ai Livelli 2 e 3.
@@ -277,13 +277,13 @@ Fase 4 (ottimizzazioni successive):
 
 | ID | Descrizione | Priorità | Stato |
 |---|---|---|---|
-| A1 | Aggiornare SCF-PROJECT-DESIGN.md | Alta | ⬜ da fare |
-| A2 | Fix parser frontmatter + test | Alta | ⬜ da fare |
-| A3 | Specifica manifesto installazione | Alta | ⬜ da fare |
-| A4 | Specifica e implementazione registry | Alta | ⬜ da fare |
-| B1 | Schema versioning motore | Media | ⬜ da fare |
-| C1 | Caching FrameworkInventory | Bassa | ⬜ da fare |
-| C2 | Note portabilità prompt | Bassa | ⬜ da fare |
+| A1 | Aggiornare SCF-PROJECT-DESIGN.md | Alta | ✅ completato |
+| A2 | Fix parser frontmatter + test | Alta | ✅ completato |
+| A3 | Specifica manifesto installazione | Alta | ✅ completato |
+| A4 | Specifica e implementazione registry | Alta | ✅ completato |
+| B1 | Schema versioning motore | Media | ✅ completato |
+| C1 | Caching FrameworkInventory | Bassa | ⬜ da fare (Fase 4) |
+| C2 | Note portabilità prompt | Bassa | ✅ completato |
 
 ---
 

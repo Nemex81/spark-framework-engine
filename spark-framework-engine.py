@@ -10,12 +10,17 @@ Domain boundary:
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +33,12 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
+
+# ---------------------------------------------------------------------------
+# Engine version
+# ---------------------------------------------------------------------------
+
+ENGINE_VERSION: str = "1.0.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -111,29 +122,61 @@ class WorkspaceLocator:
 # Standalone parsers
 # ---------------------------------------------------------------------------
 
+# Pre-compiled patterns for YAML list detection in frontmatter.
+_FM_INLINE_LIST_RE: re.Pattern[str] = re.compile(r"^\[(.+)\]$")
+_FM_BLOCK_ITEM_RE: re.Pattern[str] = re.compile(r"^(\s+)-\s+(.*)")
+
 
 def parse_markdown_frontmatter(content: str) -> dict[str, Any]:
-    """Parse optional YAML-style key:value frontmatter from markdown content."""
+    """Parse optional YAML-style frontmatter from markdown content.
+
+    Supports scalar values (string, boolean, integer), inline lists
+    ``key: [a, b, c]`` and block lists (key followed by ``  - value`` lines).
+    """
     if not content.startswith("---"):
         return {}
     parts = content.split("---", 2)
     if len(parts) < 3:
         return {}
     result: dict[str, Any] = {}
+    current_list_key: str | None = None
     for raw_line in parts[1].strip().splitlines():
+        # Block list item (indented dash) — checked before stripping whitespace.
+        block_m = _FM_BLOCK_ITEM_RE.match(raw_line)
+        if block_m and current_list_key is not None:
+            item = block_m.group(2).strip().strip('"').strip("'")
+            if item:
+                result[current_list_key].append(item)
+            continue
+        # Any non-item line closes the open block list.
+        current_list_key = None
         line = raw_line.strip()
         if not line or line.startswith("#") or ":" not in line:
             continue
         key, _, raw_value = line.partition(":")
-        value_str = raw_value.strip().strip('"').strip("'")
+        key = key.strip()
+        value_str = raw_value.strip()
+        # Inline list: key: [a, b]
+        inline_m = _FM_INLINE_LIST_RE.match(value_str)
+        if inline_m:
+            items = [s.strip().strip('"').strip("'") for s in inline_m.group(1).split(",")]
+            result[key] = [i for i in items if i]
+            continue
+        # Block list start: key: <empty>
+        if not value_str:
+            current_list_key = key
+            result[key] = []
+            continue
+        # Scalar value.
+        value_str = value_str.strip('"').strip("'")
         if value_str.lower() in ("true", "yes"):
-            result[key.strip()] = True
+            result[key] = True
         elif value_str.lower() in ("false", "no"):
-            result[key.strip()] = False
+            result[key] = False
         elif value_str.isdigit():
-            result[key.strip()] = int(value_str)
+            result[key] = int(value_str)
         else:
-            result[key.strip()] = value_str
+            result[key] = value_str
     return result
 
 
@@ -206,6 +249,10 @@ class FrameworkInventory:
 
         VS Code already exposes .github/prompts/*.prompt.md as native slash commands.
         Registering them as MCP Prompts would cause duplicate entries in the / picker.
+        This behaviour is correct for VS Code. Alternative MCP clients (Claude Desktop,
+        other IDEs) will see prompts only as generic text resources via prompts://list
+        and prompts://{name}, not as native MCP Prompt artefacts. Known portability
+        constraint of the v1 design.
         """
         return self._list_by_pattern(self._ctx.github_root / "prompts", "*.prompt.md", "prompt")
 
@@ -252,6 +299,209 @@ def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventor
         "prompt_count": len(inventory.list_prompts()),
         "script_count": len(inventory.list_scripts()),
     }
+
+
+# ---------------------------------------------------------------------------
+# ManifestManager (A3 — installation manifest)
+# ---------------------------------------------------------------------------
+
+_MANIFEST_SCHEMA_VERSION: str = "1.0"
+_MANIFEST_FILENAME: str = ".scf-manifest.json"
+
+
+class ManifestManager:
+    """Read, write and query the SCF installation manifest (.github/.scf-manifest.json).
+
+    ``user_modified`` is computed on-demand by comparing the stored SHA-256 against
+    the current file content on disk. It is never persisted to the manifest file.
+    """
+
+    def __init__(self, github_root: Path) -> None:
+        self._github_root = github_root
+        self._path = github_root / _MANIFEST_FILENAME
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def load(self) -> list[dict[str, Any]]:
+        """Return the entries array. Returns [] if absent or unreadable."""
+        if not self._path.is_file():
+            return []
+        try:
+            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            return list(raw.get("entries", []))
+        except (OSError, json.JSONDecodeError) as exc:
+            _log.warning("Manifest unreadable, returning empty: %s", exc)
+            return []
+
+    def save(self, entries: list[dict[str, Any]]) -> None:
+        """Persist entries to disk."""
+        payload: dict[str, Any] = {
+            "schema_version": _MANIFEST_SCHEMA_VERSION,
+            "entries": entries,
+        }
+        try:
+            self._path.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _log.error("Cannot write manifest: %s", exc)
+            raise
+
+    def upsert(self, file_rel: str, package: str, package_version: str, file_abs: Path) -> None:
+        """Add or update the manifest entry for a single installed file."""
+        entries = self.load()
+        sha = self._sha256(file_abs)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_entry: dict[str, Any] = {
+            "file": file_rel,
+            "package": package,
+            "package_version": package_version,
+            "installed_at": now,
+            "sha256": sha,
+        }
+        entries = [e for e in entries if e.get("file") != file_rel]
+        entries.append(new_entry)
+        self.save(entries)
+
+    def remove_package(self, package: str) -> list[str]:
+        """Remove a package's entries and delete unmodified files on disk.
+
+        Returns the list of relative paths preserved because the user modified them.
+        """
+        entries = self.load()
+        preserved: list[str] = []
+        remaining: list[dict[str, Any]] = []
+        for entry in entries:
+            if entry.get("package") != package:
+                remaining.append(entry)
+                continue
+            file_path = self._github_root / entry["file"]
+            if self._is_user_modified(entry, file_path):
+                _log.warning("Preserving user-modified file: %s", file_path)
+                preserved.append(entry["file"])
+            else:
+                if file_path.is_file():
+                    try:
+                        file_path.unlink()
+                        _log.info("Removed file: %s", file_path)
+                    except OSError as exc:
+                        _log.warning("Cannot remove %s: %s", file_path, exc)
+        self.save(remaining)
+        return preserved
+
+    def is_user_modified(self, file_rel: str) -> bool | None:
+        """On-demand check: True if user modified the file since install, None if untracked."""
+        for entry in self.load():
+            if entry.get("file") == file_rel:
+                return self._is_user_modified(entry, self._github_root / file_rel)
+        return None
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        if not path.is_file():
+            return ""
+        h = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def _is_user_modified(self, entry: dict[str, Any], file_path: Path) -> bool:
+        stored = entry.get("sha256", "")
+        if not stored:
+            return False
+        return self._sha256(file_path) != stored
+
+
+# ---------------------------------------------------------------------------
+# RegistryClient (A4 — package registry)
+# ---------------------------------------------------------------------------
+
+_REGISTRY_URL: str = (
+    "https://raw.githubusercontent.com/Nemex81/scf-registry/main/registry.json"
+)
+_REGISTRY_CACHE_FILENAME: str = ".scf-registry-cache.json"
+_REGISTRY_TIMEOUT_SECONDS: int = 5
+
+
+class RegistryClient:
+    """Fetch and cache the SCF registry index from GitHub.
+
+    V1 supports public packages only (public raw.githubusercontent.com URLs).
+    Any non-standard or private URL produces an explicit ValueError —
+    no silent attempt is ever made on private raw URLs.
+    """
+
+    def __init__(self, github_root: Path, registry_url: str = _REGISTRY_URL) -> None:
+        self._github_root = github_root
+        self._registry_url = registry_url
+        self._cache_path = github_root / _REGISTRY_CACHE_FILENAME
+
+    def fetch(self) -> dict[str, Any]:
+        """Return registry data, falling back to cache on network failure.
+
+        Raises ValueError for non-public URLs.
+        Raises RuntimeError if both network and cache are unavailable.
+        """
+        if not self._registry_url.startswith("https://raw.githubusercontent.com/"):
+            raise ValueError(
+                "Private or non-standard registry URLs are not supported in v1. "
+                "Only public raw.githubusercontent.com URLs are accepted."
+            )
+        try:
+            data = self._fetch_remote()
+            self._save_cache(data)
+            return data
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            _log.warning("Registry fetch failed (%s), falling back to cache", exc)
+            return self._load_cache()
+
+    def list_packages(self) -> list[dict[str, Any]]:
+        """Return the packages array. Returns [] when registry is unavailable."""
+        try:
+            return list(self.fetch().get("packages", []))
+        except RuntimeError:
+            return []
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _fetch_remote(self) -> dict[str, Any]:
+        req = urllib.request.Request(
+            self._registry_url,
+            headers={"User-Agent": f"spark-framework-engine/{ENGINE_VERSION}"},
+        )
+        with urllib.request.urlopen(req, timeout=_REGISTRY_TIMEOUT_SECONDS) as resp:  # noqa: S310
+            raw = resp.read().decode("utf-8")
+        return json.loads(raw)  # type: ignore[no-any-return]
+
+    def _save_cache(self, data: dict[str, Any]) -> None:
+        try:
+            self._cache_path.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            _log.warning("Cannot write registry cache: %s", exc)
+
+    def _load_cache(self) -> dict[str, Any]:
+        if not self._cache_path.is_file():
+            raise RuntimeError(
+                "Registry unavailable and no local cache found at "
+                f"{self._cache_path}. Connect to the internet and retry."
+            )
+        try:
+            return json.loads(self._cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Registry cache corrupted: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +586,13 @@ class SparkFrameworkEngine:
         self._executor = executor
 
     def register_resources(self) -> None:
-        """Register all 16 MCP resources."""
+        """Register all 16 MCP resources.
+
+        Portability note: MCP Prompts are intentionally not registered here.
+        VS Code handles .github/prompts/ natively as slash commands; alternative
+        MCP clients will see prompts only as text resources, not as native MCP
+        Prompt artefacts. Known v1 constraint, correct by design.
+        """
         inventory = self._inventory
         ctx = self._ctx
 
@@ -579,7 +835,82 @@ class SparkFrameworkEngine:
             """Return workspace paths, initialization state and SCF asset counts."""
             return build_workspace_info(self._ctx, inventory)
 
-        _log.info("Tools registered: 13 total")
+        manifest = ManifestManager(self._ctx.github_root)
+        registry = RegistryClient(self._ctx.github_root)
+
+        @self._mcp.tool()
+        async def scf_install_package(package_id: str) -> dict[str, Any]:
+            """Install an SCF package from the public registry into the active workspace .github/."""
+            try:
+                packages = registry.list_packages()
+            except Exception as exc:  # noqa: BLE001
+                return {"success": False, "error": f"Registry unavailable: {exc}"}
+            pkg = next((p for p in packages if p.get("id") == package_id), None)
+            if pkg is None:
+                return {
+                    "success": False,
+                    "error": f"Package '{package_id}' not found in registry.",
+                    "available": [p.get("id") for p in packages],
+                }
+            if pkg.get("status") == "deprecated":
+                return {
+                    "success": False,
+                    "error": (
+                        f"Package '{package_id}' is deprecated. "
+                        "Check the registry for its successor."
+                    ),
+                }
+            # Full file installation requires scf-pack-* repos to publish their
+            # file listing. Pending until the first package repos are available.
+            return {
+                "success": False,
+                "error": (
+                    "Package file installation not yet available: "
+                    "scf-pack-* package repos are pending creation."
+                ),
+                "package": pkg,
+            }
+
+        @self._mcp.tool()
+        async def scf_update_packages() -> dict[str, Any]:
+            """Check installed SCF packages for updates and report upgrade opportunities."""
+            entries = manifest.load()
+            if not entries:
+                return {"message": "No SCF packages installed via manifest.", "updates": []}
+            try:
+                reg_packages = registry.list_packages()
+            except Exception as exc:  # noqa: BLE001
+                return {"success": False, "error": f"Registry unavailable: {exc}"}
+            reg_index: dict[str, Any] = {p["id"]: p for p in reg_packages if "id" in p}
+            updates: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for entry in entries:
+                pkg_id = entry.get("package", "")
+                if not pkg_id or pkg_id in seen:
+                    continue
+                seen.add(pkg_id)
+                reg_entry = reg_index.get(pkg_id)
+                if reg_entry is None:
+                    updates.append({"package": pkg_id, "status": "not_in_registry"})
+                    continue
+                installed_ver = entry.get("package_version", "")
+                latest_ver = reg_entry.get("latest_version", "")
+                if installed_ver == latest_ver:
+                    updates.append({
+                        "package": pkg_id,
+                        "status": "up_to_date",
+                        "version": installed_ver,
+                    })
+                else:
+                    updates.append({
+                        "package": pkg_id,
+                        "status": "update_available",
+                        "installed": installed_ver,
+                        "latest": latest_ver,
+                    })
+            return {"updates": updates, "total": len(updates)}
+
+        _log.info("Tools registered: 15 total")
 
 
 # ---------------------------------------------------------------------------
