@@ -528,7 +528,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (14) and Tools (13)
+# SparkFrameworkEngine — Resources (14) and Tools (18)
 # ---------------------------------------------------------------------------
 
 
@@ -657,7 +657,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 14 MCP tools."""
+        """Register all 18 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -777,6 +777,117 @@ class SparkFrameworkEngine:
         registry = RegistryClient(self._ctx.github_root)
 
         @self._mcp.tool()
+        async def scf_list_available_packages() -> dict[str, Any]:
+            """List all packages currently available in the public SCF registry."""
+            try:
+                packages = registry.list_packages()
+            except Exception as exc:  # noqa: BLE001
+                return {"success": False, "error": f"Registry unavailable: {exc}"}
+            return {
+                "success": True,
+                "count": len(packages),
+                "packages": [
+                    {
+                        "id": p.get("id"),
+                        "description": p.get("description", ""),
+                        "latest_version": p.get("latest_version", ""),
+                        "status": p.get("status", "unknown"),
+                        "repo_url": p.get("repo_url", ""),
+                    }
+                    for p in packages
+                ],
+            }
+
+        @self._mcp.tool()
+        async def scf_get_package_info(package_id: str) -> dict[str, Any]:
+            """Return detailed information for a package, including file manifest stats."""
+            try:
+                packages = registry.list_packages()
+            except Exception as exc:  # noqa: BLE001
+                return {"success": False, "error": f"Registry unavailable: {exc}"}
+            pkg = next((p for p in packages if p.get("id") == package_id), None)
+            if pkg is None:
+                return {
+                    "success": False,
+                    "error": f"Package '{package_id}' not found in registry.",
+                    "available": [p.get("id") for p in packages],
+                }
+            try:
+                pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "success": False,
+                    "error": f"Cannot fetch package manifest: {exc}",
+                    "package": pkg,
+                }
+            files: list[str] = pkg_manifest.get("files", [])
+            categories = {
+                "root": 0,
+                "agents": 0,
+                "skills": 0,
+                "instructions": 0,
+                "prompts": 0,
+                "other": 0,
+            }
+            for fp in files:
+                if fp.startswith(".github/agents/"):
+                    categories["agents"] += 1
+                elif fp.startswith(".github/skills/"):
+                    categories["skills"] += 1
+                elif fp.startswith(".github/instructions/"):
+                    categories["instructions"] += 1
+                elif fp.startswith(".github/prompts/"):
+                    categories["prompts"] += 1
+                elif fp.startswith(".github/") and fp.count("/") == 1:
+                    categories["root"] += 1
+                else:
+                    categories["other"] += 1
+            return {
+                "success": True,
+                "package": {
+                    "id": pkg.get("id"),
+                    "description": pkg.get("description", ""),
+                    "repo_url": pkg.get("repo_url", ""),
+                    "latest_version": pkg.get("latest_version", ""),
+                    "status": pkg.get("status", "unknown"),
+                    "engine_min_version": pkg.get("engine_min_version", ""),
+                    "tags": pkg.get("tags", []),
+                },
+                "manifest": {
+                    "package": pkg_manifest.get("package", package_id),
+                    "version": pkg_manifest.get("version", pkg.get("latest_version", "")),
+                    "file_count": len(files),
+                    "categories": categories,
+                    "files": files,
+                },
+            }
+
+        @self._mcp.tool()
+        async def scf_list_installed_packages() -> dict[str, Any]:
+            """List packages currently installed in the active workspace."""
+            entries = manifest.load()
+            if not entries:
+                return {"count": 0, "packages": []}
+            grouped: dict[str, dict[str, Any]] = {}
+            for entry in entries:
+                pkg_id = entry.get("package", "")
+                if not pkg_id:
+                    continue
+                node = grouped.setdefault(
+                    pkg_id,
+                    {
+                        "package": pkg_id,
+                        "version": entry.get("package_version", ""),
+                        "file_count": 0,
+                        "files": [],
+                    },
+                )
+                node["file_count"] += 1
+                node["files"].append(entry.get("file", ""))
+            packages = sorted(grouped.values(), key=lambda x: str(x["package"]))
+            return {"count": len(packages), "packages": packages}
+
+        @self._mcp.tool()
         async def scf_install_package(package_id: str) -> dict[str, Any]:
             """Install an SCF package from the public registry into the active workspace .github/."""
             try:
@@ -889,6 +1000,43 @@ class SparkFrameworkEngine:
             return {"updates": updates, "total": len(updates)}
 
         @self._mcp.tool()
+        async def scf_apply_updates(package_id: str | None = None) -> dict[str, Any]:
+            """Apply package updates by reinstalling latest versions from the registry.
+
+            If package_id is provided, applies the update only for that package.
+            Otherwise applies all available updates.
+            """
+            report = await scf_update_packages()
+            if report.get("success") is False:
+                return report
+            updates = list(report.get("updates", []))
+            target_ids = [u.get("package", "") for u in updates if u.get("status") == "update_available"]
+            if package_id:
+                target_ids = [pkg for pkg in target_ids if pkg == package_id]
+                if not target_ids:
+                    return {
+                        "success": False,
+                        "error": f"No update available for package '{package_id}'.",
+                        "updates": updates,
+                    }
+            if not target_ids:
+                return {"success": True, "message": "No updates to apply.", "applied": [], "failed": []}
+            applied: list[dict[str, Any]] = []
+            failed: list[dict[str, Any]] = []
+            for pkg_id in target_ids:
+                result = await scf_install_package(pkg_id)
+                if result.get("success") is True:
+                    applied.append(result)
+                else:
+                    failed.append({"package": pkg_id, "error": result.get("error", "unknown error")})
+            return {
+                "success": len(failed) == 0,
+                "applied": applied,
+                "failed": failed,
+                "total_targets": len(target_ids),
+            }
+
+        @self._mcp.tool()
         async def scf_remove_package(package_id: str) -> dict[str, Any]:
             """Remove an installed SCF package from the workspace.
 
@@ -902,7 +1050,7 @@ class SparkFrameworkEngine:
                 "preserved_user_modified": preserved,
             }
 
-        _log.info("Tools registered: 14 total")
+        _log.info("Tools registered: 18 total")
 
 
 # ---------------------------------------------------------------------------
