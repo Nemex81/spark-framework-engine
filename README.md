@@ -87,7 +87,7 @@ scf://framework-version
 scf://workspace-info
 ```
 
-## Tools Disponibili (18)
+## Tools Disponibili (20)
 
 ```
 scf_list_agents           scf_get_agent(name)

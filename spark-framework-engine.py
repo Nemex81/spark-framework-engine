@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.1.0"
+ENGINE_VERSION: str = "1.2.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -561,7 +561,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (14) and Tools (18)
+# SparkFrameworkEngine — Resources (14) and Tools (20)
 # ---------------------------------------------------------------------------
 
 
@@ -690,7 +690,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 18 MCP tools."""
+        """Register all 20 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1083,7 +1083,7 @@ class SparkFrameworkEngine:
                 "preserved_user_modified": preserved,
             }
 
-        _log.info("Tools registered: 18 total")
+        _log.info("Tools registered: 20 total")
 
 
 # ---------------------------------------------------------------------------
