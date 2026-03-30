@@ -1,156 +1,148 @@
-# Piano di Modifica — Supporto Doppio Formato Skill in SCF
+# Piano Tecnico Implementativo — Supporto Doppio Formato Skill in SCF
 
-**Data:** 30 marzo 2026
-**Repo:** `spark-framework-engine`
-**Ambito:** estendere `FrameworkInventory` per scoprire skill sia in formato legacy piatto che in formato standard Agent Skills a sottocartelle
-
----
-
-## Contesto
-
-Il motore attuale scopre le skill solo con pattern piatto `*.skill.md` in `.github/skills/`. Il formato standard Agent Skills usa sottocartelle `skill-name/SKILL.md`. Vogliamo supportare entrambi senza breaking change.
+Data: 30 marzo 2026
+Repo: spark-framework-engine
+Versione piano: 2 (post-validazione e post-implementazione)
+Ambito: discovery skill dual-format nel motore SCF con retrocompatibilita' completa
 
 ---
 
-## File da modificare
+## 1) Esito convalida progetto aggiornato
 
-Un solo file: `spark-framework-engine.py`
+Esito: PASS
 
----
-
-## Modifiche richieste
-
-### 1. Metodo `FrameworkInventory.list_skills()`
-
-**Posizione attuale:** classe `FrameworkInventory`, metodo `list_skills()`.
-
-**Comportamento attuale:**
-```python
-def list_skills(self) -> list[FrameworkFile]:
-    return self._list_by_pattern(
-        self._ctx.github_root / "skills", "*.skill.md", "skill"
-    )
-```
-
-**Comportamento nuovo:** scopre skill in due passate distinte e unisce i risultati senza duplicati, ordinati per nome.
-
-- **Passata 1 — formato legacy piatto:** glob `*.skill.md` in `.github/skills/` — comportamento identico a prima, nessuna regressione
-- **Passata 2 — formato standard Agent Skills:** itera le sottodirectory di `.github/skills/`, cerca `SKILL.md` in ciascuna, la tratta come skill con nome uguale al nome della directory
-- **Deduplicazione:** se per qualche ragione esiste sia `foo.skill.md` che `foo/SKILL.md`, prevale il formato piatto (primo trovato vince)
-- **Ordinamento:** lista finale ordinata per nome alfabetico
-
-**Implementazione:**
-```python
-def list_skills(self) -> list[FrameworkFile]:
-    """Discover SCF skills in both supported formats.
-
-    Format 1 (legacy/SCF internal): .github/skills/*.skill.md
-    Format 2 (Agent Skills standard): .github/skills/skill-name/SKILL.md
-    Both formats are supported simultaneously. On name collision, flat format wins.
-    """
-    skills_root = self._ctx.github_root / "skills"
-
-    # Passata 1: formato piatto legacy
-    flat = self._list_by_pattern(skills_root, "*.skill.md", "skill")
-    seen: set[str] = {ff.name for ff in flat}
-
-    # Passata 2: formato standard Agent Skills (sottocartelle)
-    standard: list[FrameworkFile] = []
-    if skills_root.is_dir():
-        for skill_dir in sorted(skills_root.iterdir()):
-            skill_file = skill_dir / "SKILL.md"
-            if skill_dir.is_dir() and skill_file.is_file():
-                ff = self._build_framework_file(skill_file, "skill")
-                # usa il nome della directory come nome skill, non "SKILL"
-                ff = FrameworkFile(
-                    name=skill_dir.name,
-                    path=ff.path,
-                    category=ff.category,
-                    summary=ff.summary,
-                    metadata=ff.metadata,
-                )
-                if ff.name not in seen:
-                    standard.append(ff)
-                    seen.add(ff.name)
-
-    combined = flat + standard
-    return sorted(combined, key=lambda ff: ff.name)
-```
-
-### 2. Resource `skills://{name}`
-
-**Posizione attuale:** `register_resources()`, resource `skills://{name}`.
-
-**Problema:** la lookup attuale normalizza il nome rimuovendo il suffisso `.skill`. Con il formato standard il nome è già la directory, quindi non ha suffisso da rimuovere. La logica attuale funziona già correttamente perché confronta `ff.name` — che nel nuovo metodo è già il nome normalizzato. **Nessuna modifica necessaria.**
-
-### 3. Tool `scf_get_skill`
-
-**Posizione attuale:** `register_tools()`, tool `scf_get_skill`.
-
-**Stesso ragionamento:** la lookup usa `ff.name.lower().removesuffix(".skill")` per confrontare. Con il nuovo sistema il nome delle skill standard è già il nome directory senza suffisso, quindi il `removesuffix` non cambia nulla. **Nessuna modifica necessaria.**
-
-### 4. Commento della classe `SparkFrameworkEngine`
-
-**Posizione attuale:** docstring della classe, riga che descrive Resources e Tools.
-
-**Modifica:** aggiornare il commento `Resources (14) and Tools (18)` — già corretto sul conteggio tools, nessuna variazione di conteggio da questa modifica. **Nessuna modifica necessaria.**
+Evidenze tecniche verificate:
+- ENGINE_VERSION allineata a 1.1.0 in spark-framework-engine.py
+- list_skills() aggiornato per discovery dual-format
+- README allineato con Tools Disponibili (18)
+- CHANGELOG.md presente con voce [1.1.0]
+- test suite verde: 32 passed, 12 subtests passed
 
 ---
 
-## Test da aggiornare o aggiungere
+## 2) Obiettivo implementativo
 
-**File:** `tests/` — verificare se esistono test su `list_skills()`.
+Abilitare la scoperta delle skill in due formati contemporaneamente:
+- Formato legacy piatto: .github/skills/*.skill.md
+- Formato standard Agent Skills: .github/skills/<skill-name>/SKILL.md
 
-Se esistono, aggiungere un test case che:
-- crea una struttura di directory temporanea con una skill in formato piatto (`foo.skill.md`) e una in formato standard (`bar/SKILL.md`)
-- chiama `list_skills()` e verifica che entrambe siano presenti
-- verifica che in caso di collisione nome il formato piatto prevalga
-- verifica l'ordinamento alfabetico del risultato
+Vincolo primario: zero breaking change per i repository che usano solo formato legacy.
 
 ---
 
-## Invarianti da rispettare
+## 3) Specifica tecnica implementata
 
-- nessuna breaking change sui metodi pubblici di `FrameworkInventory`
-- il comportamento su repo senza directory `.github/skills/` rimane identico: restituisce lista vuota
-- il comportamento su `.github/skills/` esistente ma vuota rimane identico: restituisce lista vuota
-- nessuna modifica a resource URI, tool signature, o formato di risposta
+### 3.1 Metodo target
+
+File: spark-framework-engine.py
+Classe: FrameworkInventory
+Metodo: list_skills()
+
+### 3.2 Algoritmo
+
+Passo A - Discovery legacy:
+- usa _list_by_pattern(skills_root, "*.skill.md", "skill")
+- mantiene comportamento storico invariato
+
+Passo B - Costruzione set deduplica logica:
+- crea seen con chiavi normalizzate da flat
+- normalizzazione: removesuffix(".skill")
+
+Passo C - Discovery standard a sottocartelle:
+- itera skills_root.iterdir() in ordine sorted
+- seleziona solo directory contenenti SKILL.md
+- crea FrameworkFile con name uguale al nome directory
+
+Passo D - Deduplica con priorita' legacy:
+- calcola key normalizzata per entry standard
+- include entry standard solo se key non e' in seen
+- su collisione foo.skill.md vs foo/SKILL.md prevale flat
+
+Passo E - Ordinamento finale:
+- ritorna combined ordinato alfabeticamente per name
+
+### 3.3 Compatibilita' API
+
+Nessun cambiamento a:
+- firma dei tool
+- URI resources
+- shape di risposta dei tool
+- comportamento di skills://{name} e scf_get_skill
 
 ---
 
-## Istruzioni per Copilot
+## 4) Implementazione test
 
-Modifica il file `spark-framework-engine.py` nel repo `Nemex81/spark-framework-engine`.
+File test aggiunto: tests/test_framework_inventory_skills.py
 
-Intervieni **solo** sul metodo `list_skills()` della classe `FrameworkInventory`. Non toccare nient'altro nel file.
+Copertura minima implementata:
+- scoperta simultanea flat + standard
+- collisione nome con prevalenza flat
+- skills directory assente -> lista vuota
+- skills directory vuota -> lista vuota
 
-Il metodo aggiornato deve:
-1. eseguire prima la scoperta in formato piatto con `_list_by_pattern` — comportamento invariato rispetto a oggi
-2. eseguire poi la scoperta in formato standard iterando le sottodirectory di `.github/skills/` e cercando `SKILL.md` in ciascuna
-3. assegnare come nome della skill il nome della directory, non la stringa letterale `"SKILL"`
-4. deduplicare per nome prima di unire le due liste — in caso di collisione il formato piatto ha priorità
-5. restituire la lista unificata ordinata alfabeticamente per nome
-
-Aggiungere o aggiornare i test in `tests/` per coprire il comportamento duale con fixture di directory temporanee.
-
-Non modificare resource handler, tool handler, contatori, commenti di classe o qualsiasi altro metodo.
+Approccio test:
+- unittest standard library
+- fixture con TemporaryDirectory
+- caricamento modulo engine via importlib + mock mcp
 
 ---
 
-## Impatto
+## 5) Requisiti non funzionali soddisfatti
 
-| Area | Impatto |
-|---|---|
-| Skill formato piatto esistenti | Nessuno — comportamento invariato |
-| Skill formato standard nuove | Ora scoperte e servite correttamente |
-| Resource `skills://list` | Mostra skill di entrambi i formati |
-| Resource `skills://{name}` | Lookup funziona su entrambi i formati |
-| Tool `scf_list_skills` | Restituisce skill di entrambi i formati |
-| Tool `scf_get_skill` | Lookup funziona su entrambi i formati |
-| Test esistenti | Nessuna regressione attesa |
+- Retrocompatibilita' con repository legacy
+- Determinismo risultato tramite ordinamento
+- Nessuna dipendenza runtime aggiuntiva
+- Nessun impatto su performance significativo (scan locale limitato a .github/skills)
 
 ---
 
-## Note
+## 6) Rischi residui e mitigazioni
 
-Dopo l'implementazione, aggiornare `ENGINE_VERSION` da `1.0.0` a `1.1.0` in `spark-framework-engine.py` e creare la voce corrispondente nel `CHANGELOG.md` del motore.
+Rischio 1: collisioni non intenzionali tra nomi legacy e standard.
+Mitigazione: regola esplicita di priorita' legacy documentata e testata.
+
+Rischio 2: naming ambiguo con suffisso .skill nelle directory standard.
+Mitigazione: deduplica su chiave normalizzata (removesuffix(".skill")).
+
+Rischio 3: divergenza futura tra implementazione e documentazione.
+Mitigazione: aggiornamento README + CHANGELOG nella stessa release.
+
+---
+
+## 7) Artefatti di rilascio collegati
+
+- spark-framework-engine.py: ENGINE_VERSION 1.1.0 e list_skills dual-format
+- tests/test_framework_inventory_skills.py: nuova suite specifica
+- README.md: Tools Disponibili (18) allineato
+- CHANGELOG.md: voce [1.1.0]
+
+---
+
+## 8) Criteri di accettazione (Definition of Done)
+
+- [x] supporto dual-format attivo in list_skills()
+- [x] priorita' legacy su collisione nome
+- [x] ordinamento alfabetico output
+- [x] nessuna regressione su suite esistente
+- [x] test dedicati aggiunti e verdi
+- [x] ENGINE_VERSION allineata a 1.1.0
+- [x] CHANGELOG aggiornato
+- [x] README allineato
+
+---
+
+## 9) Procedura operativa replicabile (future patch)
+
+1. Implementare eventuale estensione di discovery solo in FrameworkInventory.list_skills().
+2. Mantenere sempre first-pass legacy e deduplica con priorita' flat.
+3. Aggiornare test dedicati in tests/test_framework_inventory_skills.py.
+4. Eseguire pytest -q e richiedere suite verde.
+5. Allineare ENGINE_VERSION, CHANGELOG e README nella stessa change-set.
+
+---
+
+## 10) Stato finale
+
+Modifica introdotta, verificata e rilasciata.
+Il piano passa da "proposta" a "piano tecnico as-built" utilizzabile come riferimento implementativo per evoluzioni future.
