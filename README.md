@@ -87,7 +87,7 @@ scf://framework-version
 scf://workspace-info
 ```
 
-## Tools Disponibili (21)
+## Tools Disponibili (22)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -97,6 +97,7 @@ scf_list_prompts          scf_get_prompt(name)
 scf_get_project_profile   scf_get_global_instructions
 scf_get_model_policy      scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati)
 scf_get_workspace_info
+scf_verify_workspace()
 scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()

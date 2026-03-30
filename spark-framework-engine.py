@@ -465,6 +465,71 @@ class ManifestManager:
                 versions[package_id] = package_version
         return dict(sorted(versions.items()))
 
+    def verify_integrity(self) -> dict[str, Any]:
+        """Verify manifest integrity against files currently present under .github/."""
+        entries = self.load()
+        tracked_files: set[str] = set()
+        missing: list[str] = []
+        modified: list[str] = []
+        ok: list[str] = []
+        duplicate_owners_map: dict[str, set[str]] = {}
+
+        for entry in entries:
+            file_rel = str(entry.get("file", "")).strip()
+            package_id = str(entry.get("package", "")).strip()
+            if not file_rel:
+                continue
+            tracked_files.add(file_rel)
+            owners = duplicate_owners_map.setdefault(file_rel, set())
+            if package_id:
+                owners.add(package_id)
+
+            file_path = self._github_root / file_rel
+            if not file_path.is_file():
+                missing.append(file_rel)
+            elif self._is_user_modified(entry, file_path):
+                modified.append(file_rel)
+            else:
+                ok.append(file_rel)
+
+        duplicate_owners = [
+            {
+                "file": file_rel,
+                "owners": sorted(owners),
+                "entry_count": sum(1 for entry in entries if str(entry.get("file", "")).strip() == file_rel),
+            }
+            for file_rel, owners in sorted(duplicate_owners_map.items())
+            if len(owners) > 1
+        ]
+
+        ignored_runtime_files = {_MANIFEST_FILENAME, _REGISTRY_CACHE_FILENAME}
+        orphan_candidates: list[str] = []
+        if self._github_root.is_dir():
+            for path in sorted(candidate for candidate in self._github_root.rglob("*") if candidate.is_file()):
+                rel_path = path.relative_to(self._github_root).as_posix()
+                if rel_path in ignored_runtime_files:
+                    continue
+                if rel_path not in tracked_files:
+                    orphan_candidates.append(rel_path)
+
+        missing.sort()
+        modified.sort()
+        ok.sort()
+        summary = {
+            "tracked_entries": len(entries),
+            "ok_count": len(ok),
+            "issue_count": len(missing) + len(modified) + len(duplicate_owners),
+            "orphan_candidate_count": len(orphan_candidates),
+        }
+        return {
+            "missing": missing,
+            "modified": modified,
+            "ok": ok,
+            "duplicate_owners": duplicate_owners,
+            "orphan_candidates": orphan_candidates,
+            "summary": summary,
+        }
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -746,7 +811,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 21 MCP tools."""
+        """Register all 22 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1164,7 +1229,17 @@ class SparkFrameworkEngine:
                 "version": _extract_version_from_changelog(changelog_path),
             }
 
-        _log.info("Tools registered: 21 total")
+        @self._mcp.tool()
+        async def scf_verify_workspace() -> dict[str, Any]:
+            """Verify runtime manifest integrity against files currently present in .github/."""
+            report = manifest.verify_integrity()
+            summary = dict(report.get("summary", {}))
+            issue_count = int(summary.get("issue_count", 0))
+            summary["is_clean"] = issue_count == 0
+            report["summary"] = summary
+            return report
+
+        _log.info("Tools registered: 22 total")
 
 
 # ---------------------------------------------------------------------------
