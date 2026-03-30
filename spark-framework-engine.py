@@ -510,14 +510,14 @@ class RegistryClient:
             + "/main/package-manifest.json"
         )
         try:
-            raw = self._fetch_raw_file(raw_url)
+            raw = self.fetch_raw_file(raw_url)
             return json.loads(raw)  # type: ignore[no-any-return]
         except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
             raise RuntimeError(
                 f"Cannot fetch package manifest from {raw_url}: {exc}"
             ) from exc
 
-    def _fetch_raw_file(self, raw_url: str) -> str:
+    def fetch_raw_file(self, raw_url: str) -> str:
         """Fetch a single raw text file from a URL. No caching."""
         req = urllib.request.Request(
             raw_url,
@@ -657,7 +657,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 13 MCP tools."""
+        """Register all 14 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -826,7 +826,7 @@ class SparkFrameworkEngine:
                     preserved.append(file_path)
                     continue
                 try:
-                    content = registry._fetch_raw_file(raw_url)
+                    content = registry.fetch_raw_file(raw_url)
                 except (urllib.error.URLError, OSError) as exc:
                     errors.append(f"{file_path}: {exc}")
                     continue
