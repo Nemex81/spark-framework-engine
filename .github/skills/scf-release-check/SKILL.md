@@ -20,7 +20,7 @@ Obiettivo: validare la release readiness del motore e proporre il tag corretto s
 - Segnalare changelog vuoto o non aggiornato.
 
 3. Allineamento ENGINE_VERSION.
-- Leggere versione corrente con scf_get_framework_version.
+- Leggere versione corrente con scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati).
 - Confrontare con ultima voce in CHANGELOG.md.
 - Segnalare mismatch.
 
@@ -40,7 +40,7 @@ Obiettivo: validare la release readiness del motore e proporre il tag corretto s
 
 ## Tool da usare
 
-- scf_get_framework_version
+- scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati)
 - scf_list_prompts
 - readFile
 - runCommand (sola lettura: git log --oneline -10, git status, git tag)

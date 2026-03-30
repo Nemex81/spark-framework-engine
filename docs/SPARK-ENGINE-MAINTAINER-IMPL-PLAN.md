@@ -165,7 +165,7 @@ Passo 5 — Report finale:
 - per ogni voce CRITICAL o WARNING indicare: file, riga se applicabile, discrepanza trovata, correzione suggerita
 - non applicare nessuna correzione autonomamente
 
-**Tool da usare:** `scf_list_prompts`, `scf_get_prompt`, `scf_get_framework_version`, `readFile`
+**Tool da usare:** `scf_list_prompts`, `scf_get_prompt`, `scf_get_framework_version` (restituisce `engine_version` e le versioni dei pacchetti installati), `readFile`
 
 ---
 
@@ -220,7 +220,7 @@ Passo 4 — Aggiornamento ENGINE_VERSION:
 - localizzare la riga `ENGINE_VERSION: str = "X.Y.Z"` in `spark-framework-engine.py`
 - proporre la modifica con anteprima del diff e attendere conferma esplicita prima di applicare
 
-**Tool da usare:** `scf_get_framework_version`, `readFile`, `editFiles`, `changes`
+**Tool da usare:** `scf_get_framework_version` (restituisce `engine_version` e le versioni dei pacchetti installati), `readFile`, `editFiles`, `changes`
 
 ---
 
@@ -381,7 +381,7 @@ Passo 6 — Proposta tag git:
 - non eseguire il tag autonomamente — proporre e attendere conferma esplicita dell'utente
 - ricordare che dopo il tag va fatto `git push --tags`
 
-**Tool da usare:** `scf_get_framework_version`, `scf_list_prompts`, `readFile`, `runCommand` (solo lettura: `git log --oneline -10`, `git status`, `git tag`)
+**Tool da usare:** `scf_get_framework_version` (restituisce `engine_version` e le versioni dei pacchetti installati), `scf_list_prompts`, `readFile`, `runCommand` (solo lettura: `git log --oneline -10`, `git status`, `git tag`)
 
 ---
 
@@ -424,7 +424,7 @@ Regola generale:
 - segnalare sempre i disallineamenti trovati prima di proporre correzioni
 - proporre sempre diff + conferma esplicita prima di applicare qualsiasi modifica
 
-**Tool da usare:** `readFile`, `editFiles`, `fetch`, `scf_get_framework_version`
+**Tool da usare:** `readFile`, `editFiles`, `fetch`, `scf_get_framework_version` (restituisce `engine_version` e le versioni dei pacchetti installati)
 
 ---
 
@@ -439,7 +439,7 @@ name: spark-engine-maintainer
 description: Agente specializzato nella manutenzione, evoluzione e coerenza del motore spark-framework-engine. Gestisce versioni, CHANGELOG, audit di coerenza, sviluppo tool MCP, gestione prompt e documentazione.
 tools:
   - scf_get_workspace_info
-  - scf_get_framework_version
+  - scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati)
   - scf_list_agents
   - scf_list_skills
   - scf_list_instructions

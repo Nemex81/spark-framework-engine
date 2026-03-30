@@ -10,9 +10,9 @@ Obiettivo: classificare correttamente il rilascio e mantenere allineati CHANGELO
 ## Procedura operativa
 
 1. Raccolta modifiche recenti.
-- Usare scf_get_framework_version per la versione corrente.
-- Leggere CHANGELOG.md per identificare ultima voce rilasciata.
-- Leggere modifiche recenti in spark-framework-engine.py e .github/ tramite readFile o changes.
+- Usare `scf_get_framework_version` (restituisce `engine_version` e le versioni dei pacchetti installati) per la versione corrente.
+- Leggere `CHANGELOG.md` per identificare l'ultima voce rilasciata.
+- Leggere modifiche recenti in `spark-framework-engine.py` e `.github/` tramite `readFile` o `changes`.
 
 2. Determinazione bump semantico.
 - Major se ci sono breaking change MCP o refactor architetturali incompatibili.
@@ -43,12 +43,12 @@ Template:
 - voce
 
 4. Aggiornamento ENGINE_VERSION.
-- Localizzare ENGINE_VERSION: str = "X.Y.Z" in spark-framework-engine.py.
+- Localizzare `ENGINE_VERSION: str = "X.Y.Z"` in `spark-framework-engine.py`.
 - Proporre diff e attendere conferma esplicita prima di applicare.
 
 ## Tool da usare
 
-- scf_get_framework_version
-- readFile
-- editFiles
-- changes
+- `scf_get_framework_version` (restituisce `engine_version` e le versioni dei pacchetti installati)
+- `readFile`
+- `editFiles`
+- `changes`

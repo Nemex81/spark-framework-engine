@@ -41,5 +41,5 @@ Obiettivo: verificare coerenza interna del motore SCF senza applicare modifiche.
 
 - scf_list_prompts
 - scf_get_prompt
-- scf_get_framework_version
+- scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati)
 - readFile

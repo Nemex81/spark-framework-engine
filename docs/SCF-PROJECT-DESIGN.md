@@ -225,7 +225,9 @@ Costante Python `ENGINE_VERSION` in `spark-framework-engine.py`. Segue semver `M
 
 ### `protocol_version` — versione del protocollo SCF
 
-Dichiarata nel workspace tramite `.github/FRAMEWORK_CHANGELOG.md`. Segue semver `MAJOR.MINOR.PATCH`.
+Dichiarata per-pacchetto dai changelog dei singoli pacchetti installati, convenzionalmente in
+`.github/changelogs/{package_id}.md`. In fase di runtime il motore legge le versioni dei pacchetti
+dall'install manifest `.scf-manifest.json` e le espone come insieme di pacchetti installati.
 
 - `PATCH`: chiarimenti o correzioni senza impatto sul formato SCF.
 - `MINOR`: nuovi campi opzionali o nuovi tipi di file; degradazione graziosa automatica.

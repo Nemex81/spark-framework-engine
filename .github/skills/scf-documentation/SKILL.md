@@ -40,4 +40,4 @@ Obiettivo: mantenere coerenza tra implementazione reale e documentazione di prog
 - readFile
 - editFiles
 - fetch
-- scf_get_framework_version
+- scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati)

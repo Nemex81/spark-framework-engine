@@ -13,7 +13,7 @@ Istruzioni operative:
 4. Non modificare file o stato del workspace.
 
 Formato risposta:
-- Sezione `Workspace`: root attiva, initialized, framework_version.
+- Sezione `Workspace`: root attiva, initialized, engine_version e installed_packages (elenco pacchetti installati con le rispettive versioni).
 - Sezione `Asset SCF`: conteggi agent/skill/instruction/prompt.
 - Sezione `Pacchetti installati`: package, versione, numero file.
 - Sezione `Aggiornamenti`: up_to_date, update_available, not_in_registry.

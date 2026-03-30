@@ -3,7 +3,7 @@ name: spark-engine-maintainer
 description: Agente specializzato nella manutenzione, evoluzione e coerenza del motore spark-framework-engine. Gestisce versioni, CHANGELOG, audit di coerenza, sviluppo tool MCP, gestione prompt e documentazione.
 tools:
   - scf_get_workspace_info
-  - scf_get_framework_version
+  - scf_get_framework_version (restituisce `engine_version` e le versioni dei pacchetti installati)
   - scf_list_agents
   - scf_list_skills
   - scf_list_instructions
