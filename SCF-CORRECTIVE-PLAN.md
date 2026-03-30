@@ -1,5 +1,5 @@
 # SCF — Piano Correttivo
-## Documento di Implementazione — v1.2 — 30 marzo 2026
+## Documento di Implementazione — v1.3 — 30 marzo 2026
 
 Questo documento descrive tutte le anomalie identificate nell'analisi critica del progetto SCF
 e il piano operativo per risolverle prima di procedere ai Livelli 2 e 3.
@@ -32,6 +32,8 @@ se fossero future.
 
 **File da modificare:** `SCF-PROJECT-DESIGN.md`
 
+**Stato:** ✅ completato
+
 ---
 
 ### A2 — Correggere il parser frontmatter per i campi lista
@@ -54,6 +56,8 @@ tra protocollo e parser è rotto in silenzio.
 
 **File da modificare:** `spark-framework-engine.py`
 **File da creare:** `tests/test_frontmatter_parser.py`
+
+**Stato:** ✅ completato
 
 ---
 
@@ -111,6 +115,8 @@ accesso a git — dipendenza esterna non garantita. SHA-256 è self-contained.
 - Criterio di accettazione indipendente: il formato deve essere documentato e implementabile interamente nel repo del motore, senza dipendenze su servizi remoti.
 
 **File da modificare:** `SCF-PROJECT-DESIGN.md`, `spark-framework-engine.py`
+
+**Stato:** ✅ completato
 
 ---
 
@@ -171,6 +177,8 @@ in modo implicito l'accesso a raw URL privati.
 **File da modificare:** `SCF-PROJECT-DESIGN.md`, `spark-framework-engine.py`
 **Repo da creare:** `scf-registry`
 
+**Stato:** ✅ completato (motore) — ⏳ repo `scf-registry` da creare
+
 ---
 
 ## BLOCCO B — Priorità Media
@@ -213,6 +221,8 @@ dei file SCF installati.
 **File da modificare:** `SCF-PROJECT-DESIGN.md`
 **File da modificare in implementazione successiva:** `spark-framework-engine.py`, `.github/FRAMEWORK_CHANGELOG.md`
 
+**Stato:** ✅ completato
+
 ---
 
 ## BLOCCO C — Priorità Bassa
@@ -224,11 +234,15 @@ ma non scalabile con molti file SCF installati.
 
 **Intervento:**
 - Trattare questo intervento come ottimizzazione successiva, non come prerequisito architetturale.
-- Basare la cache su snapshot `stat()` dei percorsi radice rilevanti (`.github/`, sottocartelle SCF e `scripts/`), così da invalidarla quando cambia lo stato del filesystem.
-- Non affidare l'invalidazione al solo tool di installazione: modifiche manuali nel workspace devono poter invalidare la cache alla chiamata successiva.
+- Basare la cache su snapshot `stat()` dei percorsi radice rilevanti (`.github/` e sottocartelle SCF),
+  così da invalidarla quando cambia lo stato del filesystem.
+- Non affidare l'invalidazione al solo tool di installazione: modifiche manuali nel workspace devono
+  poter invalidare la cache alla chiamata successiva.
 - La cache resta opzionale e può essere implementata dopo la Fase 3.
 
 **File da modificare:** `spark-framework-engine.py`
+
+**Stato:** ⏳ da fare (Fase 4)
 
 ---
 
@@ -240,51 +254,95 @@ VS Code ma introduce un vincolo implicito di portabilità: client MCP diversi da
 
 **Intervento:**
 - Aggiungere una nota esplicita nella docstring di `list_prompts()` e `register_resources()`
-  nel codice: "questo comportamento è corretto per VS Code; client MCP alternativi non
-  riceveranno i prompt come artefatti MCP Prompt nativi".
+  nel codice.
 - Aggiungere una sezione "Limiti noti e vincoli di portabilità" a `SCF-PROJECT-DESIGN.md`.
 
 **File da modificare:** `spark-framework-engine.py`, `SCF-PROJECT-DESIGN.md`
 
----
-
-## Ordine di esecuzione raccomandato
-
-```
-Fase 1 (prerequisiti documentali):
-  → A1: aggiorna SCF-PROJECT-DESIGN.md
-  → A3: aggiungi specifica manifesto a SCF-PROJECT-DESIGN.md
-  → A4: aggiungi specifica registry a SCF-PROJECT-DESIGN.md
-  → B1: aggiungi sezione versioning a SCF-PROJECT-DESIGN.md
-
-Fase 2 (correzioni al motore):
-  → A2: fix parser frontmatter + test unitari
-  → C2: note portabilità nel codice
-
-Fase 3 (nuova infrastruttura):
-  → A4 (parte 2): crea repo scf-registry con registry.json iniziale
-  → A3 (parte 2): implementa ManifestManager nel motore
-  → A4 (parte 3): implementa RegistryClient nel motore
-  → tool di installazione intelligente (scf_install_package, scf_update_packages)
-
-Fase 4 (ottimizzazioni successive):
-  → C1: caching FrameworkInventory con snapshot stat() dei percorsi radice
-```
+**Stato:** ✅ completato
 
 ---
 
-## Stato avanzamento
+## BLOCCO D — Decisioni architetturali post-analisi
+
+### D1 — Rimozione degli script dal framework SCF
+
+**Decisione approvata il 30 marzo 2026.**
+
+Il motore SCF è un sistema di contesto cognitivo per il modello AI: serve agenti, skill,
+instruction e prompt. Non è un runner di script. La gestione degli script (`ScriptExecutor`,
+`scf_run_script`, `scf_list_scripts`, resource `scripts://list` e `scripts://{name}`) era
+nata nel contesto specifico del progetto `solitario-classico-accessibile` ed è incompatibile
+con la filosofia dichiarata del motore universale.
+
+**Motivazioni:**
+- Un motore che esegue script arbitrari (anche con allowlist hardcoded) è un vettore di
+  rischio di sicurezza che cresce con ogni pacchetto aggiunto.
+- L'allowlist era composta da script di dominio specifico, in contraddizione con il
+  principio "il motore non conosce nessun dominio specifico".
+- I pacchetti `scf-pack-*` non devono mai dipendere dalla capacità di eseguire script
+  nel progetto dell'utente.
+- Se un pacchetto necessita di automazione, quella logica appartiene a uno script separato
+  che l'utente esegue coscientemente, non a qualcosa che Copilot in Agent mode può invocare
+  autonomamente.
+
+**Perimetro della rimozione:**
+- Classe `ScriptExecutor` rimossa dal motore.
+- Tool `scf_run_script` e `scf_list_scripts` rimossi (tool count: 15 → 13).
+- Resource `scripts://list` e `scripts://{name}` rimosse (resource count: 16 → 14).
+- Riferimento a `scripts_root` rimosso da `WorkspaceContext` e `WorkspaceLocator`.
+- Riferimento a `script_count` rimosso da `build_workspace_info()`.
+- `C1` aggiornato: il caching non include più `scripts/` tra i percorsi monitorati.
+
+**Regola permanente:** nessun pacchetto `scf-pack-*` può introdurre dipendenze da
+capacità di esecuzione script nel motore. Gli script di supporto di un pacchetto,
+se necessari, devono essere documentati come strumenti separati da eseguire manualmente.
+
+**File da modificare:** `spark-framework-engine.py`, `SCF-PROJECT-DESIGN.md`, `README.md`
+
+**Stato:** ⏳ da implementare (prossimo passo)
+
+---
+
+## Prossimi passi operativi
+
+```
+Passo 1 — Rimozione script dal motore (D1):
+  → Rimuovere ScriptExecutor, scf_run_script, scf_list_scripts
+  → Rimuovere resource scripts://list e scripts://{name}
+  → Aggiornare WorkspaceContext, WorkspaceLocator, build_workspace_info
+  → Aggiornare contatori in log, commenti e README
+  → Aggiornare SCF-PROJECT-DESIGN.md
+
+Passo 2 — Creare repo scf-registry:
+  → Repo pubblico con README e registry.json iniziale (schema valido, packages: [])
+  → Da questo momento RegistryClient trova il file senza errori di rete
+
+Passo 3 — Creare il primo scf-pack-*:
+  → Scegliere dominio (gamedev o accessibility)
+  → Struttura .github/ completa con agenti, skill, instruction, prompt
+  → Aggiungere voce in registry.json
+
+Passo 4 — Ottimizzazioni (Fase 4):
+  → C1: caching FrameworkInventory con snapshot stat()
+```
+
+---
+
+## Stato avanzamento complessivo
 
 | ID | Descrizione | Priorità | Stato |
 |---|---|---|---|
 | A1 | Aggiornare SCF-PROJECT-DESIGN.md | Alta | ✅ completato |
 | A2 | Fix parser frontmatter + test | Alta | ✅ completato |
-| A3 | Specifica manifesto installazione | Alta | ✅ completato |
-| A4 | Specifica e implementazione registry | Alta | ✅ completato |
+| A3 | Specifica e implementazione manifesto | Alta | ✅ completato |
+| A4 | Specifica registry (motore) | Alta | ✅ completato |
+| A4 | Repo scf-registry da creare | Alta | ⏳ prossimo passo |
 | B1 | Schema versioning motore | Media | ✅ completato |
-| C1 | Caching FrameworkInventory | Bassa | ⬜ da fare (Fase 4) |
+| C1 | Caching FrameworkInventory | Bassa | ⏳ da fare (Fase 4) |
 | C2 | Note portabilità prompt | Bassa | ✅ completato |
+| D1 | Rimozione script dal framework | Alta | ⏳ prossimo passo |
 
 ---
 
-*Documento generato il 30 marzo 2026 — fase di analisi critica e pianificazione correttiva.*
+*Documento aggiornato il 30 marzo 2026 — v1.3: aggiunta decisione D1 rimozione script, aggiornati prossimi passi operativi.*
