@@ -40,6 +40,11 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 ENGINE_VERSION: str = "1.2.0"
 
 # ---------------------------------------------------------------------------
+# Filenames
+# ---------------------------------------------------------------------------
+_FRAMEWORK_CHANGELOG_FILENAME: str = "FRAMEWORK_CHANGELOG.md"
+
+# ---------------------------------------------------------------------------
 # FastMCP import guard
 # ---------------------------------------------------------------------------
 try:
@@ -175,14 +180,14 @@ def parse_markdown_frontmatter(content: str) -> dict[str, Any]:
 
 
 def extract_framework_version(changelog_path: Path) -> str:
-    """Extract the latest framework version from FRAMEWORK_CHANGELOG.md."""
+    f"""Extract the latest framework version from {_FRAMEWORK_CHANGELOG_FILENAME}."""
     if not changelog_path.is_file():
-        _log.warning("FRAMEWORK_CHANGELOG.md not found: %s", changelog_path)
+        _log.warning("%s not found: %s", _FRAMEWORK_CHANGELOG_FILENAME, changelog_path)
         return "unknown"
     try:
         text = changelog_path.read_text(encoding="utf-8")
     except OSError as exc:
-        _log.error("Cannot read FRAMEWORK_CHANGELOG.md: %s", exc)
+        _log.error("Cannot read %s: %s", _FRAMEWORK_CHANGELOG_FILENAME, exc)
         return "unknown"
     pattern = re.compile(
         r"^\s*#{1,3}\s+\[?(v?[\d]+\.[\d]+\.[\d]+[^\]\s]*)\]?",
@@ -300,7 +305,7 @@ class FrameworkInventory:
         return self._build_framework_file(path, "index") if path.is_file() else None
 
     def get_framework_version(self) -> str:
-        return extract_framework_version(self._ctx.github_root / "FRAMEWORK_CHANGELOG.md")
+        return extract_framework_version(self._ctx.github_root / _FRAMEWORK_CHANGELOG_FILENAME)
 
 
 # ---------------------------------------------------------------------------
@@ -798,7 +803,7 @@ class SparkFrameworkEngine:
 
         @self._mcp.tool()
         async def scf_get_framework_version() -> dict[str, Any]:
-            """Return the latest SCF framework version from FRAMEWORK_CHANGELOG.md."""
+            f"""Return the latest SCF framework version from {_FRAMEWORK_CHANGELOG_FILENAME}."""
             return {"framework_version": inventory.get_framework_version()}
 
         @self._mcp.tool()
