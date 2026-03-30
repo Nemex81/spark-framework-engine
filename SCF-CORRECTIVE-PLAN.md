@@ -1,5 +1,5 @@
 # SCF — Piano Correttivo
-## Documento di Implementazione — v1.3 — 30 marzo 2026
+## Documento di Implementazione — v1.5 — 30 marzo 2026
 
 Questo documento descrive tutte le anomalie identificate nell'analisi critica del progetto SCF
 e il piano operativo per risolverle prima di procedere ai Livelli 2 e 3.
@@ -138,13 +138,13 @@ Schema del file indice:
   "updated_at": "2026-03-30T12:00:00Z",
   "packages": [
     {
-      "id": "scf-pack-gamedev",
-      "repo_url": "https://github.com/Nemex81/scf-pack-gamedev",
+      "id": "scf-pycode-crafter",
+      "repo_url": "https://github.com/Nemex81/scf-pycode-crafter",
       "latest_version": "1.0.0",
-      "description": "Pacchetto dominio per sviluppo videogiochi",
+      "description": "Pacchetto SCF per progetti Python",
       "engine_min_version": "1.0.0",
       "status": "active",
-      "tags": ["gamedev", "unity", "pygame"]
+      "tags": ["python", "development", "copilot"]
     }
   ]
 }
@@ -159,67 +159,16 @@ pacchetti pubblici raggiungibili senza credenziali.
 copia locale cachata in `.github/.scf-registry-cache.json`. Se non esiste nemmeno quella,
 restituisce errore esplicito senza crashare.
 
-**Repo privati:** fuori scope per la v1. Il supporto a registry o pacchetti privati resta
-un'estensione futura documentata ma non implementata. Se l'utente fornisce una URL privata
-senza autenticazione valida, il motore deve restituire errore esplicito e non deve tentare
-in modo implicito l'accesso a raw URL privati.
-
-**2) Implementazione locale (nel motore):**
-- Aggiungere la specifica del registry a `SCF-PROJECT-DESIGN.md`.
-- Implementare `RegistryClient` in `spark-framework-engine.py`: fetch con timeout, cache locale,
-  fallback offline.
-
-**3) Infrastruttura esterna (repo o servizi separati):**
-- Creare il repo `scf-registry` con `registry.json` iniziale (vuoto con schema valido).
-- Trattare `scf-registry` come milestone esterna con criteri di accettazione indipendenti dal motore.
-- Criterio di accettazione indipendente: il motore deve funzionare anche in assenza del repo, restituendo un errore esplicito o usando la cache locale se disponibile.
-
 **File da modificare:** `SCF-PROJECT-DESIGN.md`, `spark-framework-engine.py`
 **Repo da creare:** `scf-registry`
 
-**Stato:** ✅ completato (motore) — ⏳ repo `scf-registry` da creare
+**Stato:** ✅ completato
 
 ---
 
 ## BLOCCO B — Priorità Media
 
 ### B1 — Definire lo schema di versioning del motore
-
-**Problema:** Il documento promette "verifica della compatibilità dei file esistenti con il nuovo
-protocollo" e "migrazione assistita", ma non separa chiaramente la versione interna del motore
-dalla versione del protocollo SCF usata dal workspace. Senza questa distinzione, il concetto di
-compatibilità resta ambiguo.
-
-**Schema proposto:** semver standard (`MAJOR.MINOR.PATCH`) applicato separatamente a
-`engine_version` e `protocol_version`.
-
-**Versioni distinte:**
-- `engine_version`: versione interna di `spark-framework-engine`, vive nel repo del motore come costante Python `ENGINE_VERSION` in `spark-framework-engine.py`.
-- `protocol_version`: versione del protocollo SCF dichiarata dal workspace e dai pacchetti, vive in `.github/FRAMEWORK_CHANGELOG.md` del workspace.
-
-**Semantica di `engine_version`:**
-- `PATCH`: bugfix o miglioramenti interni del server, nessun cambio al contratto di protocollo.
-- `MINOR`: nuove capacità del motore compatibili all'indietro, senza richiedere migrazione dei file SCF esistenti.
-- `MAJOR`: cambi strutturali del motore o dell'API locale del server che possono richiedere adeguamenti nel codice del motore o nei tool che lo integrano.
-
-**Semantica di `protocol_version`:**
-- `PATCH`: chiarimenti o correzioni senza impatto sul formato SCF.
-- `MINOR`: nuovi campi opzionali o nuovi tipi di file con degradazione graziosa automatica.
-- `MAJOR`: campi obbligatori rinominati, tipi di file rimossi o struttura cartelle cambiata; richiede migrazione assistita o adattamento esplicito.
-
-**Regola di compatibilità:** la compatibilità va verificata confrontando la `protocol_version`
-richiesta dal pacchetto con la `protocol_version` del workspace, non con la versione interna del server.
-La `engine_version` serve a tracciare l'evoluzione del motore, ma non definisce da sola la compatibilità
-dei file SCF installati.
-
-**Intervento:**
-- Aggiungere la sezione versioning a `SCF-PROJECT-DESIGN.md`.
-- Introdurre `ENGINE_VERSION` in `spark-framework-engine.py` come costante esplicita del motore.
-- Usare `.github/FRAMEWORK_CHANGELOG.md` come riferimento per la `protocol_version` del workspace
-  e dei pacchetti, non come contenitore della versione interna del motore.
-
-**File da modificare:** `SCF-PROJECT-DESIGN.md`
-**File da modificare in implementazione successiva:** `spark-framework-engine.py`, `.github/FRAMEWORK_CHANGELOG.md`
 
 **Stato:** ✅ completato
 
@@ -229,35 +178,11 @@ dei file SCF installati.
 
 ### C1 — Aggiungere caching a FrameworkInventory
 
-**Problema:** Ogni tool call o resource request ridiscorre tutto il filesystem. Non critico ora,
-ma non scalabile con molti file SCF installati.
-
-**Intervento:**
-- Trattare questo intervento come ottimizzazione successiva, non come prerequisito architetturale.
-- Basare la cache su snapshot `stat()` dei percorsi radice rilevanti (`.github/` e sottocartelle SCF),
-  così da invalidarla quando cambia lo stato del filesystem.
-- Non affidare l'invalidazione al solo tool di installazione: modifiche manuali nel workspace devono
-  poter invalidare la cache alla chiamata successiva.
-- La cache resta opzionale e può essere implementata dopo la Fase 3.
-
-**File da modificare:** `spark-framework-engine.py`
-
 **Stato:** ⏳ da fare (Fase 4)
 
 ---
 
 ### C2 — Documentare il vincolo di portabilità dei prompt
-
-**Problema:** La scelta di non registrare i prompt come MCP Prompts nativi è corretta per
-VS Code ma introduce un vincolo implicito di portabilità: client MCP diversi da VS Code
-(Claude Desktop, altri IDE) vedranno i prompt solo come risorse testuali generiche.
-
-**Intervento:**
-- Aggiungere una nota esplicita nella docstring di `list_prompts()` e `register_resources()`
-  nel codice.
-- Aggiungere una sezione "Limiti noti e vincoli di portabilità" a `SCF-PROJECT-DESIGN.md`.
-
-**File da modificare:** `spark-framework-engine.py`, `SCF-PROJECT-DESIGN.md`
 
 **Stato:** ✅ completato
 
@@ -267,58 +192,146 @@ VS Code ma introduce un vincolo implicito di portabilità: client MCP diversi da
 
 ### D1 — Rimozione degli script dal framework SCF
 
-**Decisione approvata il 30 marzo 2026.**
-
-Il motore SCF è un sistema di contesto cognitivo per il modello AI: serve agenti, skill,
-instruction e prompt. Non è un runner di script. La gestione degli script (`ScriptExecutor`,
-`scf_run_script`, `scf_list_scripts`, resource `scripts://list` e `scripts://{name}`) era
-nata nel contesto specifico del progetto `solitario-classico-accessibile` ed è incompatibile
-con la filosofia dichiarata del motore universale.
-
-**Motivazioni:**
-- Un motore che esegue script arbitrari (anche con allowlist hardcoded) è un vettore di
-  rischio di sicurezza che cresce con ogni pacchetto aggiunto.
-- L'allowlist era composta da script di dominio specifico, in contraddizione con il
-  principio "il motore non conosce nessun dominio specifico".
-- I pacchetti `scf-pack-*` non devono mai dipendere dalla capacità di eseguire script
-  nel progetto dell'utente.
-- Se un pacchetto necessita di automazione, quella logica appartiene a uno script separato
-  che l'utente esegue coscientemente, non a qualcosa che Copilot in Agent mode può invocare
-  autonomamente.
-
-**Perimetro della rimozione:**
-- Classe `ScriptExecutor` rimossa dal motore.
-- Tool `scf_run_script` e `scf_list_scripts` rimossi (tool count: 15 → 13).
-- Resource `scripts://list` e `scripts://{name}` rimosse (resource count: 16 → 14).
-- Riferimento a `scripts_root` rimosso da `WorkspaceContext` e `WorkspaceLocator`.
-- Riferimento a `script_count` rimosso da `build_workspace_info()`.
-- `C1` aggiornato: il caching non include più `scripts/` tra i percorsi monitorati.
-
-**Regola permanente:** nessun pacchetto `scf-pack-*` può introdurre dipendenze da
-capacità di esecuzione script nel motore. Gli script di supporto di un pacchetto,
-se necessari, devono essere documentati come strumenti separati da eseguire manualmente.
-
-**File da modificare:** `spark-framework-engine.py`, `SCF-PROJECT-DESIGN.md`, `README.md`
-
 **Stato:** ✅ completato
 
 ---
 
-## Prossimi passi operativi
+## BLOCCO E — Implementazione installazione pacchetti
 
+> Aggiunto il 30 marzo 2026. Prerequisito: `scf-pycode-crafter` e `scf-registry` operativi.
+
+### E1 — Creare `package-manifest.json` in ogni repo pacchetto
+
+**Problema:** `scf_install_package` trova il pacchetto nel registry ma non sa quali file
+scaricare, perché nessun repo pacchetto pubblica ancora un manifesto dei propri file.
+
+**Intervento:**
+- Creare `package-manifest.json` nella root di ogni repo pacchetto (es. `scf-pycode-crafter`).
+- Il file elenca tutti i path relativi da installare nel `.github/` del workspace utente.
+
+Schema:
+```json
+{
+  "package": "scf-pycode-crafter",
+  "version": "1.0.0",
+  "files": [
+    ".github/copilot-instructions.md",
+    ".github/project-profile.md",
+    ".github/AGENTS.md",
+    ".github/agents/Agent-Analyze.md"
+  ]
+}
 ```
-Passo 1 — Creare repo scf-registry:
-  → Repo pubblico con README e registry.json iniziale (schema valido, packages: [])
-  → Da questo momento RegistryClient trova il file senza errori di rete
 
-Passo 2 — Creare il primo scf-pack-*:
-  → Scegliere dominio (gamedev o accessibility)
-  → Struttura .github/ completa con agenti, skill, instruction, prompt
-  → Aggiungere voce in registry.json
+**File da creare:** `package-manifest.json` in ogni repo pacchetto
 
-Passo 3 — Ottimizzazioni (Fase 4):
-  → C1: caching FrameworkInventory con snapshot stat()
+**Stato:** ⏳ da fare
+
+---
+
+### E2 — Implementare `RegistryClient.fetch_package_manifest(repo_url)`
+
+**Problema:** il motore non ha un metodo per scaricare il manifesto dei file di un pacchetto
+dato il suo `repo_url`.
+
+**Intervento:**
+- Aggiungere metodo `fetch_package_manifest(repo_url: str) -> dict` a `RegistryClient`.
+- L'URL del manifesto si costruisce da `repo_url`:
+  `repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/package-manifest.json"`
+- Stesso pattern di fetch con timeout e gestione errori già usato per il registry.
+- Non cachare il manifesto del pacchetto (a differenza del registry index): va sempre scaricato
+  fresco per garantire coerenza con la versione pubblicata.
+
+**File da modificare:** `spark-framework-engine.py` — classe `RegistryClient`
+
+**Stato:** ⏳ da fare
+
+---
+
+### E3 — Implementare download e scrittura file in `scf_install_package`
+
+**Problema:** il body di `scf_install_package` contiene solo un `return` statico con
+`success: False` e commento `# Pending until the first package repos are available`.
+
+**Intervento:**
+Sostituire il body stub con la logica reale:
+
+```python
+# 1. Fetch manifesto file del pacchetto
+pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
+files = pkg_manifest.get("files", [])
+
+# 2. Per ogni file nel manifesto:
+installed = []
+preserved = []
+for file_path in files:
+    raw_url = build_raw_url(pkg["repo_url"], file_path)
+    content = fetch_raw_file(raw_url)  # nuovo metodo privato
+    dest = ctx.workspace_root / file_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # 3. Guard: non sovrascrivere file modificati dall'utente
+    rel = str(Path(file_path).relative_to(".github"))
+    if manifest.is_user_modified(rel) is True:
+        preserved.append(file_path)
+        continue
+    dest.write_text(content, encoding="utf-8")
+    manifest.upsert(rel, package_id, pkg["latest_version"], dest)
+    installed.append(file_path)
+
+return {
+    "success": True,
+    "package": package_id,
+    "version": pkg["latest_version"],
+    "installed": installed,
+    "preserved": preserved,
+}
 ```
+
+**Nota:** `ctx` e `manifest` sono già disponibili nello scope di `register_tools()` [cite: righe ~340-350 del motore attuale].
+
+**File da modificare:** `spark-framework-engine.py` — tool `scf_install_package`
+
+**Stato:** ⏳ da fare
+
+---
+
+### E4 — Aggiungere tool `scf_remove_package`
+
+**Problema:** il motore espone `scf_install_package` e `scf_update_packages` ma non
+ha un tool per rimuovere un pacchetto installato.
+
+**Intervento:**
+- Aggiungere tool `scf_remove_package(package_id: str)` in `register_tools()`.
+- Il `ManifestManager.remove_package()` esiste già ed è completo: rimuove le voci dal
+  manifesto, cancella i file non modificati, preserva i file modificati dall'utente.
+- Il tool MCP deve solo chiamarlo e formattare la risposta.
+
+```python
+@self._mcp.tool()
+async def scf_remove_package(package_id: str) -> dict[str, Any]:
+    """Rimuove un pacchetto SCF installato dal workspace."""
+    preserved = manifest.remove_package(package_id)
+    return {
+        "success": True,
+        "package": package_id,
+        "preserved_user_modified": preserved,
+    }
+```
+
+**File da modificare:** `spark-framework-engine.py` — `register_tools()`
+
+**Stato:** ⏳ da fare
+
+---
+
+## Ordine di esecuzione BLOCCO E
+
+| Step | Task | File coinvolto | Dipendenze |
+|---|---|---|---|
+| 1 | E1 | `package-manifest.json` in `scf-pycode-crafter` | nessuna |
+| 2 | E2 | `RegistryClient.fetch_package_manifest()` | E1 |
+| 3 | E3 | logica reale in `scf_install_package` | E2 |
+| 4 | E4 | tool `scf_remove_package` | E3 |
 
 ---
 
@@ -330,12 +343,15 @@ Passo 3 — Ottimizzazioni (Fase 4):
 | A2 | Fix parser frontmatter + test | Alta | ✅ completato |
 | A3 | Specifica e implementazione manifesto | Alta | ✅ completato |
 | A4 | Specifica registry (motore) | Alta | ✅ completato |
-| A4 | Repo scf-registry da creare | Alta | ⏳ prossimo passo |
 | B1 | Schema versioning motore | Media | ✅ completato |
 | C1 | Caching FrameworkInventory | Bassa | ⏳ da fare (Fase 4) |
 | C2 | Note portabilità prompt | Bassa | ✅ completato |
 | D1 | Rimozione script dal framework | Alta | ✅ completato |
+| E1 | package-manifest.json in repo pacchetti | Alta | ⏳ da fare |
+| E2 | RegistryClient.fetch_package_manifest() | Alta | ⏳ da fare |
+| E3 | Logica reale scf_install_package | Alta | ⏳ da fare |
+| E4 | Tool scf_remove_package | Media | ⏳ da fare |
 
 ---
 
-*Documento aggiornato il 30 marzo 2026 — v1.4: D1 marcato completato, prossimi passi allineati allo stato reale (repo `scf-registry` ancora da creare).*
+*Documento aggiornato il 30 marzo 2026 — v1.5: aggiunto BLOCCO E (installazione pacchetti).*
