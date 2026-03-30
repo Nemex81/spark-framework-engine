@@ -492,6 +492,40 @@ class RegistryClient:
         except (OSError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Registry cache corrupted: {exc}") from exc
 
+    def fetch_package_manifest(self, repo_url: str) -> dict[str, Any]:
+        """Fetch the package-manifest.json from a package repo.
+
+        Constructs the raw URL from repo_url. No caching — always fetched fresh
+        to guarantee consistency with the published package version.
+        Raises ValueError for non-github.com repo URLs.
+        Raises RuntimeError on network or parse failure.
+        """
+        if not repo_url.startswith("https://github.com/"):
+            raise ValueError(
+                f"Unsupported repo URL: {repo_url!r}. "
+                "Only https://github.com/ URLs are supported."
+            )
+        raw_url = (
+            repo_url.replace("https://github.com/", "https://raw.githubusercontent.com/")
+            + "/main/package-manifest.json"
+        )
+        try:
+            raw = self._fetch_raw_file(raw_url)
+            return json.loads(raw)  # type: ignore[no-any-return]
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(
+                f"Cannot fetch package manifest from {raw_url}: {exc}"
+            ) from exc
+
+    def _fetch_raw_file(self, raw_url: str) -> str:
+        """Fetch a single raw text file from a URL. No caching."""
+        req = urllib.request.Request(
+            raw_url,
+            headers={"User-Agent": f"spark-framework-engine/{ENGINE_VERSION}"},
+        )
+        with urllib.request.urlopen(req, timeout=_REGISTRY_TIMEOUT_SECONDS) as resp:  # noqa: S310
+            return resp.read().decode("utf-8")
+
 
 # ---------------------------------------------------------------------------
 # SparkFrameworkEngine — Resources (14) and Tools (13)
@@ -764,16 +798,56 @@ class SparkFrameworkEngine:
                         "Check the registry for its successor."
                     ),
                 }
-            # Full file installation requires scf-pack-* repos to publish their
-            # file listing. Pending until the first package repos are available.
-            return {
-                "success": False,
-                "error": (
-                    "Package file installation not yet available: "
-                    "scf-pack-* package repos are pending creation."
-                ),
-                "package": pkg,
+            # Fetch package file manifest
+            try:
+                pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
+            except RuntimeError as exc:
+                return {"success": False, "error": f"Cannot fetch package manifest: {exc}"}
+            files: list[str] = pkg_manifest.get("files", [])
+            if not files:
+                return {
+                    "success": False,
+                    "error": f"Package '{package_id}' has no files in its manifest.",
+                }
+            pkg_version: str = pkg.get("latest_version", "unknown")
+            installed: list[str] = []
+            preserved: list[str] = []
+            errors: list[str] = []
+            for file_path in files:
+                raw_url = (
+                    pkg["repo_url"].replace(
+                        "https://github.com/", "https://raw.githubusercontent.com/"
+                    )
+                    + "/main/"
+                    + file_path
+                )
+                rel = file_path.removeprefix(".github/")
+                if manifest.is_user_modified(rel) is True:
+                    preserved.append(file_path)
+                    continue
+                try:
+                    content = registry._fetch_raw_file(raw_url)
+                except (urllib.error.URLError, OSError) as exc:
+                    errors.append(f"{file_path}: {exc}")
+                    continue
+                dest = self._ctx.workspace_root / file_path
+                try:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_text(content, encoding="utf-8")
+                    manifest.upsert(rel, package_id, pkg_version, dest)
+                    installed.append(file_path)
+                except OSError as exc:
+                    errors.append(f"{file_path}: {exc}")
+            result: dict[str, Any] = {
+                "success": len(errors) == 0,
+                "package": package_id,
+                "version": pkg_version,
+                "installed": installed,
+                "preserved": preserved,
             }
+            if errors:
+                result["errors"] = errors
+            return result
 
         @self._mcp.tool()
         async def scf_update_packages() -> dict[str, Any]:
@@ -814,7 +888,21 @@ class SparkFrameworkEngine:
                     })
             return {"updates": updates, "total": len(updates)}
 
-        _log.info("Tools registered: 13 total")
+        @self._mcp.tool()
+        async def scf_remove_package(package_id: str) -> dict[str, Any]:
+            """Remove an installed SCF package from the workspace.
+
+            Deletes all files installed by the package that have not been
+            modified by the user. Modified files are preserved and reported.
+            """
+            preserved = manifest.remove_package(package_id)
+            return {
+                "success": True,
+                "package": package_id,
+                "preserved_user_modified": preserved,
+            }
+
+        _log.info("Tools registered: 14 total")
 
 
 # ---------------------------------------------------------------------------
