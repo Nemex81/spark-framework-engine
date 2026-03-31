@@ -370,13 +370,26 @@ Corrisponde ai problemi C2 e C3 di `SCF-CORRECTIVE-PLAN.md`.
 - [ ] Bump minor **1.3.0**
 - [ ] Eseguire `pytest -q` per confermare suite verde
 
-### Fase 3 — Setup una-tantum (cross-repo)
+### Fase 3 — ⚠️ SUPERSEDED da architettura gateway v2.0
 
-- [ ] Creare `REGISTRY_WRITE_TOKEN` come GitHub Secret in `scf-pycode-crafter`
-- [ ] Aggiungere `.github/workflows/sync-registry.yml` in `scf-pycode-crafter`
-- [ ] Aggiungere in `scf-pycode-crafter` il test di verifica cross-repo `package` == `id`
-- [ ] Testare il workflow su un branch: modificare `package-manifest.json` e verificare che la PR arrivi su `scf-registry`
-- [ ] Aggiornare `registry.json` manualmente per l'ultima volta (versione attuale)
+> **Nota (2026-03-31):** questa fase è stata sostituita integralmente da `SCF-REGISTRY-SYNC-GATEWAY-IMPL-PLAN.md` (v2.0).
+> L'architettura v1 prevedeva `sync-registry.yml` direttamente nel plugin con `REGISTRY_WRITE_TOKEN`.
+> L'architettura v2.0 centralizza la scrittura sul registry **sul motore** (`spark-framework-engine`),
+> che diventa l'unico gateway autorizzato. I plugin inviano solo un evento `repository_dispatch`.
+> I task originali sotto sono sostituiti — non vanno eseguiti.
+
+- ~~Creare `REGISTRY_WRITE_TOKEN` come GitHub Secret in `scf-pycode-crafter`~~
+- ~~Aggiungere `.github/workflows/sync-registry.yml` in `scf-pycode-crafter`~~
+- ~~Aggiungere in `scf-pycode-crafter` il test di verifica cross-repo `package` == `id`~~
+- ~~Testare il workflow su un branch: modificare `package-manifest.json` e verificare che la PR arrivi su `scf-registry`~~
+- ~~Aggiornare `registry.json` manualmente per l'ultima volta (versione attuale)~~
+
+**Implementazione effettiva (v2.0):**
+- ✅ `notify-engine.yml` in `scf-pycode-crafter` — invia `repository_dispatch` al motore
+- ✅ `registry-sync-gateway.yml` in `spark-framework-engine` — unico gateway verso `scf-registry`
+- ✅ `registry.json` allineato manualmente (ultima volta) con `1.0.1` / `1.2.1`
+- ✅ `REGISTRY_WRITE_TOKEN` richiesto in `spark-framework-engine` (non nel plugin)
+- ✅ `ENGINE_DISPATCH_TOKEN` richiesto in `scf-pycode-crafter`
 
 ### Fase 4 — Documentazione e chiusura
 

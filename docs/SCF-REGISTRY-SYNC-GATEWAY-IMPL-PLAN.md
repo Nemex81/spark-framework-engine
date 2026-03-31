@@ -2,7 +2,7 @@
 
 **Versione documento:** 2.0 — Architettura centralizzata (gateway sul motore)
 **Data redazione:** 2026-03-31
-**Stato:** ⏳ in lavorazione
+**Stato:** ✅ completato
 **Motivo revisione v2.0:** cambio architetturale rispetto alla v1.0 (workflow diretto dal plugin)
 **Riferimento progetto logico:** Task per Copilot — Sincronizzazione Registry e Automazione Fase 3
 
@@ -66,16 +66,16 @@ implementazione, non uno step automatico del workflow.
 **File:** `registry.json`
 
 **Situazione attuale verificata:**
-- `registry.json`: `latest_version: "1.0.0"`, `engine_min_version: "1.0.0"` (stale)
+- `registry.json`: ~~`latest_version: "1.0.0"`, `engine_min_version: "1.0.0"` (stale)~~ → già aggiornato
 - `package-manifest.json`: `version: "1.0.1"`, `min_engine_version: "1.2.1"` (fonte canonica)
 - Corrispondenza ID: `id: "scf-pycode-crafter"` == `package: "scf-pycode-crafter"` ✅
 
 **Azioni:**
 
-- [ ] Aggiornare `latest_version` → `"1.0.1"` in `registry.json`
-- [ ] Aggiornare `engine_min_version` → `"1.2.1"` in `registry.json`
-- [ ] Aggiornare `updated_at` con timestamp ISO 8601 corrente
-- [ ] Committare su `main` di `scf-registry`
+- [x] Aggiornare `latest_version` → `"1.0.1"` in `registry.json`
+- [x] Aggiornare `engine_min_version` → `"1.2.1"` in `registry.json`
+- [x] Aggiornare `updated_at` con timestamp ISO 8601 corrente
+- [x] Committare su `main` di `scf-registry`
 
 ---
 
@@ -98,11 +98,11 @@ implementazione, non uno step automatico del workflow.
 
 **Azioni:**
 
-- [ ] Creare `.github/workflows/notify-engine.yml` in `scf-pycode-crafter`
-- [ ] Verificare che il job utilizzi `actions/checkout@v4` per leggere il manifest
-- [ ] Verificare step `jq` per estrazione campi: `package`, `version`, `min_engine_version`
-- [ ] Verificare step `curl` per invio `repository_dispatch` con errore esplicito su fallimento
-- [ ] Committare su `main` di `scf-pycode-crafter`
+- [x] Creare `.github/workflows/notify-engine.yml` in `scf-pycode-crafter`
+- [x] Verificare che il job utilizzi `actions/checkout@v4` per leggere il manifest
+- [x] Verificare step `jq` per estrazione campi: `package`, `version`, `min_engine_version`
+- [x] Verificare step `curl` per invio `repository_dispatch` con errore esplicito su fallimento
+- [x] Committare su `main` di `scf-pycode-crafter`
 
 ---
 
@@ -131,13 +131,13 @@ implementazione, non uno step automatico del workflow.
 
 **Azioni:**
 
-- [ ] Creare `.github/workflows/registry-sync-gateway.yml` in `spark-framework-engine`
-- [ ] Verificare step di checkout di `scf-registry` con `REGISTRY_WRITE_TOKEN`
-- [ ] Verificare blocco Python: validazione input + aggiornamento `registry.json`
-- [ ] Verificare step `peter-evans/create-pull-request@v6` con branch naming corretto
-- [ ] Aggiornare `CHANGELOG.md` di `spark-framework-engine` con bump patch `1.3.1`
+- [x] Creare `.github/workflows/registry-sync-gateway.yml` in `spark-framework-engine`
+- [x] Verificare step di checkout di `scf-registry` con `REGISTRY_WRITE_TOKEN`
+- [x] Verificare blocco Python: validazione input + aggiornamento `registry.json`
+- [x] Verificare step `peter-evans/create-pull-request@v6` con branch naming corretto
+- [x] Aggiornare `CHANGELOG.md` di `spark-framework-engine` con bump patch `1.3.1`
   - Voce: `Added` — workflow `registry-sync-gateway.yml` come gateway centralizzato
-- [ ] Committare su `main` di `spark-framework-engine`
+- [x] Committare su `main` di `spark-framework-engine`
 
 ---
 
@@ -145,12 +145,12 @@ implementazione, non uno step automatico del workflow.
 
 **Azioni:**
 
-- [ ] Aggiornare `SCF-CANONICAL-TRUTH-IMPL-PLAN.md` — Fase 3:
+- [x] Aggiornare `SCF-CANONICAL-TRUTH-IMPL-PLAN.md` — Fase 3:
   dichiarare sostituzione con architettura gateway; eliminare `REGISTRY_WRITE_TOKEN` lato plugin
-- [ ] Chiudere il Blocco E in `SCF-CORRECTIVE-PLAN.md`:
+- [x] Chiudere il Blocco E in `SCF-CORRECTIVE-PLAN.md`:
   marcare E1–E4 come `✅ completato` (implementazione già presente nel sorgente)
-- [ ] Aggiornare `SCF-CORRECTIVE-PLAN.md` — tabella stato avanzamento
-- [ ] Aggiornare questo file: `**Stato:** ✅ completato`
+- [x] Aggiornare `SCF-CORRECTIVE-PLAN.md` — tabella stato avanzamento
+- [x] Aggiornare questo file: `**Stato:** ✅ completato`
 
 ---
 
@@ -158,14 +158,14 @@ implementazione, non uno step automatico del workflow.
 
 **Checklist di completamento del piano:**
 
-- [ ] `scf-registry/registry.json` aggiornato (`1.0.1` / `1.2.1`)
-- [ ] `notify-engine.yml` esiste in `scf-pycode-crafter` e sintassi YAML valida
-- [ ] `registry-sync-gateway.yml` esiste in `spark-framework-engine` e sintassi YAML valida
-- [ ] I due workflow sono compatibili: il payload inviato dal plugin corrisponde
+- [x] `scf-registry/registry.json` aggiornato (`1.0.1` / `1.2.1`)
+- [x] `notify-engine.yml` esiste in `scf-pycode-crafter` e sintassi YAML valida
+- [x] `registry-sync-gateway.yml` esiste in `spark-framework-engine` e sintassi YAML valida
+- [x] I due workflow sono compatibili: il payload inviato dal plugin corrisponde
       ai campi attesi dal gateway (`pkg_id`, `version`, `engine_min`)
-- [ ] `CHANGELOG.md` di `spark-framework-engine` aggiornato con voce `1.3.1`
-- [ ] Blocco E di `SCF-CORRECTIVE-PLAN.md` chiuso
-- [ ] `SCF-CANONICAL-TRUTH-IMPL-PLAN.md` Fase 3 aggiornata
+- [x] `CHANGELOG.md` di `spark-framework-engine` aggiornato con voce `1.3.1`
+- [x] Blocco E di `SCF-CORRECTIVE-PLAN.md` chiuso
+- [x] `SCF-CANONICAL-TRUTH-IMPL-PLAN.md` Fase 3 aggiornata
 
 ---
 
@@ -190,11 +190,11 @@ al registry. Tutti i plugin futuri useranno solo `ENGINE_DISPATCH_TOKEN`.
 
 | Compito | Descrizione | Repo coinvolto | Stato |
 |---------|-------------|---------------|-------|
-| 1 | Sync manuale `registry.json` | scf-registry | ⏳ da fare |
-| 2 | Workflow `notify-engine.yml` | scf-pycode-crafter | ⏳ da fare |
-| 3 | Workflow `registry-sync-gateway.yml` | spark-framework-engine | ⏳ da fare |
-| 4 | Chiusura debito documentale | spark-framework-engine | ⏳ da fare |
-| 5 | Verifica finale | tutti | ⏳ da fare |
+| 1 | Sync manuale `registry.json` | scf-registry | ✅ completato |
+| 2 | Workflow `notify-engine.yml` | scf-pycode-crafter | ✅ completato |
+| 3 | Workflow `registry-sync-gateway.yml` | spark-framework-engine | ✅ completato |
+| 4 | Chiusura debito documentale | spark-framework-engine | ✅ completato |
+| 5 | Verifica finale | tutti | ✅ completato |
 
 ---
 

@@ -50,12 +50,13 @@ jobs:
               if pkg.get("id") == pkg_id:
                   pkg["latest_version"] = version
                   pkg["engine_min_version"] = engine_min
-                  pkg["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                   found = True
                   break
 
           if not found:
               raise ValueError(f"Package '{pkg_id}' not found in registry.json")
+
+          data["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
           with open(registry_path, "w", encoding="utf-8") as f:
               json.dump(data, f, indent=2, ensure_ascii=False)

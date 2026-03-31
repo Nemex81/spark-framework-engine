@@ -202,125 +202,25 @@ restituisce errore esplicito senza crashare.
 
 ### E1 — Creare `package-manifest.json` in ogni repo pacchetto
 
-**Problema:** `scf_install_package` trova il pacchetto nel registry ma non sa quali file
-scaricare, perché nessun repo pacchetto pubblica ancora un manifesto dei propri file.
-
-**Intervento:**
-- Creare `package-manifest.json` nella root di ogni repo pacchetto (es. `scf-pycode-crafter`).
-- Il file elenca tutti i path relativi da installare nel `.github/` del workspace utente.
-
-Schema:
-```json
-{
-  "package": "scf-pycode-crafter",
-  "version": "1.0.0",
-  "files": [
-    ".github/copilot-instructions.md",
-    ".github/project-profile.md",
-    ".github/AGENTS.md",
-    ".github/agents/Agent-Analyze.md"
-  ]
-}
-```
-
-**File da creare:** `package-manifest.json` in ogni repo pacchetto
-
-**Stato:** ⏳ da fare
+**Stato:** ✅ completato — `package-manifest.json` presente in `scf-pycode-crafter` (v1.0.1, schema 2.0)
 
 ---
 
 ### E2 — Implementare `RegistryClient.fetch_package_manifest(repo_url)`
 
-**Problema:** il motore non ha un metodo per scaricare il manifesto dei file di un pacchetto
-dato il suo `repo_url`.
-
-**Intervento:**
-- Aggiungere metodo `fetch_package_manifest(repo_url: str) -> dict` a `RegistryClient`.
-- L'URL del manifesto si costruisce da `repo_url`:
-  `repo_url.replace("github.com", "raw.githubusercontent.com") + "/main/package-manifest.json"`
-- Stesso pattern di fetch con timeout e gestione errori già usato per il registry.
-- Non cachare il manifesto del pacchetto (a differenza del registry index): va sempre scaricato
-  fresco per garantire coerenza con la versione pubblicata.
-
-**File da modificare:** `spark-framework-engine.py` — classe `RegistryClient`
-
-**Stato:** ⏳ da fare
+**Stato:** ✅ completato — metodo presente in `spark-framework-engine.py` riga ~680
 
 ---
 
 ### E3 — Implementare download e scrittura file in `scf_install_package`
 
-**Problema:** il body di `scf_install_package` contiene solo un `return` statico con
-`success: False` e commento `# Pending until the first package repos are available`.
-
-**Intervento:**
-Sostituire il body stub con la logica reale:
-
-```python
-# 1. Fetch manifesto file del pacchetto
-pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
-files = pkg_manifest.get("files", [])
-
-# 2. Per ogni file nel manifesto:
-installed = []
-preserved = []
-for file_path in files:
-    raw_url = build_raw_url(pkg["repo_url"], file_path)
-    content = fetch_raw_file(raw_url)  # nuovo metodo privato
-    dest = ctx.workspace_root / file_path
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    # 3. Guard: non sovrascrivere file modificati dall'utente
-    rel = str(Path(file_path).relative_to(".github"))
-    if manifest.is_user_modified(rel) is True:
-        preserved.append(file_path)
-        continue
-    dest.write_text(content, encoding="utf-8")
-    manifest.upsert(rel, package_id, pkg["latest_version"], dest)
-    installed.append(file_path)
-
-return {
-    "success": True,
-    "package": package_id,
-    "version": pkg["latest_version"],
-    "installed": installed,
-    "preserved": preserved,
-}
-```
-
-**Nota:** `ctx` e `manifest` sono già disponibili nello scope di `register_tools()` [cite: righe ~340-350 del motore attuale].
-
-**File da modificare:** `spark-framework-engine.py` — tool `scf_install_package`
-
-**Stato:** ⏳ da fare
+**Stato:** ✅ completato — logica reale implementata in `spark-framework-engine.py` (tool `scf_install_package`)
 
 ---
 
 ### E4 — Aggiungere tool `scf_remove_package`
 
-**Problema:** il motore espone `scf_install_package` e `scf_update_packages` ma non
-ha un tool per rimuovere un pacchetto installato.
-
-**Intervento:**
-- Aggiungere tool `scf_remove_package(package_id: str)` in `register_tools()`.
-- Il `ManifestManager.remove_package()` esiste già ed è completo: rimuove le voci dal
-  manifesto, cancella i file non modificati, preserva i file modificati dall'utente.
-- Il tool MCP deve solo chiamarlo e formattare la risposta.
-
-```python
-@self._mcp.tool()
-async def scf_remove_package(package_id: str) -> dict[str, Any]:
-    """Rimuove un pacchetto SCF installato dal workspace."""
-    preserved = manifest.remove_package(package_id)
-    return {
-        "success": True,
-        "package": package_id,
-        "preserved_user_modified": preserved,
-    }
-```
-
-**File da modificare:** `spark-framework-engine.py` — `register_tools()`
-
-**Stato:** ⏳ da fare
+**Stato:** ✅ completato — tool `scf_remove_package` presente in `register_tools()` con guard esplicita
 
 ---
 
@@ -347,10 +247,10 @@ async def scf_remove_package(package_id: str) -> dict[str, Any]:
 | C1 | Caching FrameworkInventory | Bassa | ⏳ da fare (Fase 4) |
 | C2 | Note portabilità prompt | Bassa | ✅ completato |
 | D1 | Rimozione script dal framework | Alta | ✅ completato |
-| E1 | package-manifest.json in repo pacchetti | Alta | ⏳ da fare |
-| E2 | RegistryClient.fetch_package_manifest() | Alta | ⏳ da fare |
-| E3 | Logica reale scf_install_package | Alta | ⏳ da fare |
-| E4 | Tool scf_remove_package | Media | ⏳ da fare |
+| E1 | package-manifest.json in repo pacchetti | Alta | ✅ completato |
+| E2 | RegistryClient.fetch_package_manifest() | Alta | ✅ completato |
+| E3 | Logica reale scf_install_package | Alta | ✅ completato |
+| E4 | Tool scf_remove_package | Media | ✅ completato |
 
 ---
 
