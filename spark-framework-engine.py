@@ -126,6 +126,7 @@ class WorkspaceLocator:
 # Pre-compiled patterns for YAML list detection in frontmatter.
 _FM_INLINE_LIST_RE: re.Pattern[str] = re.compile(r"^\[(.+)\]$")
 _FM_BLOCK_ITEM_RE: re.Pattern[str] = re.compile(r"^(\s+)-\s+(.*)")
+_SEMVER_RE: re.Pattern[str] = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)")
 
 
 def parse_markdown_frontmatter(content: str) -> dict[str, Any]:
@@ -197,6 +198,34 @@ def _extract_version_from_changelog(changelog_path: Path) -> str:
     )
     match = pattern.search(text)
     return match.group(1) if match else "unknown"
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    """Return a normalized list of non-empty strings."""
+    if not isinstance(value, list):
+        return []
+    items = [str(item).strip() for item in value]
+    return [item for item in items if item]
+
+
+def _parse_semver_triplet(version: str) -> tuple[int, int, int] | None:
+    """Parse the numeric core of a semantic version string."""
+    match = _SEMVER_RE.match(version.strip())
+    if match is None:
+        return None
+    major, minor, patch = (int(part) for part in match.groups())
+    return (major, minor, patch)
+
+
+def _is_engine_version_compatible(current_version: str, minimum_version: str) -> bool:
+    """Return True when the current engine version satisfies the minimum version."""
+    if not minimum_version.strip():
+        return True
+    current = _parse_semver_triplet(current_version)
+    minimum = _parse_semver_triplet(minimum_version)
+    if current is None or minimum is None:
+        return False
+    return current >= minimum
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +493,39 @@ class ManifestManager:
             if package_id and package_version:
                 versions[package_id] = package_version
         return dict(sorted(versions.items()))
+
+    def get_file_owners(self, file_rel: str) -> list[str]:
+        """Return sorted package owners for a tracked file path."""
+        owners = {
+            str(entry.get("package", "")).strip()
+            for entry in self.load()
+            if str(entry.get("file", "")).strip() == file_rel
+            and str(entry.get("package", "")).strip()
+        }
+        return sorted(owners)
+
+    def upsert_many(
+        self,
+        package: str,
+        package_version: str,
+        files: list[tuple[str, Path]],
+    ) -> None:
+        """Add or update manifest entries for many installed files in one save."""
+        entries = self.load()
+        replacements = {file_rel for file_rel, _ in files}
+        entries = [entry for entry in entries if str(entry.get("file", "")).strip() not in replacements]
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for file_rel, file_abs in files:
+            entries.append(
+                {
+                    "file": file_rel,
+                    "package": package,
+                    "package_version": package_version,
+                    "installed_at": now,
+                    "sha256": self._sha256(file_abs),
+                }
+            )
+        self.save(entries)
 
     def verify_integrity(self) -> dict[str, Any]:
         """Verify manifest integrity against files currently present under .github/."""
@@ -978,6 +1040,12 @@ class SparkFrameworkEngine:
                     "package": pkg,
                 }
             files: list[str] = pkg_manifest.get("files", [])
+            installed_versions = manifest.get_installed_versions()
+            dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
+            conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
+            min_engine_version = str(
+                pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
+            ).strip()
             categories = {
                 "root": 0,
                 "agents": 0,
@@ -1011,11 +1079,41 @@ class SparkFrameworkEngine:
                     "tags": pkg.get("tags", []),
                 },
                 "manifest": {
+                    "schema_version": str(pkg_manifest.get("schema_version", "1.0")),
                     "package": pkg_manifest.get("package", package_id),
                     "version": pkg_manifest.get("version", pkg.get("latest_version", "")),
+                    "display_name": pkg_manifest.get("display_name", ""),
+                    "description": pkg_manifest.get("description", pkg.get("description", "")),
+                    "author": pkg_manifest.get("author", ""),
+                    "min_engine_version": min_engine_version,
+                    "dependencies": dependencies,
+                    "conflicts": conflicts,
+                    "file_ownership_policy": str(
+                        pkg_manifest.get("file_ownership_policy", "error")
+                    ).strip()
+                    or "error",
+                    "changelog_path": str(pkg_manifest.get("changelog_path", "")).strip(),
                     "file_count": len(files),
                     "categories": categories,
                     "files": files,
+                },
+                "compatibility": {
+                    "engine_version": ENGINE_VERSION,
+                    "engine_compatible": _is_engine_version_compatible(
+                        ENGINE_VERSION,
+                        min_engine_version,
+                    ),
+                    "installed_packages": installed_versions,
+                    "missing_dependencies": [
+                        dependency
+                        for dependency in dependencies
+                        if dependency not in installed_versions
+                    ],
+                    "present_conflicts": [
+                        conflict
+                        for conflict in conflicts
+                        if conflict in installed_versions
+                    ],
                 },
             }
 
@@ -1077,10 +1175,79 @@ class SparkFrameworkEngine:
                     "success": False,
                     "error": f"Package '{package_id}' has no files in its manifest.",
                 }
-            pkg_version: str = pkg.get("latest_version", "unknown")
-            installed: list[str] = []
+            pkg_version = str(pkg_manifest.get("version", pkg.get("latest_version", "unknown"))).strip()
+            min_engine_version = str(
+                pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
+            ).strip()
+            dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
+            declared_conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
+            file_ownership_policy = (
+                str(pkg_manifest.get("file_ownership_policy", "error")).strip() or "error"
+            )
+            installed_versions = manifest.get_installed_versions()
+            if not _is_engine_version_compatible(ENGINE_VERSION, min_engine_version):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Package '{package_id}' requires engine version >= {min_engine_version}."
+                    ),
+                    "package": package_id,
+                    "required_engine_version": min_engine_version,
+                    "engine_version": ENGINE_VERSION,
+                }
+            missing_dependencies = [
+                dependency for dependency in dependencies if dependency not in installed_versions
+            ]
+            if missing_dependencies:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Package '{package_id}' requires missing dependencies: "
+                        f"{', '.join(missing_dependencies)}"
+                    ),
+                    "package": package_id,
+                    "missing_dependencies": missing_dependencies,
+                    "installed_packages": installed_versions,
+                }
+            present_conflicts = [
+                conflict for conflict in declared_conflicts if conflict in installed_versions
+            ]
+            if present_conflicts:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Package '{package_id}' conflicts with installed packages: "
+                        f"{', '.join(present_conflicts)}"
+                    ),
+                    "package": package_id,
+                    "present_conflicts": present_conflicts,
+                    "installed_packages": installed_versions,
+                }
+            ownership_conflicts: list[dict[str, Any]] = []
+            for file_path in files:
+                rel = file_path.removeprefix(".github/")
+                owners = [owner for owner in manifest.get_file_owners(rel) if owner != package_id]
+                if owners:
+                    ownership_conflicts.append(
+                        {
+                            "file": file_path,
+                            "owners": owners,
+                        }
+                    )
+            if ownership_conflicts:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Package '{package_id}' conflicts with files already owned by another package."
+                    ),
+                    "package": package_id,
+                    "file_ownership_policy": file_ownership_policy,
+                    "effective_file_ownership_policy": "error",
+                    "conflicts": ownership_conflicts,
+                }
             preserved: list[str] = []
-            errors: list[str] = []
+            fetch_errors: list[str] = []
+            staged_files: list[tuple[str, str, str]] = []
             for file_path in files:
                 raw_url = (
                     pkg["repo_url"].replace(
@@ -1096,26 +1263,69 @@ class SparkFrameworkEngine:
                 try:
                     content = registry.fetch_raw_file(raw_url)
                 except (urllib.error.URLError, OSError) as exc:
-                    errors.append(f"{file_path}: {exc}")
+                    fetch_errors.append(f"{file_path}: {exc}")
                     continue
-                dest = self._ctx.workspace_root / file_path
-                try:
+                staged_files.append((file_path, rel, content))
+            if fetch_errors:
+                return {
+                    "success": False,
+                    "package": package_id,
+                    "version": pkg_version,
+                    "installed": [],
+                    "preserved": preserved,
+                    "errors": fetch_errors,
+                }
+            installed: list[str] = []
+            backups: dict[Path, str | None] = {}
+            written_paths: list[tuple[str, str, Path]] = []
+            try:
+                for file_path, rel, content in staged_files:
+                    dest = self._ctx.workspace_root / file_path
+                    previous_content: str | None = None
+                    if dest.is_file():
+                        previous_content = dest.read_text(encoding="utf-8")
+                    backups[dest] = previous_content
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(content, encoding="utf-8")
-                    manifest.upsert(rel, package_id, pkg_version, dest)
-                    installed.append(file_path)
-                except OSError as exc:
-                    errors.append(f"{file_path}: {exc}")
-            result: dict[str, Any] = {
-                "success": len(errors) == 0,
+                    written_paths.append((file_path, rel, dest))
+                manifest.upsert_many(
+                    package_id,
+                    pkg_version,
+                    [(rel, dest) for _, rel, dest in written_paths],
+                )
+                installed = [file_path for file_path, _, _ in written_paths]
+            except OSError as exc:
+                rollback_errors: list[str] = []
+                for _, _, dest in reversed(written_paths):
+                    previous_content = backups.get(dest)
+                    try:
+                        if previous_content is None:
+                            if dest.is_file():
+                                dest.unlink()
+                        else:
+                            dest.write_text(previous_content, encoding="utf-8")
+                    except OSError as rollback_exc:
+                        rollback_errors.append(f"{dest}: {rollback_exc}")
+                result: dict[str, Any] = {
+                    "success": False,
+                    "package": package_id,
+                    "version": pkg_version,
+                    "installed": [],
+                    "preserved": preserved,
+                    "errors": [f"write failure: {exc}"],
+                    "rolled_back": len(rollback_errors) == 0,
+                }
+                if rollback_errors:
+                    result["rollback_errors"] = rollback_errors
+                return result
+            success_result: dict[str, Any] = {
+                "success": True,
                 "package": package_id,
                 "version": pkg_version,
                 "installed": installed,
                 "preserved": preserved,
             }
-            if errors:
-                result["errors"] = errors
-            return result
+            return success_result
 
         @self._mcp.tool()
         async def scf_update_packages() -> dict[str, Any]:

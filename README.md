@@ -108,6 +108,17 @@ scf_remove_package(package_id)
 scf_get_package_changelog(package_id)
 ```
 
+`scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
+schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,
+`file_ownership_policy` e `changelog_path`, insieme a una sezione di
+compatibilita calcolata sul workspace attivo.
+
+`scf_install_package(package_id)` esegue un preflight prima di scrivere file:
+verifica compatibilita del motore, dipendenze dichiarate, conflitti di package
+e ownership dei path gia tracciati nel manifest runtime. In caso di errore in
+scrittura, tenta il rollback dei file appena toccati e non aggiorna il manifest
+in modo parziale.
+
 ---
 
 ## Architettura SCF

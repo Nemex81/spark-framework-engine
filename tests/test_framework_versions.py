@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
@@ -65,7 +66,7 @@ class TestManifestManagerInstalledVersions(unittest.TestCase):
 
 
 class TestFrameworkInventoryPackageChangelog(unittest.TestCase):
-    def _build_inventory(self, workspace_root: Path) -> object:
+    def _build_inventory(self, workspace_root: Path) -> Any:
         ctx = WorkspaceContext(
             workspace_root=workspace_root,
             github_root=workspace_root / ".github",
@@ -138,7 +139,7 @@ class TestFrameworkInventoryPackageChangelog(unittest.TestCase):
 
 
 class TestBuildWorkspaceInfo(unittest.TestCase):
-    def _build_inventory(self, workspace_root: Path) -> object:
+    def _build_inventory(self, workspace_root: Path) -> Any:
         ctx = WorkspaceContext(
             workspace_root=workspace_root,
             github_root=workspace_root / ".github",
