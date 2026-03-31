@@ -10,7 +10,8 @@ Istruzioni operative:
 1. Esegui `scf_get_workspace_info()`.
 2. Esegui `scf_list_installed_packages()`.
 3. Esegui `scf_update_packages()`.
-4. Non modificare file o stato del workspace.
+4. Opzionale: se l'utente richiede una verifica di coerenza cross-component, esegui `scf_verify_system()` e riporta eventuali `issues` e `warnings`.
+5. Non modificare file o stato del workspace.
 
 Formato risposta:
 - Sezione `Workspace`: root attiva, initialized, engine_version e installed_packages (elenco pacchetti installati con le rispettive versioni).

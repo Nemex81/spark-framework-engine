@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.2.1"
+ENGINE_VERSION: str = "1.3.0"
 
 
 # ---------------------------------------------------------------------------
@@ -713,7 +713,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (14) and Tools (21)
+# SparkFrameworkEngine — Resources (14) and Tools (23)
 # ---------------------------------------------------------------------------
 
 
@@ -1391,6 +1391,16 @@ class SparkFrameworkEngine:
             Deletes all files installed by the package that have not been
             modified by the user. Modified files are preserved and reported.
             """
+            installed = manifest.get_installed_versions()
+            if package_id not in installed:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Pacchetto '{package_id}' non trovato nel manifest. "
+                        "Usa scf_list_installed_packages per vedere i pacchetti installati."
+                    ),
+                    "package": package_id,
+                }
             preserved = manifest.remove_package(package_id)
             return {
                 "success": True,
@@ -1425,7 +1435,73 @@ class SparkFrameworkEngine:
             report["summary"] = summary
             return report
 
-        _log.info("Tools registered: 22 total")
+        @self._mcp.tool()
+        async def scf_verify_system() -> dict[str, Any]:
+            """Verifica la coerenza cross-component tra motore, pacchetti e registry."""
+            issues: list[dict[str, Any]] = []
+            warnings: list[str] = []
+            installed = manifest.get_installed_versions()
+
+            if not installed:
+                return {
+                    "engine_version": ENGINE_VERSION,
+                    "packages_checked": 0,
+                    "issues": [],
+                    "warnings": [],
+                    "manifest_empty": True,
+                    "is_coherent": True,
+                }
+
+            try:
+                reg_packages = registry.list_packages()
+            except Exception as exc:  # noqa: BLE001
+                return {"success": False, "error": f"Registry non raggiungibile: {exc}"}
+
+            reg_index = {p["id"]: p for p in reg_packages if "id" in p}
+
+            for pkg_id, _installed_ver in installed.items():
+                reg_entry = reg_index.get(pkg_id)
+                if reg_entry is None:
+                    warnings.append(f"Pacchetto '{pkg_id}' non trovato nel registry")
+                    continue
+                try:
+                    pkg_manifest_data = registry.fetch_package_manifest(reg_entry["repo_url"])
+                except Exception as exc:  # noqa: BLE001
+                    warnings.append(f"Manifest non raggiungibile per '{pkg_id}': {exc}")
+                    continue
+
+                manifest_ver = str(pkg_manifest_data.get("version", "")).strip()
+                registry_ver = str(reg_entry.get("latest_version", "")).strip()
+                if manifest_ver != registry_ver:
+                    issues.append({
+                        "type": "registry_stale",
+                        "package": pkg_id,
+                        "registry_version": registry_ver,
+                        "manifest_version": manifest_ver,
+                        "fix": f"Aggiornare registry.json: latest_version → {manifest_ver}",
+                    })
+
+                min_engine_pkg = str(pkg_manifest_data.get("min_engine_version", "")).strip()
+                min_engine_reg = str(reg_entry.get("engine_min_version", "")).strip()
+                if min_engine_pkg and min_engine_reg and min_engine_pkg != min_engine_reg:
+                    issues.append({
+                        "type": "engine_min_mismatch",
+                        "package": pkg_id,
+                        "registry_engine_min": min_engine_reg,
+                        "manifest_engine_min": min_engine_pkg,
+                        "fix": f"Aggiornare registry.json: engine_min_version → {min_engine_pkg}",
+                    })
+
+            return {
+                "engine_version": ENGINE_VERSION,
+                "packages_checked": len(installed),
+                "issues": issues,
+                "warnings": warnings,
+                "manifest_empty": False,
+                "is_coherent": len(issues) == 0,
+            }
+
+        _log.info("Tools registered: 23 total")
 
 
 # ---------------------------------------------------------------------------

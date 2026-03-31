@@ -6,6 +6,20 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.3.0] — 31 marzo 2026
+
+### Added
+
+- Nuovo tool MCP `scf_verify_system`: verifica la coerenza cross-component tra motore, pacchetti installati e registry (versioni e `min_engine_version`).
+- Nuovo file `tests/test_engine_coherence.py`: due test di invariante che verificano l'allineamento contatori tool MCP e l'allineamento `ENGINE_VERSION`/CHANGELOG.
+
+### Fixed
+
+- `scf_remove_package`: aggiunta guard esplicita che restituisce errore descrittivo se il pacchetto non è nel manifest, eliminando il falso positivo silenzioso precedente.
+- Allineato il commento `Tools (21)` → `Tools (23)` (era desincronizzato rispetto ai tool effettivi).
+
+---
+
 ## [1.2.1] — 31 marzo 2026
 
 ### Fixed
