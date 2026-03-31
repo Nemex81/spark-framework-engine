@@ -1,7 +1,7 @@
 # SCF — Canonical Truth Architecture: Piano di Implementazione
 
 **Data redazione:** 2026-03-31
-**Stato:** Attivo
+**Stato:** ✅ completato
 **Versione documento:** 1.1 (revisione post-analisi)
 
 ---
@@ -330,7 +330,7 @@ Aggiungere due passi al check esistente:
    - [ ] Verificare che la GitHub Action abbia aperto la PR su `scf-registry`
    - [ ] Controllare che la PR sia stata mergiata
    - [ ] Eseguire `scf_verify_system` una seconda volta post-merge per conferma
-   - [ ] Solo dopo: dichiarare il rilascio completo
+ - [x] Solo dopo: dichiarare il rilascio completo
 
 #### Documentazione da aggiungere a `SCF-PROJECT-DESIGN.md`
 
@@ -383,7 +383,7 @@ Corrisponde ai problemi C2 e C3 di `SCF-CORRECTIVE-PLAN.md`.
 - [ ] Aggiungere sezione "Protocollo di rilascio" a `SCF-PROJECT-DESIGN.md`
 - [ ] Chiudere il blocco E in `SCF-CORRECTIVE-PLAN.md`
 - [ ] Spostare `IMPLEMENTATION_PLAN_MULTI_PACKAGE.md` → `docs/DONE-IMPLEMENTATION_PLAN_MULTI_PACKAGE.md`
-- [ ] Aggiornare questo file con stato "Completato"
+- [x] Aggiornare questo file con stato "Completato"
 
 ---
 

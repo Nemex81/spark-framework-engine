@@ -1,6 +1,7 @@
 # Piano Tecnico Implementativo — Supporto Doppio Formato Skill in SCF
 
 Data: 30 marzo 2026
+**Stato:** ✅ completato
 Repo: spark-framework-engine
 Versione piano: 2 (post-validazione e post-implementazione)
 Ambito: discovery skill dual-format nel motore SCF con retrocompatibilita' completa

@@ -1,6 +1,7 @@
 # Piano Di Implementazione — Prompt SCF Per Gestione Pacchetti
 
 Data: 30 marzo 2026
+**Stato:** ✅ completato
 Repo analizzato: `spark-framework-engine`
 Ambito: progettazione dei prompt `.github/prompts/*.prompt.md` per il ciclo di vita dei pacchetti SCF
 
