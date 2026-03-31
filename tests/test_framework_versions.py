@@ -86,57 +86,6 @@ class TestFrameworkInventoryPackageChangelog(unittest.TestCase):
 
             self.assertEqual(inventory.get_package_changelog("pkg-a"), "# 1.0.0\n")
 
-    def test_get_package_changelog_uses_legacy_file_only_when_unambiguous(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            github_root = root / ".github"
-            github_root.mkdir(parents=True)
-            (github_root / "FRAMEWORK_CHANGELOG.md").write_text("# 1.0.0\n", encoding="utf-8")
-            ManifestManager(github_root).save(
-                [
-                    {
-                        "file": "FRAMEWORK_CHANGELOG.md",
-                        "package": "pkg-a",
-                        "package_version": "1.0.0",
-                        "installed_at": "2026-03-31T00:00:00Z",
-                        "sha256": "abc",
-                    }
-                ]
-            )
-
-            inventory = self._build_inventory(root)
-
-            self.assertEqual(inventory.get_package_changelog("pkg-a"), "# 1.0.0\n")
-
-    def test_get_package_changelog_returns_none_when_legacy_file_is_ambiguous(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            github_root = root / ".github"
-            github_root.mkdir(parents=True)
-            (github_root / "FRAMEWORK_CHANGELOG.md").write_text("# 1.0.0\n", encoding="utf-8")
-            ManifestManager(github_root).save(
-                [
-                    {
-                        "file": "FRAMEWORK_CHANGELOG.md",
-                        "package": "pkg-a",
-                        "package_version": "1.0.0",
-                        "installed_at": "2026-03-31T00:00:00Z",
-                        "sha256": "abc",
-                    },
-                    {
-                        "file": "agents/other.md",
-                        "package": "pkg-b",
-                        "package_version": "2.0.0",
-                        "installed_at": "2026-03-31T00:00:01Z",
-                        "sha256": "def",
-                    },
-                ]
-            )
-
-            inventory = self._build_inventory(root)
-
-            self.assertIsNone(inventory.get_package_changelog("pkg-a"))
-
 
 class TestBuildWorkspaceInfo(unittest.TestCase):
     def _build_inventory(self, workspace_root: Path) -> Any:

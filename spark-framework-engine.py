@@ -37,14 +37,13 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.2.0"
+ENGINE_VERSION: str = "1.2.1"
 
 
 # ---------------------------------------------------------------------------
 # Changelogs directory
 # ---------------------------------------------------------------------------
 _CHANGELOGS_SUBDIR: str = "changelogs"
-_LEGACY_FRAMEWORK_CHANGELOG_FILENAME: str = "FRAMEWORK_CHANGELOG.md"
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -336,31 +335,13 @@ class FrameworkInventory:
         return self._build_framework_file(path, "index") if path.is_file() else None
 
     def get_package_changelog(self, package_id: str) -> str | None:
-        """Return the changelog text for a package, with legacy fallback when unambiguous."""
+        """Return the changelog text for a package."""
         changelog_path = self._ctx.github_root / _CHANGELOGS_SUBDIR / f"{package_id}.md"
         try:
             if changelog_path.is_file():
                 return changelog_path.read_text(encoding="utf-8")
         except OSError as exc:
             _log.warning("Cannot read package changelog %s: %s", changelog_path, exc)
-            return None
-
-        legacy_changelog_path = self._ctx.github_root / _LEGACY_FRAMEWORK_CHANGELOG_FILENAME
-        installed_versions = ManifestManager(self._ctx.github_root).get_installed_versions()
-        if legacy_changelog_path.is_file() and len(installed_versions) == 1 and package_id in installed_versions:
-            _log.warning(
-                "Using deprecated legacy changelog path for package %s: %s",
-                package_id,
-                legacy_changelog_path,
-            )
-            try:
-                return legacy_changelog_path.read_text(encoding="utf-8")
-            except OSError as exc:
-                _log.warning(
-                    "Cannot read legacy package changelog %s: %s",
-                    legacy_changelog_path,
-                    exc,
-                )
         return None
 
 
@@ -1427,11 +1408,6 @@ class SparkFrameworkEngine:
                     "package": package_id,
                 }
             changelog_path = self._ctx.github_root / _CHANGELOGS_SUBDIR / f"{package_id}.md"
-            if not changelog_path.is_file():
-                legacy_changelog_path = self._ctx.github_root / _LEGACY_FRAMEWORK_CHANGELOG_FILENAME
-                installed_versions = manifest.get_installed_versions()
-                if legacy_changelog_path.is_file() and len(installed_versions) == 1 and package_id in installed_versions:
-                    changelog_path = legacy_changelog_path
             return {
                 "package": package_id,
                 "path": str(changelog_path),

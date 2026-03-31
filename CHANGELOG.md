@@ -6,6 +6,14 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.2.1] — 31 marzo 2026
+
+### Fixed
+
+- Rimosso il fallback legacy a `.github/FRAMEWORK_CHANGELOG.md` dal motore.
+- `FrameworkInventory.get_package_changelog()` e `scf_get_package_changelog` usano ora solo il path canonico `.github/changelogs/{package_id}.md`.
+- Rimossi i test del comportamento legacy deprecato.
+
 ## [1.2.0] — 30 marzo 2026
 
 ### Added
