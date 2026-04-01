@@ -55,6 +55,7 @@ htmlcov/
 # Logs
 logs/
 *.log
+scripts/*.out
 
 # Python compiled
 *.pyc
@@ -69,5 +70,4 @@ logs/
 # SCF-specific caches and manifests (generated/runtime files)
 .github/.scf-manifest.json
 .github/.scf-registry-cache.json
-#.github/
 .scf-registry-cache.json
