@@ -1,7 +1,7 @@
 # SCF — Piano Implementativo: Auto-merge Condizionale per il Gateway
 
 **Data redazione:** 2026-04-01
-**Stato:** 📋 da implementare
+**Stato:** ✅ implementato
 **Versione documento:** 1.2 (rev. validazione prerequisiti)
 **Repository target:** `spark-framework-engine`
 **File da modificare:** `.github/workflows/registry-sync-gateway.yml`

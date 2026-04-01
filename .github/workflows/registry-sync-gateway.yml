@@ -66,6 +66,7 @@ jobs:
           EOF
 
       - name: Create Pull Request on scf-registry
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.REGISTRY_WRITE_TOKEN }}
@@ -84,3 +85,9 @@ jobs:
             Aperto automaticamente da `registry-sync-gateway.yml`.
           commit-message: "sync: ${{ env.PKG_ID }} ${{ env.VERSION }}"
           delete-branch: true
+
+      - name: Auto-merge se mittente fidato
+        if: ${{ github.event.sender.login == 'Nemex81' && steps.cpr.outputs.pull-request-number != '' }}
+        run: gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --squash --repo Nemex81/scf-registry
+        env:
+          GH_TOKEN: ${{ secrets.REGISTRY_WRITE_TOKEN }}
