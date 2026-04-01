@@ -2,7 +2,7 @@
 
 **Data redazione:** 2026-04-01
 **Stato:** 📋 da implementare
-**Versione documento:** 1.1 (rev. correttiva)
+**Versione documento:** 1.2 (rev. validazione prerequisiti)
 **Repository target:** `spark-framework-engine`
 **File da modificare:** `.github/workflows/registry-sync-gateway.yml`
 
@@ -31,7 +31,15 @@ La strategia correttiva adottata è il **merge diretto** tramite `gh pr merge --
 
 ## Prerequisiti
 
-Nessun prerequisito manuale richiesto su `scf-registry`. Il token `REGISTRY_WRITE_TOKEN` già configurato deve avere scope `contents: write` sul repo target — requisito già soddisfatto dalla configurazione esistente.
+Nessun prerequisito manuale richiesto su `scf-registry`.
+
+**`REGISTRY_WRITE_TOKEN`** (usato sia per checkout che per `gh pr merge`): deve avere i seguenti scope sul repo `Nemex81/scf-registry`:
+- `contents: write` — per scrivere il branch e mergiare il contenuto
+- `pull_requests: write` — per eseguire `PUT /repos/.../pulls/{number}/merge` (chiamata interna di `gh pr merge`)
+
+Per un **PAT classico** con scope `repo`, entrambi i requisiti sono coperti automaticamente. Per un **fine-grained PAT**, entrambi gli scope devono essere abilitati esplicitamente. La configurazione esistente soddisfa questo requisito se il token è di tipo `repo`-scope.
+
+**`ENGINE_DISPATCH_TOKEN`** (in `notify-engine.yml` su `scf-pycode-crafter`): deve essere un PAT di proprietà di `Nemex81`. La condizione di auto-merge `sender.login == 'Nemex81'` si basa sul fatto che GitHub imposta `event.sender` all'utente proprietario del token usato per inviare il `repository_dispatch`. Se il token fosse di un altro utente o di una GitHub App, la condizione fallirebbe silenziosamente (il merge non avverrebbe, la PR resterebbe aperta).
 
 ---
 
@@ -251,7 +259,11 @@ jobs:
 
 ## Note per il maintainer
 
-Lo step di auto-merge usa `gh pr merge` (GitHub CLI), già preinstallato nei runner `ubuntu-latest`. Non introduce dipendenze esterne aggiuntive rispetto a `create-pull-request`. Il `REGISTRY_WRITE_TOKEN` già configurato fornisce i permessi necessari tramite variabile d'ambiente `GH_TOKEN`.
+Lo step di auto-merge usa `gh pr merge` (GitHub CLI), già preinstallato nei runner `ubuntu-latest`. Non introduce dipendenze esterne aggiuntive rispetto a `create-pull-request`. Il `REGISTRY_WRITE_TOKEN` già configurato fornisce i permessi necessari tramite variabile d'ambiente `GH_TOKEN` (richiede scope `contents: write` + `pull_requests: write`, o `repo` scope per PAT classici).
+
+### Come funziona la condizione `sender.login == 'Nemex81'`
+
+Il workflow `notify-engine.yml` su `scf-pycode-crafter` invia il `repository_dispatch` tramite una chiamata API autenticata con `ENGINE_DISPATCH_TOKEN`. GitHub imposta `github.event.sender.login` all'utente proprietario di quel token. Se `ENGINE_DISPATCH_TOKEN` appartiene a `Nemex81`, la condizione risulta vera e il merge è automatico. Se il dispatch proviene da un repo di un contributore esterno con il proprio token, `sender.login` sarà il nome del contributore e la condizione sarà falsa — la PR resta aperta per revisione manuale.
 
 Il flag `--repo Nemex81/scf-registry` è obbligatorio perché il workflow gira su `spark-framework-engine` ma la PR target è su `scf-registry` — senza specificarlo il CLI cercherebbe la PR nel repo sbagliato.
 
@@ -259,4 +271,4 @@ Il flag `--repo Nemex81/scf-registry` è obbligatorio perché il workflow gira s
 
 L'action `peter-evans/enable-pull-request-automerge@v3` richiede che la branch `base` della PR abbia **branch protection rules con almeno un requisito attivo** (doc ufficiale, sezione *Conditions*). `scf-registry` non ha CI né branch protection su `main`, quindi l'azione fallirebbe. `gh pr merge --squash` è la soluzione più semplice e affidabile per questo scenario.
 
-*Documento generato il 2026-04-01 — v1.1 (rev. correttiva)*
+*Documento generato il 2026-04-01 — v1.2 (rev. validazione prerequisiti)*
