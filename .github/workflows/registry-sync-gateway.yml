@@ -65,7 +65,7 @@ jobs:
           print(f"Updated {pkg_id} to version {version} (engine_min={engine_min})")
           EOF
 
-      - name: Validate registry.json schema
+      - name: Validate registry.json after update
         run: |
           python3 - <<'EOF'
           import json
@@ -75,6 +75,16 @@ jobs:
           registry_path = "scf-registry/registry.json"
           with open(registry_path, "r", encoding="utf-8") as f:
               data = json.load(f)
+
+          required_root_fields = ["schema_version", "updated_at", "packages"]
+          for field in required_root_fields:
+              if field not in data:
+                  print(f"::error::Missing required root field: '{field}'")
+                  sys.exit(1)
+
+          if not isinstance(data["packages"], list):
+              print("::error::Field 'packages' must be a list")
+              sys.exit(1)
 
           errors = []
           semver_re = re.compile(r"^\d+\.\d+\.\d+$")
