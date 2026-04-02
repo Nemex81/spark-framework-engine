@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.3.1"
+ENGINE_VERSION: str = "1.3.2"
 
 
 # ---------------------------------------------------------------------------
@@ -854,7 +854,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 22 MCP tools."""
+        """Register all 23 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
