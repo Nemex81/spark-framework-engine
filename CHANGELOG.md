@@ -6,6 +6,16 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.3.2] — 2 aprile 2026
+
+### Fixed
+
+- Corretto docstring `register_tools()`: aggiornato da `"Register all 22 MCP tools"` a `"Register all 23 MCP tools"` per allinearlo al conteggio reale.
+- Rimosso `.github/.scf-registry-cache.json` dal tracking Git (era già in `.gitignore`).
+- Aggiunta validazione schema JSON nel workflow `registry-sync-gateway.yml`: lo step verifica campi obbligatori, semver e status validi prima di aprire la PR su `scf-registry`.
+
+---
+
 ## [1.3.1] — 31 marzo 2026
 
 ### Added
