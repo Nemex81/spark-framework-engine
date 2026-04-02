@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.4.0"
+ENGINE_VERSION: str = "1.4.1"
 
 
 # ---------------------------------------------------------------------------
@@ -1153,13 +1153,20 @@ class SparkFrameworkEngine:
             try:
                 packages = registry.list_packages()
             except Exception as exc:  # noqa: BLE001
-                return {"success": False, "error": f"Registry unavailable: {exc}"}
+                return {
+                    "success": False,
+                    "error": f"Registry unavailable: {exc}",
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
+                }
             pkg = next((p for p in packages if p.get("id") == package_id), None)
             if pkg is None:
                 return {
                     "success": False,
                     "error": f"Package '{package_id}' not found in registry.",
                     "available": [p.get("id") for p in packages],
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
             if pkg.get("status") == "deprecated":
                 return {
@@ -1168,17 +1175,26 @@ class SparkFrameworkEngine:
                         f"Package '{package_id}' is deprecated. "
                         "Check the registry for its successor."
                     ),
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
             # Fetch package file manifest
             try:
                 pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
             except RuntimeError as exc:
-                return {"success": False, "error": f"Cannot fetch package manifest: {exc}"}
+                return {
+                    "success": False,
+                    "error": f"Cannot fetch package manifest: {exc}",
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
+                }
             files: list[str] = pkg_manifest.get("files", [])
             if not files:
                 return {
                     "success": False,
                     "error": f"Package '{package_id}' has no files in its manifest.",
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
             pkg_version = str(pkg_manifest.get("version", pkg.get("latest_version", "unknown"))).strip()
             min_engine_version = str(
@@ -1199,6 +1215,8 @@ class SparkFrameworkEngine:
                     "package": package_id,
                     "required_engine_version": min_engine_version,
                     "engine_version": ENGINE_VERSION,
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
             missing_dependencies = [
                 dependency for dependency in dependencies if dependency not in installed_versions
@@ -1213,6 +1231,8 @@ class SparkFrameworkEngine:
                     "package": package_id,
                     "missing_dependencies": missing_dependencies,
                     "installed_packages": installed_versions,
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
             present_conflicts = [
                 conflict for conflict in declared_conflicts if conflict in installed_versions
@@ -1227,6 +1247,8 @@ class SparkFrameworkEngine:
                     "package": package_id,
                     "present_conflicts": present_conflicts,
                     "installed_packages": installed_versions,
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
             ownership_conflicts: list[dict[str, Any]] = []
             for file_path in files:
@@ -1249,33 +1271,9 @@ class SparkFrameworkEngine:
                     "file_ownership_policy": file_ownership_policy,
                     "effective_file_ownership_policy": "error",
                     "conflicts": ownership_conflicts,
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                 }
-            # --- Diff-based cleanup: remove files obsoleted by this update ---
-            old_files: set[str] = {
-                entry["file"]
-                for entry in manifest.load()
-                if entry.get("package") == package_id
-            }
-            new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
-            to_remove: set[str] = old_files - new_files
-            removed_files: list[str] = []
-            preserved_obsolete: list[str] = []
-            for rel_path in sorted(to_remove):
-                is_modified = manifest.is_user_modified(rel_path)
-                file_abs = self._ctx.github_root / rel_path
-                if is_modified:
-                    preserved_obsolete.append(rel_path)
-                    _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
-                else:
-                    if file_abs.is_file():
-                        try:
-                            file_abs.unlink()
-                            removed_files.append(rel_path)
-                            _log.info("Obsolete file removed: %s", rel_path)
-                        except OSError as exc:
-                            _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
-            # --- End diff-based cleanup ---
-
             preserved: list[str] = []
             fetch_errors: list[str] = []
             staged_files: list[tuple[str, str, str]] = []
@@ -1304,8 +1302,35 @@ class SparkFrameworkEngine:
                     "version": pkg_version,
                     "installed": [],
                     "preserved": preserved,
+                    "removed_obsolete_files": [],
+                    "preserved_obsolete_files": [],
                     "errors": fetch_errors,
                 }
+            # --- Diff-based cleanup: remove files obsoleted by this update ---
+            old_files: set[str] = {
+                entry["file"]
+                for entry in manifest.load()
+                if entry.get("package") == package_id
+            }
+            new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
+            to_remove: set[str] = old_files - new_files
+            removed_files: list[str] = []
+            preserved_obsolete: list[str] = []
+            for rel_path in sorted(to_remove):
+                is_modified = manifest.is_user_modified(rel_path)
+                file_abs = self._ctx.github_root / rel_path
+                if is_modified:
+                    preserved_obsolete.append(rel_path)
+                    _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
+                else:
+                    if file_abs.is_file():
+                        try:
+                            file_abs.unlink()
+                            removed_files.append(rel_path)
+                            _log.info("Obsolete file removed: %s", rel_path)
+                        except OSError as exc:
+                            _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
+            # --- End diff-based cleanup ---
             installed: list[str] = []
             backups: dict[Path, str | None] = {}
             written_paths: list[tuple[str, str, Path]] = []
@@ -1343,6 +1368,8 @@ class SparkFrameworkEngine:
                     "version": pkg_version,
                     "installed": [],
                     "preserved": preserved,
+                    "removed_obsolete_files": removed_files,
+                    "preserved_obsolete_files": preserved_obsolete,
                     "errors": [f"write failure: {exc}"],
                     "rolled_back": len(rollback_errors) == 0,
                 }

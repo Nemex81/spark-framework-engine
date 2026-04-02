@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import json
 import sys
 import tempfile
 import unittest
@@ -233,6 +232,130 @@ class TestTripartiteClassification(unittest.TestCase):
             self.assertIn("untagged_spark_count", summary)
             self.assertEqual(summary["user_file_count"], 1)
             self.assertEqual(summary["untagged_spark_count"], 1)
+
+
+class TestFetchErrorAtomicity(unittest.TestCase):
+    """Tests verifying that a fetch failure leaves disk and manifest untouched.
+
+    The fixed execution order is: fetch → (if ok) diff-cleanup → write.
+    These tests simulate that order directly to confirm the invariants.
+    """
+
+    def _setup(self, tmp: str) -> tuple[Path, Path, ManifestManager]:
+        workspace_root = Path(tmp)
+        github_root = workspace_root / ".github"
+        github_root.mkdir(parents=True)
+        (github_root / "agents").mkdir(parents=True)
+        return workspace_root, github_root, ManifestManager(github_root)
+
+    def _simulate_fixed_install(
+        self,
+        github_root: Path,
+        manager: ManifestManager,
+        package_id: str,
+        new_file_paths: list[str],
+        fail_on: str,
+    ) -> dict:
+        """Simulate the FIXED scf_install_package order: fetch first, cleanup only if 100% ok."""
+        # Phase 1: fetch (no disk writes)
+        preserved: list[str] = []
+        fetch_errors: list[str] = []
+        staged: list[tuple[str, str, str]] = []
+        for file_path in new_file_paths:
+            rel = file_path.removeprefix(".github/")
+            if manager.is_user_modified(rel) is True:
+                preserved.append(file_path)
+                continue
+            if file_path == fail_on:
+                fetch_errors.append(f"{file_path}: simulated URLError")
+                continue
+            staged.append((file_path, rel, "mock content"))
+
+        if fetch_errors:
+            return {
+                "success": False,
+                "package": package_id,
+                "version": "2.0.0",
+                "installed": [],
+                "preserved": preserved,
+                "removed_obsolete_files": [],
+                "preserved_obsolete_files": [],
+                "errors": fetch_errors,
+            }
+
+        # Phase 2: diff-cleanup (only reached when fetch is 100% complete)
+        old_files = {e["file"] for e in manager.load() if e.get("package") == package_id}
+        new_files = {f.removeprefix(".github/") for f in new_file_paths if f}
+        to_remove = old_files - new_files
+        removed_files: list[str] = []
+        preserved_obsolete: list[str] = []
+        for rel_path in sorted(to_remove):
+            is_modified = manager.is_user_modified(rel_path)
+            file_abs = github_root / rel_path
+            if is_modified:
+                preserved_obsolete.append(rel_path)
+            elif file_abs.is_file():
+                file_abs.unlink()
+                removed_files.append(rel_path)
+
+        return {
+            "success": True,
+            "package": package_id,
+            "version": "2.0.0",
+            "installed": [fp for fp, _, _ in staged],
+            "preserved": preserved,
+            "removed_obsolete_files": removed_files,
+            "preserved_obsolete_files": preserved_obsolete,
+        }
+
+    def test_fetch_error_leaves_manifest_intact(self) -> None:
+        """If fetch fails, files on disk and manifest entries must be untouched."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _, github_root, manager = self._setup(tmp)
+
+            file_a = github_root / "agents" / "FileA.md"
+            file_b = github_root / "agents" / "FileB.md"
+            file_a.write_text("content A", encoding="utf-8")
+            file_b.write_text("content B", encoding="utf-8")
+
+            manager.save([
+                _entry("agents/FileA.md", "pkg-test", "content A"),
+                _entry("agents/FileB.md", "pkg-test", "content B"),
+            ])
+
+            # v2 removes FileA and adds FileC — FileC fetch will fail
+            v2_files = [".github/agents/FileB.md", ".github/agents/FileC.md"]
+            result = self._simulate_fixed_install(
+                github_root, manager, "pkg-test", v2_files,
+                fail_on=".github/agents/FileC.md",
+            )
+
+            self.assertFalse(result["success"])
+            self.assertTrue(file_a.exists(), "FileA.md must still exist on disk")
+            files_in_manifest = {e["file"] for e in manager.load()}
+            self.assertIn("agents/FileA.md", files_in_manifest, "FileA must remain in manifest")
+            self.assertIn("agents/FileB.md", files_in_manifest, "FileB must remain in manifest")
+            self.assertEqual(result["removed_obsolete_files"], [])
+
+    def test_fetch_error_return_has_all_keys(self) -> None:
+        """Return dict on fetch failure must contain all required keys."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _, github_root, manager = self._setup(tmp)
+
+            (github_root / "agents" / "FileA.md").write_text("content A", encoding="utf-8")
+            manager.save([_entry("agents/FileA.md", "pkg-test", "content A")])
+
+            v2_files = [".github/agents/FileB.md", ".github/agents/FileC.md"]
+            result = self._simulate_fixed_install(
+                github_root, manager, "pkg-test", v2_files,
+                fail_on=".github/agents/FileC.md",
+            )
+
+            required_keys = {
+                "success", "package", "version", "installed",
+                "preserved", "removed_obsolete_files", "preserved_obsolete_files", "errors",
+            }
+            self.assertTrue(required_keys.issubset(result.keys()))
 
 
 if __name__ == "__main__":

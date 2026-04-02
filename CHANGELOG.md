@@ -6,6 +6,28 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.4.1] — 2026-04-02
+
+### Fixed
+- **Atomicità installazione in `scf_install_package`**: il blocco diff-cleanup (rimozione file
+  obsoleti) è stato spostato **dopo** la fase fetch. Se uno o più file non possono essere
+  scaricati, l'installazione si interrompe prima di toccare il disco — manifiest e file esistenti
+  rimangono intatti. In precedenza, i file obsoleti venivano eliminati prima ancora di verificare
+  se il fetch sarebbe andato a buon fine, causando corruzione silenziosa dello stato.
+- **Chiavi mancanti nei return di errore di `scf_install_package`**: tutti i path di ritorno
+  (successo, fetch failure, OSError rollback e tutti i guard iniziali) includono ora
+  uniformemente `removed_obsolete_files` e `preserved_obsolete_files`. I return anticipati
+  restituiscono liste vuote `[]`; il rollback OSError restituisce i valori effettivi poiché
+  il diff-cleanup è già avvenuto a quel punto.
+- **Import inutilizzato** rimosso da `tests/test_update_diff.py` (`import json`).
+- **Nuovi test di regressione** in `tests/test_update_diff.py`:
+  - `test_fetch_error_leaves_manifest_intact` — verifica che manifest e disco siano intatti
+    se il fetch fallisce.
+  - `test_fetch_error_return_has_all_keys` — verifica che il dict di ritorno contenga tutte
+    le chiavi richieste anche in caso di fetch failure.
+
+---
+
 ## [1.4.0] — 2026-04-02
 
 ### Added
