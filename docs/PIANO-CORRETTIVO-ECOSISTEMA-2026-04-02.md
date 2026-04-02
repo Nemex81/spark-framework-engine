@@ -1,4 +1,5 @@
 ﻿# Piano correttivo per l'ecosistema SPARK — 2 aprile 2026
+**Stato:** ✅ implementato
 > Piano revisionato dall'utente, validato da Copilot e pronto per implementazione.
 > Correzioni ordinate per priorità reale. No refactoring non richiesti.
 ---

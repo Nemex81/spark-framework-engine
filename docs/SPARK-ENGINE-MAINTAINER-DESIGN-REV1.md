@@ -1,6 +1,7 @@
 # Documento di Progettazione — Agente `spark-engine-maintainer` (rev. 1)
 
 **Data:** 30 marzo 2026
+**Stato:** ✅ implementato
 **Revisione:** 1 — aggiornato dopo validazione Copilot e decisioni di progetto
 **Repo:** `spark-framework-engine`
 **Ambito:** progettazione logica completa dell'agente di manutenzione del motore SCF

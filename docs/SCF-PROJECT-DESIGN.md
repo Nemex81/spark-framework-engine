@@ -1,6 +1,6 @@
 # SCF — SPARK Code Framework
 ## Documento di Progettazione Logica — v0.2 — 30 marzo 2026
-
+**Stato:** ✅ implementato
 ---
 
 ## Visione

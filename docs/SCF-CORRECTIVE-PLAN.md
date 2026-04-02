@@ -1,7 +1,7 @@
 # SCF — Piano Correttivo
 ## Documento di Implementazione — v1.5 — 30 marzo 2026
 
-> ⚠️ **PARZIALMENTE COMPLETATO** — Tutti i blocchi A–E sono ✅, eccetto C1 (caching `FrameworkInventory`) deliberatamente deferito a Fase 4 di `TASK-SYNC-REGISTRY-WORKFLOW-IMPL-PLAN.md`.
+**Stato:** ✅ implementato
 
 Questo documento descrive tutte le anomalie identificate nell'analisi critica del progetto SCF
 e il piano operativo per risolverle prima di procedere ai Livelli 2 e 3.
