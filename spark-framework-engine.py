@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.3.2"
+ENGINE_VERSION: str = "1.4.0"
 
 
 # ---------------------------------------------------------------------------
@@ -546,23 +546,45 @@ class ManifestManager:
         ]
 
         ignored_runtime_files = {_MANIFEST_FILENAME, _REGISTRY_CACHE_FILENAME}
-        orphan_candidates: list[str] = []
+        user_files: list[str] = []
+        untagged_spark_files: list[str] = []
+        orphan_candidates: list[str] = []  # retrocompatibilità: = untagged_spark_files
+
         if self._github_root.is_dir():
-            for path in sorted(candidate for candidate in self._github_root.rglob("*") if candidate.is_file()):
+            for path in sorted(
+                candidate for candidate in self._github_root.rglob("*") if candidate.is_file()
+            ):
                 rel_path = path.relative_to(self._github_root).as_posix()
                 if rel_path in ignored_runtime_files:
                     continue
-                if rel_path not in tracked_files:
+                if rel_path in tracked_files:
+                    continue
+
+                is_spark = False
+                if path.suffix == ".md":
+                    try:
+                        file_content = path.read_text(encoding="utf-8", errors="replace")
+                        fm = parse_markdown_frontmatter(file_content)
+                        is_spark = bool(fm.get("spark", False))
+                    except OSError:
+                        pass
+
+                if is_spark:
+                    untagged_spark_files.append(rel_path)
                     orphan_candidates.append(rel_path)
+                else:
+                    user_files.append(rel_path)
 
         missing.sort()
         modified.sort()
         ok.sort()
-        summary = {
+        summary: dict[str, Any] = {
             "tracked_entries": len(entries),
             "ok_count": len(ok),
             "issue_count": len(missing) + len(modified) + len(duplicate_owners),
             "orphan_candidate_count": len(orphan_candidates),
+            "user_file_count": len(user_files),
+            "untagged_spark_count": len(untagged_spark_files),
         }
         return {
             "missing": missing,
@@ -570,6 +592,8 @@ class ManifestManager:
             "ok": ok,
             "duplicate_owners": duplicate_owners,
             "orphan_candidates": orphan_candidates,
+            "user_files": user_files,
+            "untagged_spark_files": untagged_spark_files,
             "summary": summary,
         }
 
@@ -1226,6 +1250,32 @@ class SparkFrameworkEngine:
                     "effective_file_ownership_policy": "error",
                     "conflicts": ownership_conflicts,
                 }
+            # --- Diff-based cleanup: remove files obsoleted by this update ---
+            old_files: set[str] = {
+                entry["file"]
+                for entry in manifest.load()
+                if entry.get("package") == package_id
+            }
+            new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
+            to_remove: set[str] = old_files - new_files
+            removed_files: list[str] = []
+            preserved_obsolete: list[str] = []
+            for rel_path in sorted(to_remove):
+                is_modified = manifest.is_user_modified(rel_path)
+                file_abs = self._ctx.github_root / rel_path
+                if is_modified:
+                    preserved_obsolete.append(rel_path)
+                    _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
+                else:
+                    if file_abs.is_file():
+                        try:
+                            file_abs.unlink()
+                            removed_files.append(rel_path)
+                            _log.info("Obsolete file removed: %s", rel_path)
+                        except OSError as exc:
+                            _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
+            # --- End diff-based cleanup ---
+
             preserved: list[str] = []
             fetch_errors: list[str] = []
             staged_files: list[tuple[str, str, str]] = []
@@ -1305,6 +1355,8 @@ class SparkFrameworkEngine:
                 "version": pkg_version,
                 "installed": installed,
                 "preserved": preserved,
+                "removed_obsolete_files": removed_files,
+                "preserved_obsolete_files": preserved_obsolete,
             }
             return success_result
 

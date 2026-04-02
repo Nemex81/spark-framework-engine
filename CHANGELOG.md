@@ -6,6 +6,24 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.4.0] — 2026-04-02
+
+### Added
+- **Diff-based cleanup in `scf_install_package`**: durante un update/reinstall, il motore
+  calcola i file presenti nell'installazione corrente ma assenti nel nuovo manifest del pacchetto
+  e li rimuove automaticamente. I file modificati dall'utente (SHA mismatch) vengono preservati.
+  Il risultato include i nuovi campi `removed_obsolete_files` e `preserved_obsolete_files`.
+- **Classificazione tripartita in `verify_integrity`**: i file non tracciati nel manifest
+  non sono più raggruppati indiscriminatamente come `orphan_candidates`, ma separati in:
+  - `user_files` — file `.md` senza `spark: true` (componenti locali utente, non SCF)
+  - `untagged_spark_files` — file `.md` con `spark: true` ma non nel manifest (anomalia)
+  - `orphan_candidates` — invariante retrocompatibile, ora = `untagged_spark_files`
+- Campo `user_file_count` e `untagged_spark_count` aggiunti al `summary` di `verify_integrity`.
+- Campi `user_files` e `untagged_spark_files` propagati automaticamente nel risultato
+  di `scf_verify_workspace` (passthrough dal report di `verify_integrity`).
+
+---
+
 ## [1.3.2] — 2 aprile 2026
 
 ### Fixed

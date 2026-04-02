@@ -89,7 +89,9 @@ class TestManifestIntegrity(unittest.TestCase):
             self.assertEqual(report["missing"], [])
             self.assertEqual(report["modified"], [])
             self.assertEqual(report["duplicate_owners"], [])
-            self.assertEqual(report["orphan_candidates"], ["notes.md"])
+            # notes.md has no spark: true → classified as user_file, not orphan_candidate
+            self.assertEqual(report["orphan_candidates"], [])
+            self.assertIn("notes.md", report["user_files"])
 
     def test_verify_integrity_reports_missing_modified_and_duplicate_owners(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
