@@ -1,5 +1,5 @@
 **Stato:** ✅ implementato
-
+**Stato:** ✅ implementato
 Questo prompt deve essere eseguito da GitHub Copilot in Agent mode nella sessione VS Code con il workspace `spark-framework-engine.code-workspace` aperto. Esegui ogni modifica in modo atomico, verificando il risultato prima di passare al punto successivo. Non chiedere conferme intermedie: procedi in autonomia su tutti i punti.
 
 ---
