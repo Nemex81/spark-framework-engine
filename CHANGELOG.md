@@ -6,6 +6,14 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.4.2] — 2026-04-06
+
+### Fixed
+- **README.md**: corretto conteggio tool da 22 a 23; aggiunto `scf_verify_system` nella lista tool.
+- **CHANGELOG.md**: normalizzate le date delle versioni precedenti al formato ISO 8601 (YYYY-MM-DD).
+
+---
+
 ## [1.4.1] — 2026-04-02
 
 ### Fixed
@@ -46,7 +54,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
-## [1.3.2] — 2 aprile 2026
+## [1.3.2] — 2026-04-02
 
 ### Fixed
 
@@ -56,7 +64,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
-## [1.3.1] — 31 marzo 2026
+## [1.3.1] — 2026-03-31
 
 ### Added
 
@@ -64,7 +72,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
-## [1.3.0] — 31 marzo 2026
+## [1.3.0] — 2026-03-31
 
 ### Added
 
@@ -78,7 +86,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
-## [1.2.1] — 31 marzo 2026
+## [1.2.1] — 2026-03-31
 
 ### Fixed
 
@@ -86,7 +94,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `FrameworkInventory.get_package_changelog()` e `scf_get_package_changelog` usano ora solo il path canonico `.github/changelogs/{package_id}.md`.
 - Rimossi i test del comportamento legacy deprecato.
 
-## [1.2.0] — 30 marzo 2026
+## [1.2.0] — 2026-03-30
 
 ### Added
 
@@ -105,7 +113,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 - Introduzione non-breaking: la release aggiunge artefatti di governance e manutenzione senza alterare API MCP o comportamento runtime del motore.
 
-## [1.1.0] — 30 marzo 2026
+## [1.1.0] — 2026-03-30
 
 ### Added
 
@@ -128,7 +136,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
-## [1.0.0] — 20 febbraio 2026
+## [1.0.0] — 2026-02-20
 
 ### Initial Release
 
