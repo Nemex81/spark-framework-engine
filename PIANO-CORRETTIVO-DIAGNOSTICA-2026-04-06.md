@@ -2,7 +2,7 @@
 
 Generato da: analisi diagnostica del 6 aprile 2026  
 Ambito: `spark-framework-engine` (motore MCP)  
-Stato: **DA VALIDARE**
+Stato: **IMPLEMENTATO — IN ATTESA PUSH REMOTO**
 
 ---
 
@@ -143,10 +143,10 @@ Questo piano supera la convalida se:
 
 ## Stato esecuzione
 
-- [ ] Step 1 — Crea tag v1.4.1
-- [ ] Step 2 — Fix README.md
-- [ ] Step 3 — Normalizza date CHANGELOG
-- [ ] Step 4 — Bump ENGINE_VERSION + nuova voce CHANGELOG
-- [ ] Step 5 — Validazione post-modifica
-- [ ] Step 6 — Commit e tag v1.4.2
+- [x] Step 1 — Crea tag v1.4.1 (commit 592a062)
+- [x] Step 2 — Fix README.md
+- [x] Step 3 — Normalizza date CHANGELOG
+- [x] Step 4 — Bump ENGINE_VERSION + nuova voce CHANGELOG [1.4.2]
+- [x] Step 5 — Validazione post-modifica (2/2 test passed, ruff 0 violations)
+- [x] Step 6 — Commit 22f76e5 e tag v1.4.2
 - [ ] Step 7 — Push (IN ATTESA CONFERMA UTENTE)
