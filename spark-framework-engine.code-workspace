@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../scf-registry"
+		},
+		{
+			"path": "../scf-master-codecrafter"
 		}
 	],
 	"settings": {},
