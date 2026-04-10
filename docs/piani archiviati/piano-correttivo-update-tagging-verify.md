@@ -276,11 +276,7 @@ return {
     "orphan_candidates": orphan_candidates,     # retrocompatibilità: ora = solo untagged_spark_files
     "user_files": user_files,                   # NUOVO: file locali utente, non SCF
     "untagged_spark_files": untagged_spark_files,  # NUOVO: SCF non tracciati (anomalia)
-    "summary": {
-        **summary,
-        "user_file_count": len(user_files),         # NUOVO
-        "untagged_spark_count": len(untagged_spark_files),  # NUOVO
-    },
+    "summary": summary,
 }
 ```
 
