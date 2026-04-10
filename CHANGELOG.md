@@ -6,6 +6,42 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.5.1] — 2026-04-10
+
+### Changed
+- `scf_update_packages()` ora restituisce anche un piano di update ordinato per dipendenze e gli eventuali blocchi operativi.
+- `scf_apply_updates()` ora usa il piano dependency-aware invece di applicare aggiornamenti in ordine lineare.
+- `registry-sync-gateway.yml` accetta anche `stable` come status valido del registry.
+
+### Fixed
+- Allineata la documentazione pubblica del motore al conteggio reale delle resource e al flusso di update.
+
+### Notes
+- Nessun nuovo tool MCP pubblico: il rafforzamento riguarda il comportamento dei tool di update esistenti.
+
+---
+
+## [1.5.0] — 2026-04-10
+
+### Added
+- `scf_get_runtime_state` tool: legge `.github/runtime/orchestrator-state.json`.
+- `scf_update_runtime_state` tool: aggiorna con merge parziale `orchestrator-state.json`.
+- `scf://runtime-state` resource: espone lo stato runtime come JSON leggibile direttamente.
+- `FrameworkInventory.get_orchestrator_state()`: lettura con default e gestione file corrotto.
+- `FrameworkInventory.set_orchestrator_state()`: scrittura con merge, creazione cartella runtime e timestamp UTC.
+- `FrameworkInventory.list_agents_indexes()`: scoperta di tutti i file `AGENTS*.md` per supporto multi-plugin.
+
+### Changed
+- `scf://agents-index`: ora aggrega tutti i file `AGENTS*.md` presenti nella root `.github/`.
+- Conteggio resource aggiornato da 14 a 15.
+- Conteggio tool aggiornato da 23 a 25.
+
+### Notes
+- `.github/runtime/` resta esclusa dal `ManifestManager` per design.
+- `scf-master-codecrafter` richiede `min_engine_version: 1.5.0`.
+
+---
+
 ## [1.4.2] — 2026-04-06
 
 ### Fixed

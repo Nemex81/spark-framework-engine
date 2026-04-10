@@ -72,7 +72,7 @@ e serve on-demand al modello AI (in Agent mode) tutto il contenuto SCF trovato.
 
 ---
 
-## Resources Disponibili (14)
+## Resources Disponibili (15)
 
 ```
 agents://list             agents://{name}
@@ -85,9 +85,10 @@ scf://model-policy
 scf://agents-index
 scf://framework-version
 scf://workspace-info
+scf://runtime-state
 ```
 
-## Tools Disponibili (23)
+## Tools Disponibili (25)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -99,6 +100,8 @@ scf_get_model_policy      scf_get_framework_version (restituisce `engine_version
 scf_get_workspace_info
 scf_verify_workspace()
 scf_verify_system()
+scf_get_runtime_state()
+scf_update_runtime_state(patch)
 scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()
@@ -119,6 +122,14 @@ verifica compatibilita del motore, dipendenze dichiarate, conflitti di package
 e ownership dei path gia tracciati nel manifest runtime. In caso di errore in
 scrittura, tenta il rollback dei file appena toccati e non aggiorna il manifest
 in modo parziale.
+
+`scf_update_packages()` non si limita piu a segnalare i delta di versione: costruisce
+anche una preview ordinata del piano di update, includendo dipendenze tra package,
+blocchi operativi e ordine di applicazione previsto.
+
+`scf_apply_updates(package_id | None)` usa lo stesso piano dependency-aware per
+aggiornare i package in ordine topologico. Se il piano e bloccato, il tool si ferma
+prima di modificare il workspace e restituisce i motivi del blocco.
 
 ---
 

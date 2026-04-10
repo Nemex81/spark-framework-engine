@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.4.2"
+ENGINE_VERSION: str = "1.5.1"
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +227,38 @@ def _is_engine_version_compatible(current_version: str, minimum_version: str) ->
     return current >= minimum
 
 
+def _resolve_dependency_update_order(
+    target_ids: list[str],
+    package_dependencies: dict[str, list[str]],
+) -> dict[str, Any]:
+    """Build a deterministic dependency-aware update order for selected packages."""
+    unique_targets = sorted({pkg_id for pkg_id in target_ids if pkg_id})
+    dependency_graph: dict[str, set[str]] = {pkg_id: set() for pkg_id in unique_targets}
+    reverse_graph: dict[str, set[str]] = {pkg_id: set() for pkg_id in unique_targets}
+    for pkg_id in unique_targets:
+        for dependency in package_dependencies.get(pkg_id, []):
+            if dependency in dependency_graph:
+                dependency_graph[pkg_id].add(dependency)
+                reverse_graph[dependency].add(pkg_id)
+
+    ready = sorted([pkg_id for pkg_id, deps in dependency_graph.items() if not deps])
+    ordered: list[str] = []
+    while ready:
+        current = ready.pop(0)
+        ordered.append(current)
+        for dependent in sorted(reverse_graph[current]):
+            dependency_graph[dependent].discard(current)
+            if not dependency_graph[dependent] and dependent not in ordered and dependent not in ready:
+                ready.append(dependent)
+        ready.sort()
+
+    cycles = sorted([pkg_id for pkg_id, deps in dependency_graph.items() if deps])
+    return {
+        "order": ordered,
+        "cycles": cycles,
+    }
+
+
 # ---------------------------------------------------------------------------
 # FrameworkInventory
 # ---------------------------------------------------------------------------
@@ -343,6 +375,52 @@ class FrameworkInventory:
         except OSError as exc:
             _log.warning("Cannot read package changelog %s: %s", changelog_path, exc)
         return None
+
+    def list_agents_indexes(self) -> list[FrameworkFile]:
+        """Return every AGENTS*.md index file found in the .github root."""
+        if not self._ctx.github_root.is_dir():
+            return []
+        return sorted(
+            [
+                self._build_framework_file(path, "index")
+                for path in self._ctx.github_root.glob("AGENTS*.md")
+                if path.is_file()
+            ],
+            key=lambda framework_file: framework_file.name,
+        )
+
+    def get_orchestrator_state(self) -> dict[str, Any]:
+        """Return orchestrator runtime state from .github/runtime/orchestrator-state.json."""
+        state_path = self._ctx.github_root / "runtime" / "orchestrator-state.json"
+        if not state_path.is_file():
+            return {
+                "current_phase": "",
+                "current_agent": "",
+                "retry_count": 0,
+                "confidence": 1.0,
+                "execution_mode": "autonomous",
+                "last_updated": "",
+                "phase_history": [],
+                "active_task_id": "",
+            }
+        try:
+            return json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            _log.warning("orchestrator-state.json unreadable: %s", exc)
+            return {}
+
+    def set_orchestrator_state(self, patch: dict[str, Any]) -> dict[str, Any]:
+        """Update orchestrator runtime state with a partial merge and UTC timestamp."""
+        state_path = self._ctx.github_root / "runtime" / "orchestrator-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        current = self.get_orchestrator_state()
+        current.update(patch)
+        current["last_updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state_path.write_text(
+            json.dumps(current, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return current
 
 
 # ---------------------------------------------------------------------------
@@ -737,7 +815,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (14) and Tools (23)
+# SparkFrameworkEngine — Resources (15) and Tools (25)
 # ---------------------------------------------------------------------------
 
 
@@ -852,8 +930,13 @@ class SparkFrameworkEngine:
 
         @self._mcp.resource("scf://agents-index")
         async def resource_agents_index() -> str:
-            ff = inventory.get_agents_index()
-            return ff.path.read_text(encoding="utf-8", errors="replace") if ff else "AGENTS.md not found."
+            indexes = inventory.list_agents_indexes()
+            if not indexes:
+                return "AGENTS.md not found."
+            return "\n\n---\n\n".join(
+                ff.path.read_text(encoding="utf-8", errors="replace")
+                for ff in indexes
+            )
 
         @self._mcp.resource("scf://framework-version")
         async def resource_framework_version() -> str:
@@ -875,10 +958,16 @@ class SparkFrameworkEngine:
             info = build_workspace_info(ctx, inventory)
             return _fmt_workspace_info(info)
 
-        _log.info("Resources registered: 4 list + 4 template + 6 scf:// singletons (14 total)")
+        @self._mcp.resource("scf://runtime-state")
+        async def resource_runtime_state() -> str:
+            """Stato runtime orchestratore come JSON formattato."""
+            state = inventory.get_orchestrator_state()
+            return json.dumps(state, indent=2, ensure_ascii=False)
+
+        _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 23 MCP tools."""
+        """Register all 25 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1387,44 +1476,180 @@ class SparkFrameworkEngine:
             }
             return success_result
 
-        @self._mcp.tool()
-        async def scf_update_packages() -> dict[str, Any]:
-            """Check installed SCF packages for updates and report upgrade opportunities."""
+        def _plan_package_updates(requested_package_id: str | None = None) -> dict[str, Any]:
             entries = manifest.load()
             if not entries:
-                return {"message": "No SCF packages installed via manifest.", "updates": []}
+                return {
+                    "success": True,
+                    "message": "No SCF packages installed via manifest.",
+                    "updates": [],
+                    "plan": {
+                        "requested_package": requested_package_id,
+                        "can_apply": False,
+                        "order": [],
+                        "blocked": [],
+                    },
+                }
             try:
                 reg_packages = registry.list_packages()
             except Exception as exc:  # noqa: BLE001
                 return {"success": False, "error": f"Registry unavailable: {exc}"}
+
+            installed_versions = manifest.get_installed_versions()
             reg_index: dict[str, Any] = {p["id"]: p for p in reg_packages if "id" in p}
             updates: list[dict[str, Any]] = []
-            seen: set[str] = set()
-            for entry in entries:
-                pkg_id = entry.get("package", "")
-                if not pkg_id or pkg_id in seen:
-                    continue
-                seen.add(pkg_id)
+            manifest_cache: dict[str, dict[str, Any]] = {}
+            dependency_map: dict[str, list[str]] = {}
+            candidate_ids: set[str] = set()
+            blocked: list[dict[str, Any]] = []
+
+            for pkg_id in sorted(installed_versions):
                 reg_entry = reg_index.get(pkg_id)
                 if reg_entry is None:
-                    updates.append({"package": pkg_id, "status": "not_in_registry"})
+                    updates.append({
+                        "package": pkg_id,
+                        "status": "not_in_registry",
+                        "installed": installed_versions[pkg_id],
+                    })
                     continue
-                installed_ver = entry.get("package_version", "")
-                latest_ver = reg_entry.get("latest_version", "")
-                if installed_ver == latest_ver:
-                    updates.append({
+
+                installed_ver = installed_versions[pkg_id]
+                latest_ver = str(reg_entry.get("latest_version", "")).strip()
+                status = "up_to_date" if installed_ver == latest_ver else "update_available"
+                update_entry: dict[str, Any] = {
+                    "package": pkg_id,
+                    "status": status,
+                    "installed": installed_ver,
+                    "latest": latest_ver,
+                    "registry_status": reg_entry.get("status", "unknown"),
+                }
+
+                pkg_manifest: dict[str, Any] | None = None
+                manifest_error: str | None = None
+                if status == "update_available":
+                    try:
+                        pkg_manifest = registry.fetch_package_manifest(reg_entry["repo_url"])
+                        manifest_cache[pkg_id] = pkg_manifest
+                    except Exception as exc:  # noqa: BLE001
+                        manifest_error = str(exc)
+                        update_entry["status"] = "metadata_unavailable"
+                        update_entry["error"] = f"Cannot fetch package manifest: {exc}"
+
+                if pkg_manifest is not None:
+                    dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
+                    dependency_map[pkg_id] = dependencies
+                    min_engine_version = str(
+                        pkg_manifest.get("min_engine_version", reg_entry.get("engine_min_version", ""))
+                    ).strip()
+                    missing_dependencies = [
+                        dependency for dependency in dependencies if dependency not in installed_versions
+                    ]
+                    engine_compatible = _is_engine_version_compatible(
+                        ENGINE_VERSION,
+                        min_engine_version,
+                    )
+                    update_entry["dependencies"] = dependencies
+                    update_entry["missing_dependencies"] = missing_dependencies
+                    update_entry["engine_min_version"] = min_engine_version
+                    update_entry["engine_compatible"] = engine_compatible
+
+                    if missing_dependencies:
+                        update_entry["status"] = "blocked_missing_dependencies"
+                        blocked.append({
+                            "package": pkg_id,
+                            "reason": "missing_dependencies",
+                            "missing_dependencies": missing_dependencies,
+                        })
+                    elif not engine_compatible:
+                        update_entry["status"] = "blocked_engine_version"
+                        blocked.append({
+                            "package": pkg_id,
+                            "reason": "engine_version",
+                            "required_engine_version": min_engine_version,
+                            "engine_version": ENGINE_VERSION,
+                        })
+                    else:
+                        candidate_ids.add(pkg_id)
+                elif manifest_error is not None:
+                    blocked.append({
                         "package": pkg_id,
-                        "status": "up_to_date",
-                        "version": installed_ver,
+                        "reason": "metadata_unavailable",
+                        "error": manifest_error,
                     })
-                else:
-                    updates.append({
+
+                updates.append(update_entry)
+
+            selected_ids = set(candidate_ids)
+            selected_blocked = list(blocked)
+            if requested_package_id:
+                matching_update = next(
+                    (item for item in updates if item.get("package") == requested_package_id),
+                    None,
+                )
+                if matching_update is None:
+                    return {
+                        "success": False,
+                        "error": f"Package '{requested_package_id}' is not installed.",
+                        "updates": updates,
+                    }
+                selected_ids = {requested_package_id} if requested_package_id in candidate_ids else set()
+                selected_blocked = [
+                    item for item in blocked if item.get("package") == requested_package_id
+                ]
+                if requested_package_id in candidate_ids:
+                    pending = [requested_package_id]
+                    while pending:
+                        current = pending.pop()
+                        for dependency in dependency_map.get(current, []):
+                            if dependency in candidate_ids and dependency not in selected_ids:
+                                selected_ids.add(dependency)
+                                pending.append(dependency)
+
+            resolution = _resolve_dependency_update_order(list(selected_ids), dependency_map)
+            if resolution["cycles"]:
+                for pkg_id in resolution["cycles"]:
+                    selected_blocked.append({
                         "package": pkg_id,
-                        "status": "update_available",
-                        "installed": installed_ver,
-                        "latest": latest_ver,
+                        "reason": "dependency_cycle",
                     })
-            return {"updates": updates, "total": len(updates)}
+
+            plan_order: list[dict[str, Any]] = []
+            for pkg_id in resolution["order"]:
+                update_entry = next(item for item in updates if item.get("package") == pkg_id)
+                plan_order.append({
+                    "package": pkg_id,
+                    "installed": update_entry.get("installed", ""),
+                    "target": update_entry.get("latest", ""),
+                    "dependencies": [
+                        dependency
+                        for dependency in dependency_map.get(pkg_id, [])
+                        if dependency in selected_ids
+                    ],
+                })
+
+            summary = {
+                "up_to_date": len([u for u in updates if u.get("status") == "up_to_date"]),
+                "update_available": len([u for u in updates if u.get("status") == "update_available"]),
+                "not_in_registry": len([u for u in updates if u.get("status") == "not_in_registry"]),
+                "blocked": len(selected_blocked),
+            }
+            return {
+                "success": True,
+                "updates": updates,
+                "total": len(updates),
+                "summary": summary,
+                "plan": {
+                    "requested_package": requested_package_id,
+                    "can_apply": len(plan_order) > 0 and len(selected_blocked) == 0,
+                    "order": plan_order,
+                    "blocked": selected_blocked,
+                },
+            }
+
+        @self._mcp.tool()
+        async def scf_update_packages() -> dict[str, Any]:
+            """Check installed SCF packages for updates and build an ordered update preview."""
+            return _plan_package_updates()
 
         @self._mcp.tool()
         async def scf_apply_updates(package_id: str | None = None) -> dict[str, Any]:
@@ -1433,21 +1658,35 @@ class SparkFrameworkEngine:
             If package_id is provided, applies the update only for that package.
             Otherwise applies all available updates.
             """
-            report = await scf_update_packages()
+            report = _plan_package_updates(package_id)
             if report.get("success") is False:
                 return report
-            updates = list(report.get("updates", []))
-            target_ids = [u.get("package", "") for u in updates if u.get("status") == "update_available"]
-            if package_id:
-                target_ids = [pkg for pkg in target_ids if pkg == package_id]
-                if not target_ids:
-                    return {
-                        "success": False,
-                        "error": f"No update available for package '{package_id}'.",
-                        "updates": updates,
-                    }
+            plan = report.get("plan", {})
+            plan_order = list(plan.get("order", []))
+            blocked = list(plan.get("blocked", []))
+            target_ids = [item.get("package", "") for item in plan_order if item.get("package")]
+            if blocked:
+                return {
+                    "success": False,
+                    "error": "Cannot apply updates because the update plan is blocked.",
+                    "plan": plan,
+                    "updates": report.get("updates", []),
+                }
+            if package_id and not target_ids:
+                return {
+                    "success": False,
+                    "error": f"No update available for package '{package_id}'.",
+                    "updates": report.get("updates", []),
+                    "plan": plan,
+                }
             if not target_ids:
-                return {"success": True, "message": "No updates to apply.", "applied": [], "failed": []}
+                return {
+                    "success": True,
+                    "message": "No updates to apply.",
+                    "applied": [],
+                    "failed": [],
+                    "plan": plan,
+                }
             applied: list[dict[str, Any]] = []
             failed: list[dict[str, Any]] = []
             for pkg_id in target_ids:
@@ -1461,6 +1700,7 @@ class SparkFrameworkEngine:
                 "applied": applied,
                 "failed": failed,
                 "total_targets": len(target_ids),
+                "plan": plan,
             }
 
         @self._mcp.tool()
@@ -1580,7 +1820,17 @@ class SparkFrameworkEngine:
                 "is_coherent": len(issues) == 0,
             }
 
-        _log.info("Tools registered: 23 total")
+        @self._mcp.tool()
+        async def scf_get_runtime_state() -> dict[str, Any]:
+            """Leggi lo stato runtime dell'orchestratore dal workspace corrente."""
+            return inventory.get_orchestrator_state()
+
+        @self._mcp.tool()
+        async def scf_update_runtime_state(patch: dict[str, Any]) -> dict[str, Any]:
+            """Aggiorna selettivamente lo stato runtime dell'orchestratore nel workspace."""
+            return inventory.set_orchestrator_state(patch)
+
+        _log.info("Tools registered: 25 total")
 
 
 # ---------------------------------------------------------------------------
