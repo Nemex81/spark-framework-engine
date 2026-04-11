@@ -73,7 +73,7 @@ scripts/*.out
 .scf-registry-cache.json
 
 # Temporary files created during markdownlint runs and diagnostics
-"lint fix output.txt"
+fix output.txt
 mdlint.json
-"mdlint out.json"
 out.json
+
