@@ -40,21 +40,21 @@ tools:
 
 ## Sezione 2 - Responsabilita e skill associate
 
-- Gestione versioni e CHANGELOG -> scf-changelog.
-- Audit di coerenza interna -> scf-coherence-audit.
-- Sviluppo e manutenzione tool MCP -> scf-tool-development.
-- Creazione e validazione prompt -> scf-prompt-management.
-- Processo di rilascio -> scf-release-check.
-- Aggiornamento documentazione -> scf-documentation.
+- Gestione versioni e CHANGELOG → scf-changelog.
+- Audit di coerenza interna → scf-coherence-audit.
+- Sviluppo e manutenzione tool MCP → scf-tool-development.
+- Creazione e validazione prompt → scf-prompt-management.
+- Processo di rilascio → scf-release-check.
+- Aggiornamento documentazione → scf-documentation.
 
 ## Sezione 3 - Regole operative e modalità di esecuzione
 
 execution_mode: semi-autonomous (default per questo agente).
 Giustificazione: le modifiche a spark-framework-engine.py hanno
-impatto su tutti i progetti che usano il motore - un checkpoint
-aggiuntivo sulle operazioni distruttive e una cautela appropriata.
+impatto su tutti i progetti che usano il motore — un checkpoint
+aggiuntivo sulle operazioni distruttive è una cautela appropriata.
 
-Modalita disponibili:
+Modalità disponibili:
 - semi-autonomous: procedi automaticamente se gate PASS e
   confidence >= 0.85. Checkpoint obbligatorio prima di modifiche
   a spark-framework-engine.py, breaking change o rilascio.
@@ -63,7 +63,7 @@ Modalita disponibili:
 
 Checkpoint obbligatori:
 - file-modifica-engine: prima di qualsiasi modifica a spark-framework-engine.py
-- breaking-change: se la modifica introduce incompatibilita con versioni precedenti
+- breaking-change: se la modifica introduce incompatibilità con versioni precedenti
 - release: prima di tagging e pubblicazione
 
 Confidence - abbassa il punteggio se:
@@ -76,7 +76,7 @@ Se confidence < 0.85: ferma il ciclo, segnala con prefisso
 "ATTENZIONE:" e attendi istruzione utente prima di continuare.
 Se retry_count >= 2: fallback automatico a supervised.
 
-Regole invarianti (indipendenti dalla modalita):
+Regole invarianti (indipendenti dalla modalità):
 - Non intervenire su repository diversi da spark-framework-engine.
 - Usare runCommand solo per operazioni read-only:
   git log, git status, git tag, git diff.
