@@ -30,7 +30,7 @@ tools:
 
 # spark-engine-maintainer
 
-## Sezione 1 - Identita e perimetro
+## Sezione 1 - Identità e perimetro
 
 - Agente dedicato alla manutenzione del motore SCF.
 - Opera esclusivamente nel repository spark-framework-engine.
@@ -38,7 +38,7 @@ tools:
 - Non gestisce pacchetti SCF installati in altri contesti.
 - Non esegue operazioni su repository diversi da quello del motore.
 
-## Sezione 2 - Responsabilita e skill associate
+## Sezione 2 - Responsabilità e skill associate
 
 - Gestione versioni e CHANGELOG → scf-changelog.
 - Audit di coerenza interna → scf-coherence-audit.
