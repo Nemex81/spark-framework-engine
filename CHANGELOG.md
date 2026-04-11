@@ -27,14 +27,17 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ## [1.5.1] — 2026-04-10
 
 ### Changed
+
 - `scf_update_packages()` ora restituisce anche un piano di update ordinato per dipendenze e gli eventuali blocchi operativi.
 - `scf_apply_updates()` ora usa il piano dependency-aware invece di applicare aggiornamenti in ordine lineare.
 - `registry-sync-gateway.yml` accetta anche `stable` come status valido del registry.
 
 ### Fixed
+
 - Allineata la documentazione pubblica del motore al conteggio reale delle resource e al flusso di update.
 
 ### Notes
+
 - Nessun nuovo tool MCP pubblico: il rafforzamento riguarda il comportamento dei tool di update esistenti.
 
 ---
@@ -42,6 +45,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ## [1.5.0] — 2026-04-10
 
 ### Added
+
 - `scf_get_runtime_state` tool: legge `.github/runtime/orchestrator-state.json`.
 - `scf_update_runtime_state` tool: aggiorna con merge parziale `orchestrator-state.json`.
 - `scf://runtime-state` resource: espone lo stato runtime come JSON leggibile direttamente.
@@ -50,11 +54,13 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `FrameworkInventory.list_agents_indexes()`: scoperta di tutti i file `AGENTS*.md` per supporto multi-plugin.
 
 ### Changed
+
 - `scf://agents-index`: ora aggrega tutti i file `AGENTS*.md` presenti nella root `.github/`.
 - Conteggio resource aggiornato da 14 a 15.
 - Conteggio tool aggiornato da 23 a 25.
 
 ### Notes
+
 - `.github/runtime/` resta esclusa dal `ManifestManager` per design.
 - `scf-master-codecrafter` richiede `min_engine_version: 1.5.0`.
 
@@ -63,6 +69,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ## [1.4.2] — 2026-04-06
 
 ### Fixed
+
 - **README.md**: corretto conteggio tool da 22 a 23; aggiunto `scf_verify_system` nella lista tool.
 - **CHANGELOG.md**: normalizzate le date delle versioni precedenti al formato ISO 8601 (YYYY-MM-DD).
 
@@ -71,6 +78,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ## [1.4.1] — 2026-04-02
 
 ### Fixed
+
 - **Atomicità installazione in `scf_install_package`**: il blocco diff-cleanup (rimozione file
   obsoleti) è stato spostato **dopo** la fase fetch. Se uno o più file non possono essere
   scaricati, l'installazione si interrompe prima di toccare il disco — manifiest e file esistenti
@@ -93,6 +101,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ## [1.4.0] — 2026-04-02
 
 ### Added
+
 - **Diff-based cleanup in `scf_install_package`**: durante un update/reinstall, il motore
   calcola i file presenti nell'installazione corrente ma assenti nel nuovo manifest del pacchetto
   e li rimuove automaticamente. I file modificati dall'utente (SHA mismatch) vengono preservati.
@@ -154,12 +163,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 - **Agente di manutenzione SCF**: creato `.github/agents/spark-engine-maintainer.agent.md` con perimetro operativo, responsabilita' e regole di comportamento per la manutenzione del motore.
 - **Skill dedicate all'agente**: aggiunte 6 skill in formato standard `skill-name/SKILL.md`:
-	- `.github/skills/scf-coherence-audit/SKILL.md`
-	- `.github/skills/scf-changelog/SKILL.md`
-	- `.github/skills/scf-tool-development/SKILL.md`
-	- `.github/skills/scf-prompt-management/SKILL.md`
-	- `.github/skills/scf-release-check/SKILL.md`
-	- `.github/skills/scf-documentation/SKILL.md`
+ 	- `.github/skills/scf-coherence-audit/SKILL.md`
+ 	- `.github/skills/scf-changelog/SKILL.md`
+ 	- `.github/skills/scf-tool-development/SKILL.md`
+ 	- `.github/skills/scf-prompt-management/SKILL.md`
+ 	- `.github/skills/scf-release-check/SKILL.md`
+ 	- `.github/skills/scf-documentation/SKILL.md`
 - **Istruzioni operative dominio motore**: creato `.github/instructions/spark-engine-maintenance.instructions.md` con convenzioni su naming tool/prompt, contatori, versioning e policy di conferma.
 - **Entry point Copilot repository-scoped**: creato `.github/copilot-instructions.md` con regole di ingaggio e riferimenti agli artefatti del maintainer.
 
