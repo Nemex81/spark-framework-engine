@@ -88,7 +88,7 @@ scf://workspace-info
 scf://runtime-state
 ```
 
-## Tools Disponibili (25)
+## Tools Disponibili (27)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -106,6 +106,8 @@ scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()
 scf_install_package(package_id)
+scf_check_updates()
+scf_update_package(package_id)
 scf_update_packages()
 scf_apply_updates(package_id | None)
 scf_remove_package(package_id)
@@ -122,6 +124,13 @@ verifica compatibilita del motore, dipendenze dichiarate, conflitti di package
 e ownership dei path gia tracciati nel manifest runtime. In caso di errore in
 scrittura, tenta il rollback dei file appena toccati e non aggiorna il manifest
 in modo parziale.
+
+`scf_check_updates()` restituisce solo i pacchetti installati che risultano
+aggiornabili rispetto al registry, con versione installata e versione disponibile.
+
+`scf_update_package(package_id)` aggiorna un singolo pacchetto installato,
+preservando i file modificati dall'utente e aggiornando il manifest locale con
+nuove versioni e SHA-256 dei file sovrascritti.
 
 `scf_update_packages()` non si limita piu a segnalare i delta di versione: costruisce
 anche una preview ordinata del piano di update, includendo dipendenze tra package,

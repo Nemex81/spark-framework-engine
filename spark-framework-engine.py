@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.5.1"
+ENGINE_VERSION: str = "1.6.0"
 
 
 # ---------------------------------------------------------------------------
@@ -967,7 +967,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 25 MCP tools."""
+        """Register all 27 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1476,6 +1476,123 @@ class SparkFrameworkEngine:
             }
             return success_result
 
+        def _summarize_available_updates(report: dict[str, Any]) -> list[dict[str, Any]]:
+            """Extract only updatable packages from the update planner report."""
+            return [
+                {
+                    "package": item.get("package", ""),
+                    "installed": item.get("installed", ""),
+                    "latest": item.get("latest", ""),
+                }
+                for item in report.get("updates", [])
+                if item.get("status") == "update_available"
+            ]
+
+        @self._mcp.tool()
+        async def scf_check_updates() -> dict[str, Any]:
+            """Return only the installed SCF packages that have an update available."""
+            report = _plan_package_updates()
+            if report.get("success") is False:
+                return report
+            updates = _summarize_available_updates(report)
+            return {
+                "success": True,
+                "count": len(updates),
+                "updates": updates,
+            }
+
+        @self._mcp.tool()
+        async def scf_update_package(package_id: str) -> dict[str, Any]:
+            """Update one installed SCF package while preserving user-modified files."""
+            installed_versions = manifest.get_installed_versions()
+            if package_id not in installed_versions:
+                return {
+                    "success": False,
+                    "error": f"Package '{package_id}' is not installed.",
+                    "package": package_id,
+                }
+
+            version_from = installed_versions[package_id]
+            plan_report = _plan_package_updates(package_id)
+            if plan_report.get("success") is False:
+                return plan_report
+
+            requested_update = next(
+                (item for item in plan_report.get("updates", []) if item.get("package") == package_id),
+                None,
+            )
+            if requested_update is None:
+                return {
+                    "success": False,
+                    "error": f"Package '{package_id}' is not installed.",
+                    "package": package_id,
+                }
+
+            if requested_update.get("status") == "up_to_date":
+                return {
+                    "success": True,
+                    "package": package_id,
+                    "already_up_to_date": True,
+                    "version_from": version_from,
+                    "version_to": version_from,
+                    "updated_files": [],
+                    "preserved_files": [],
+                }
+
+            blocked = [
+                item for item in plan_report.get("plan", {}).get("blocked", [])
+                if item.get("package") == package_id
+            ]
+            if blocked:
+                return {
+                    "success": False,
+                    "package": package_id,
+                    "error": "Cannot update package because the update plan is blocked.",
+                    "blocked": blocked,
+                    "version_from": version_from,
+                    "version_to": requested_update.get("latest", version_from),
+                }
+
+            apply_report = await scf_apply_updates(package_id)
+            if apply_report.get("success") is False:
+                return {
+                    "success": False,
+                    "package": package_id,
+                    "error": apply_report.get("error", "unknown error"),
+                    "version_from": version_from,
+                    "version_to": requested_update.get("latest", version_from),
+                    "details": apply_report,
+                }
+
+            applied_items = list(apply_report.get("applied", []))
+            requested_result = next(
+                (item for item in applied_items if item.get("package") == package_id),
+                None,
+            )
+            if requested_result is None:
+                return {
+                    "success": False,
+                    "package": package_id,
+                    "error": f"Update completed without an applied result for '{package_id}'.",
+                    "version_from": version_from,
+                    "version_to": requested_update.get("latest", version_from),
+                    "details": apply_report,
+                }
+
+            preserved_files = list(requested_result.get("preserved", [])) + list(
+                requested_result.get("preserved_obsolete_files", [])
+            )
+            return {
+                "success": True,
+                "package": package_id,
+                "version_from": version_from,
+                "version_to": requested_result.get("version", requested_update.get("latest", version_from)),
+                "updated_files": list(requested_result.get("installed", [])),
+                "preserved_files": preserved_files,
+                "removed_obsolete_files": list(requested_result.get("removed_obsolete_files", [])),
+                "already_up_to_date": False,
+            }
+
         def _plan_package_updates(requested_package_id: str | None = None) -> dict[str, Any]:
             entries = manifest.load()
             if not entries:
@@ -1646,7 +1763,6 @@ class SparkFrameworkEngine:
                 },
             }
 
-        @self._mcp.tool()
         async def scf_update_packages() -> dict[str, Any]:
             """Check installed SCF packages for updates and build an ordered update preview."""
             return _plan_package_updates()
@@ -1830,7 +1946,7 @@ class SparkFrameworkEngine:
             """Aggiorna selettivamente lo stato runtime dell'orchestratore nel workspace."""
             return inventory.set_orchestrator_state(patch)
 
-        _log.info("Tools registered: 25 total")
+        _log.info("Tools registered: 27 total")
 
 
 # ---------------------------------------------------------------------------

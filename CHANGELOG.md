@@ -6,6 +6,24 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.6.0] — 2026-04-11
+
+### Added
+
+- `scf_check_updates()` tool: restituisce solo i pacchetti installati che hanno un aggiornamento disponibile.
+- `scf_update_package(package_id)` tool: aggiorna un singolo pacchetto installato preservando i file modificati dall'utente.
+
+### Changed
+
+- Conteggio tool aggiornato da 25 a 27.
+- `ENGINE_VERSION` aggiornato a `1.6.0`.
+
+### Notes
+
+- `scf_update_package(package_id)` riusa il planner dependency-aware e la logica di installazione esistenti, senza introdurre nuovi modelli dati.
+
+---
+
 ## [1.5.1] — 2026-04-10
 
 ### Changed
