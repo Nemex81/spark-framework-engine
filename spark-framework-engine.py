@@ -1763,6 +1763,7 @@ class SparkFrameworkEngine:
                 },
             }
 
+        @self._mcp.tool()
         async def scf_update_packages() -> dict[str, Any]:
             """Check installed SCF packages for updates and build an ordered update preview."""
             return _plan_package_updates()
@@ -1946,7 +1947,7 @@ class SparkFrameworkEngine:
             """Aggiorna selettivamente lo stato runtime dell'orchestratore nel workspace."""
             return inventory.set_orchestrator_state(patch)
 
-        _log.info("Tools registered: 27 total")
+        _log.info("Tools registered: 28 total")
 
 
 # ---------------------------------------------------------------------------
