@@ -2,7 +2,7 @@
 name: spark-assistant
 description: Assistente SPARK per orientarsi nel workspace, gestire pacchetti SCF e diagnosticare problemi di base senza intervenire sul motore.
 spark: true
-version: 1.0.0
+version: 1.1.0
 model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5.4 (copilot)']
 layer: workspace
 role: executor
