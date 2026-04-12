@@ -13,6 +13,9 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `spark-assistant.agent.md`: nuovo agente bootstrap per l'utente finale orientato a catalogo, installazione, update e diagnostica base dei pacchetti SCF.
 - `spark-assistant-guide.instructions.md`: instruction dedicata al comportamento operativo dell'assistente bootstrap.
 - `scf-package-management` skill: guida riutilizzabile per il ciclo install/update/remove/verify dei pacchetti SCF.
+- `spark-init.py`: `_update_vscode_settings()` crea o aggiorna `.vscode/settings.json` scrivendo solo la chiave `mcp.servers.sparkFrameworkEngine`; JSON corrotto loggato su stderr e ricreato.
+- `spark-init.py`: `_bootstrap_github_files()` copia `agents/spark-assistant.agent.md`, `instructions/spark-assistant-guide.instructions.md` e tutti i `prompts/scf-*.prompt.md` dal repo engine al workspace utente con idempotenza SHA-256.
+- `spark-init.py`: `main()` produce ora su stdout un riepilogo ordinato (workspace, settings, ogni file bootstrap, modalità e cartella); tutto il logging intermedio è su stderr nel formato `[SPARK-INIT][LEVEL]`.
 
 ### Changed
 

@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 _MODULE_PATH = Path(__file__).parent.parent / "spark-init.py"
 _SPEC = importlib.util.spec_from_file_location("spark_init", _MODULE_PATH)
@@ -105,3 +107,262 @@ def test_update_existing_workspace_returns_error_when_root_mcp_is_not_an_object(
 
     assert success is False
     assert "la chiave 'mcp' deve essere un oggetto JSON" in message
+
+
+# ---------------------------------------------------------------------------
+# _update_vscode_settings
+# ---------------------------------------------------------------------------
+
+
+def test_update_vscode_settings_creates_settings_json_when_absent(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    engine_script = tmp_path / "spark-framework-engine.py"
+
+    success, action = _MODULE._update_vscode_settings(
+        project_root / "ws.code-workspace",
+        project_root,
+        engine_script,
+    )
+
+    settings_path = project_root / ".vscode" / "settings.json"
+    assert settings_path.exists()
+    assert success is True
+    assert action == "creato"
+    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "mcp" in data
+    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+    assert data["mcp"]["servers"][_MODULE.SERVER_ID]["args"] == [str(engine_script)]
+
+
+def test_update_vscode_settings_preserves_other_keys(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    engine_script = tmp_path / "spark-framework-engine.py"
+    vscode_dir = project_root / ".vscode"
+    vscode_dir.mkdir()
+    settings_path = vscode_dir / "settings.json"
+    settings_path.write_text(
+        '{"editor.tabSize": 2, "mcp": {"servers": {}}}',
+        encoding="utf-8",
+    )
+
+    success, action = _MODULE._update_vscode_settings(
+        project_root / "ws.code-workspace",
+        project_root,
+        engine_script,
+    )
+
+    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
+    assert success is True
+    assert action == "aggiornato"
+    assert data["editor.tabSize"] == 2
+    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+
+
+def test_update_vscode_settings_handles_corrupted_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    engine_script = tmp_path / "spark-framework-engine.py"
+    vscode_dir = project_root / ".vscode"
+    vscode_dir.mkdir()
+    settings_path = vscode_dir / "settings.json"
+    settings_path.write_text("{not valid json{{", encoding="utf-8")
+
+    success, action = _MODULE._update_vscode_settings(
+        project_root / "ws.code-workspace",
+        project_root,
+        engine_script,
+    )
+
+    captured = capsys.readouterr()
+    assert success is True
+    assert action == "aggiornato"
+    assert "[SPARK-INIT][ERROR]" in captured.err
+    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
+    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+
+
+def test_update_vscode_settings_handles_non_dict_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    engine_script = tmp_path / "spark-framework-engine.py"
+    vscode_dir = project_root / ".vscode"
+    vscode_dir.mkdir()
+    (vscode_dir / "settings.json").write_text("[1, 2, 3]", encoding="utf-8")
+
+    success, action = _MODULE._update_vscode_settings(
+        project_root / "ws.code-workspace",
+        project_root,
+        engine_script,
+    )
+
+    captured = capsys.readouterr()
+    assert success is True
+    assert action == "aggiornato"
+    assert "[SPARK-INIT][ERROR]" in captured.err
+    data = _MODULE.json.loads((vscode_dir / "settings.json").read_text(encoding="utf-8"))
+    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+
+
+def test_update_vscode_settings_handles_invalid_mcp_shape(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    engine_script = tmp_path / "spark-framework-engine.py"
+    vscode_dir = project_root / ".vscode"
+    vscode_dir.mkdir()
+    settings_path = vscode_dir / "settings.json"
+    settings_path.write_text(
+        '{"editor.tabSize": 2, "mcp": []}',
+        encoding="utf-8",
+    )
+
+    success, action = _MODULE._update_vscode_settings(
+        project_root / "ws.code-workspace",
+        project_root,
+        engine_script,
+    )
+
+    captured = capsys.readouterr()
+    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
+    assert success is True
+    assert action == "aggiornato"
+    assert data["editor.tabSize"] == 2
+    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+    assert "[SPARK-INIT][ERROR]" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# _bootstrap_github_files
+# ---------------------------------------------------------------------------
+
+
+def _make_engine_with_assets(base: Path) -> tuple[Path, Path]:
+    """Return (engine_root, workspace_root) after creating minimal source assets."""
+    engine_root = base / "engine"
+    workspace_root = base / "workspace"
+    workspace_root.mkdir()
+    gh = engine_root / ".github"
+    (gh / "agents").mkdir(parents=True)
+    (gh / "instructions").mkdir(parents=True)
+    (gh / "prompts").mkdir(parents=True)
+    (gh / "agents" / "spark-assistant.agent.md").write_text("agent", encoding="utf-8")
+    (gh / "instructions" / "spark-assistant-guide.instructions.md").write_text(
+        "guide", encoding="utf-8"
+    )
+    (gh / "prompts" / "scf-foo.prompt.md").write_text("prompt1", encoding="utf-8")
+    (gh / "prompts" / "scf-bar.prompt.md").write_text("prompt2", encoding="utf-8")
+    return engine_root, workspace_root
+
+
+def test_bootstrap_github_files_copies_missing_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    engine_root, workspace_root = _make_engine_with_assets(tmp_path)
+
+    messages = _MODULE._bootstrap_github_files(engine_root, workspace_root)
+
+    assert all(msg.startswith("[SPARK] .github/") for msg in messages)
+    assert all("copiato" in m for m in messages)
+    assert (workspace_root / ".github" / "agents" / "spark-assistant.agent.md").exists()
+    assert (
+        workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md"
+    ).exists()
+    assert (workspace_root / ".github" / "prompts" / "scf-foo.prompt.md").exists()
+    assert (workspace_root / ".github" / "prompts" / "scf-bar.prompt.md").exists()
+    assert "[SPARK-INIT][INFO] copiato:" in capsys.readouterr().err
+
+
+def test_bootstrap_github_files_silent_skip_when_identical(tmp_path: Path) -> None:
+    engine_root, workspace_root = _make_engine_with_assets(tmp_path)
+    # Pre-copy so content is identical.
+    _MODULE._bootstrap_github_files(engine_root, workspace_root)
+
+    messages = _MODULE._bootstrap_github_files(engine_root, workspace_root)
+
+    assert all("preservato" in m for m in messages)
+
+
+def test_bootstrap_github_files_preserves_user_modified_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    engine_root, workspace_root = _make_engine_with_assets(tmp_path)
+    _MODULE._bootstrap_github_files(engine_root, workspace_root)
+    # Modify one destination file.
+    agent_dst = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+    agent_dst.write_text("user modified content", encoding="utf-8")
+
+    messages = _MODULE._bootstrap_github_files(engine_root, workspace_root)
+
+    agent_msg = next(m for m in messages if "spark-assistant.agent.md" in m)
+    assert "preservato" in agent_msg
+    assert agent_dst.read_text(encoding="utf-8") == "user modified content"
+    assert "[SPARK-INIT][INFO] preservato" in capsys.readouterr().err
+
+
+def test_bootstrap_github_files_warns_on_missing_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    engine_root = tmp_path / "engine"
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    # Engine .github has no files at all.
+    (engine_root / ".github").mkdir(parents=True)
+
+    messages = _MODULE._bootstrap_github_files(engine_root, workspace_root)
+
+    assert any("sorgente non trovata" in m for m in messages)
+    assert "[SPARK-INIT][WARNING]" in capsys.readouterr().err
+
+
+def test_main_prints_ordered_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    workspace_file = project_root / f"{project_root.name}.code-workspace"
+
+    monkeypatch.chdir(project_root)
+    monkeypatch.setattr(_MODULE, "_workspace_candidates", lambda _project_root: [])
+    monkeypatch.setattr(
+        _MODULE,
+        "_create_workspace_file",
+        lambda _workspace_path, _project_root, _engine_script: "File salvato",
+    )
+    monkeypatch.setattr(
+        _MODULE,
+        "_update_vscode_settings",
+        lambda _workspace_path, _project_root, _engine_script: (True, "creato"),
+    )
+    monkeypatch.setattr(
+        _MODULE,
+        "_bootstrap_github_files",
+        lambda _engine_root, _workspace_root: [
+            "[SPARK] .github/agents/spark-assistant.agent.md → copiato",
+            "[SPARK] .github/prompts/scf-install.prompt.md → preservato",
+        ],
+    )
+
+    exit_code = _MODULE.main()
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.splitlines() == [
+        f"[SPARK] .code-workspace → creato: {workspace_file.name}",
+        "[SPARK] .vscode/settings.json → creato",
+        "[SPARK] .github/agents/spark-assistant.agent.md → copiato",
+        "[SPARK] .github/prompts/scf-install.prompt.md → preservato",
+        "",
+        "Setup completato. Il server SPARK è configurato in due modi:",
+        f"  - Workspace : apri {workspace_file.name} in VS Code",
+        "  - Cartella  : apri direttamente la cartella, funziona lo stesso",
+    ]
