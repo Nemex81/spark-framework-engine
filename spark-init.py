@@ -66,13 +66,15 @@ def _update_existing_workspace(
             f"ERRORE: la chiave 'settings' deve essere un oggetto JSON: {workspace_path}"
         )
 
-    mcp_settings = settings.get("mcp")
+    settings.pop("mcp", None)
+
+    mcp_settings = workspace_data.get("mcp")
     if mcp_settings is None:
         mcp_settings = {}
-        settings["mcp"] = mcp_settings
+        workspace_data["mcp"] = mcp_settings
     elif not isinstance(mcp_settings, dict):
         return False, (
-            f"ERRORE: la chiave 'settings.mcp' deve essere un oggetto JSON: {workspace_path}"
+            f"ERRORE: la chiave 'mcp' deve essere un oggetto JSON: {workspace_path}"
         )
 
     servers = mcp_settings.get("servers")
@@ -81,7 +83,7 @@ def _update_existing_workspace(
         mcp_settings["servers"] = servers
     elif not isinstance(servers, dict):
         return False, (
-            f"ERRORE: la chiave 'settings.mcp.servers' deve essere un oggetto JSON: "
+            f"ERRORE: la chiave 'mcp.servers' deve essere un oggetto JSON: "
             f"{workspace_path}"
         )
 
