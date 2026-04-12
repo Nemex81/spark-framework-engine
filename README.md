@@ -27,6 +27,56 @@ cd spark-framework-engine
 pip install mcp
 ```
 
+## Primo avvio
+
+### Scenario A - Progetto nuovo, nessun .code-workspace
+
+1. Apri un terminale nella cartella del tuo progetto.
+2. Esegui:
+
+```bash
+python /path/to/spark-framework-engine/spark-init.py
+```
+
+3. Apri VS Code.
+4. Usa File > Apri area di lavoro dal file.
+5. Seleziona il file .code-workspace appena creato.
+6. Riavvia il server MCP dal pannello MCP di VS Code.
+
+### Scenario B - Progetto esistente con .code-workspace gia presente
+
+Aggiungi manualmente questo blocco al tuo file .code-workspace, dentro "settings": {} allo stesso livello:
+
+```json
+"mcp": {
+  "servers": {
+    "sparkFrameworkEngine": {
+      "type": "stdio",
+      "command": "<path-python-venv>",
+      "args": ["<path-spark-framework-engine.py>"],
+      "env": {
+        "WORKSPACE_FOLDER": "<path-assoluto-progetto>"
+      }
+    }
+  }
+}
+```
+
+In alternativa, esegui spark-init.py che lo aggiunge in automatico.
+
+### Scenario C - Aperta solo la cartella senza workspace file
+
+Se nel log del server vedi:
+
+```text
+WARNING: WORKSPACE_FOLDER env var not set
+```
+
+significa che il server non sa dove sei. Hai due opzioni:
+
+- Opzione rapida: esegui spark-init.py nella cartella del progetto.
+- Opzione manuale: crea il file .code-workspace come da Scenario B.
+
 ## Prima Configurazione
 
 Per usare SPARK la prima volta in un workspace utente:

@@ -92,13 +92,50 @@ class WorkspaceLocator:
     def resolve(self) -> WorkspaceContext:
         workspace_root_str: str | None = os.environ.get("WORKSPACE_FOLDER")
         if workspace_root_str:
-            workspace_root = Path(workspace_root_str)
+            workspace_root = Path(workspace_root_str).expanduser().resolve()
+            _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
         else:
-            workspace_root = Path.cwd()
-            _log.warning(
-                "WORKSPACE_FOLDER env var not set; falling back to cwd: %s",
-                workspace_root,
+            cwd = Path.cwd().resolve()
+            workspace_candidates = sorted(
+                path for path in cwd.glob("*.code-workspace") if path.is_file()
             )
+            if workspace_candidates:
+                if len(workspace_candidates) > 1:
+                    candidate_names = ", ".join(path.name for path in workspace_candidates)
+                    _log.info(
+                        "Multiple .code-workspace files found in %s: %s. Using: %s",
+                        cwd,
+                        candidate_names,
+                        workspace_candidates[0].name,
+                    )
+                workspace_root = cwd
+                _log.info(
+                    "Workspace resolved via .code-workspace discovery: %s",
+                    workspace_root,
+                )
+            else:
+                parent = cwd.parent
+                parent_candidates = sorted(
+                    path for path in parent.glob("*.code-workspace") if path.is_file()
+                )
+                if parent_candidates:
+                    workspace_root = parent.resolve()
+                    _log.info(
+                        "Workspace resolved via .code-workspace discovery (parent): %s",
+                        workspace_root,
+                    )
+                else:
+                    workspace_root = cwd
+                    _log.warning(
+                        "WORKSPACE_FOLDER env var not set and no .code-workspace found."
+                    )
+                    _log.warning("Falling back to cwd: %s", workspace_root)
+                    _log.warning(
+                        "This is likely wrong. Run spark-init.py in your project folder"
+                    )
+                    _log.warning(
+                        "or open the project via File > Open Workspace from File."
+                    )
 
         if not workspace_root.is_dir():
             raise RuntimeError(
