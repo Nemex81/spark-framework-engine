@@ -6,6 +6,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.8.0] — 2026-04-12
+
+### Added
+
+- `spark-assistant.agent.md`: nuovo agente bootstrap per l'utente finale orientato a catalogo, installazione, update e diagnostica base dei pacchetti SCF.
+- `spark-assistant-guide.instructions.md`: instruction dedicata al comportamento operativo dell'assistente bootstrap.
+- `scf-package-management` skill: guida riutilizzabile per il ciclo install/update/remove/verify dei pacchetti SCF.
+
+### Changed
+
+- `scf_bootstrap_workspace()` ora copia l'agente `spark-assistant.agent.md` e `spark-assistant-guide.instructions.md` dal repo engine al workspace utente.
+- `ENGINE_VERSION` aggiornato a `1.8.0`.
+
+### Notes
+
+- Il bootstrap resta idempotente e, se trova un workspace gia bootstrap-pato in modo parziale, completa solo gli asset mancanti senza sovrascrivere file utente.
+
+---
+
 ## [1.7.0] — 2026-04-12
 
 ### Added

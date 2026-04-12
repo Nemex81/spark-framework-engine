@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.7.0"
+ENGINE_VERSION: str = "1.8.0"
 
 
 # ---------------------------------------------------------------------------
@@ -1952,9 +1952,11 @@ class SparkFrameworkEngine:
             """Bootstrap the base SPARK prompts and assistant agent into this workspace."""
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
-            agent_source = engine_github_root / "agents" / "spark-engine-maintainer.agent.md"
+            agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
+            guide_source = engine_github_root / "instructions" / "spark-assistant-guide.instructions.md"
             workspace_github_root = self._ctx.github_root
             sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
+            sentinel_exists = sentinel.is_file()
 
             prompt_sources = sorted(prompts_source_dir.glob("scf-*.prompt.md"))
             bootstrap_targets: list[tuple[Path, Path]] = [
@@ -1962,8 +1964,11 @@ class SparkFrameworkEngine:
                 for source_path in prompt_sources
             ]
             bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
+            bootstrap_targets.append(
+                (guide_source, workspace_github_root / "instructions" / "spark-assistant-guide.instructions.md")
+            )
 
-            if sentinel.is_file():
+            if sentinel_exists and all(dest_path.is_file() for _, dest_path in bootstrap_targets):
                 present_files = [
                     dest_path.relative_to(self._ctx.workspace_root).as_posix()
                     for _, dest_path in bootstrap_targets
@@ -1986,7 +1991,7 @@ class SparkFrameworkEngine:
             if missing_sources:
                 return {
                     "success": False,
-                    "already_bootstrapped": False,
+                    "already_bootstrapped": sentinel_exists,
                     "files_copied": [],
                     "files_skipped": [],
                     "workspace": str(self._ctx.workspace_root),
@@ -2026,7 +2031,7 @@ class SparkFrameworkEngine:
                     rollback_note = f" Rollback issues: {rollback_errors}"
                 return {
                     "success": False,
-                    "already_bootstrapped": False,
+                    "already_bootstrapped": sentinel_exists,
                     "files_copied": [],
                     "files_skipped": files_skipped,
                     "workspace": str(self._ctx.workspace_root),
@@ -2035,7 +2040,7 @@ class SparkFrameworkEngine:
 
             return {
                 "success": True,
-                "already_bootstrapped": False,
+                "already_bootstrapped": sentinel_exists,
                 "files_copied": files_copied,
                 "files_skipped": files_skipped,
                 "workspace": str(self._ctx.workspace_root),

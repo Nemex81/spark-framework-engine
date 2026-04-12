@@ -115,6 +115,11 @@ scf_remove_package(package_id)
 scf_get_package_changelog(package_id)
 ```
 
+`scf_bootstrap_workspace()` copia nel workspace utente il set base di bootstrap:
+gli 8 prompt `scf-*.prompt.md`, l'agente `spark-assistant.agent.md` e
+l'instruction `spark-assistant-guide.instructions.md`. Se il workspace e gia
+bootstrap-pato ma manca qualche asset base, il tool copia solo i file mancanti.
+
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,
 `file_ownership_policy` e `changelog_path`, insieme a una sezione di
