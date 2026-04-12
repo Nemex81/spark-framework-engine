@@ -77,7 +77,16 @@ foreach ($candidate in @("python", "python3", "py")) {
 }
 
 if (-not $pythonCmd) {
-    Write-Error "[SPARK] Python 3.10+ non trovato nel PATH.`nInstalla Python da https://python.org e riprova."
+    Write-Host ""
+    Write-Host "[SPARK] ERRORE: Python 3.10 o superiore non trovato nel PATH."
+    Write-Host ""
+    Write-Host " Come risolvere:"
+    Write-Host "   1. Scarica Python da: https://python.org/downloads"
+    Write-Host "   2. Durante l'installazione spunta la casella:"
+    Write-Host "        'Add Python to PATH'"
+    Write-Host "   3. Chiudi e riapri PowerShell."
+    Write-Host "   4. Riesegui questo script."
+    Write-Host ""
     exit 1
 }
 
@@ -87,6 +96,21 @@ Write-Host "[SPARK] Python trovato: $fullVer ($pythonCmd)"
 # ---------------------------------------------------------------------------
 # Creazione venv (se non esiste o incompleto)
 # ---------------------------------------------------------------------------
+if (-not (Test-Path $VenvPython)) {
+    Write-Host ""
+    Write-Host "[SPARK] E' necessario creare un ambiente virtuale Python in:"
+    Write-Host "        $VenvDir"
+    Write-Host ""
+    Write-Host "        L'ambiente contiene solo la dipendenza 'mcp' richiesta"
+    Write-Host "        dal server SPARK. Non modifica il tuo progetto."
+    Write-Host ""
+    $confirm = Read-Host "[SPARK] Premi INVIO per continuare o digita N per annullare"
+    if ($confirm -match "^[Nn]") {
+        Write-Host "[SPARK] Operazione annullata dall'utente."
+        exit 0
+    }
+}
+
 if (-not (Test-Path $VenvPython)) {
     Write-Host "[SPARK] Creazione ambiente virtuale .venv ..."
     & $pythonCmd -m venv $VenvDir

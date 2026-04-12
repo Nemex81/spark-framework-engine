@@ -55,8 +55,17 @@ for candidate in python3 python; do
 done
 
 if [[ -z "$PYTHON_CMD" ]]; then
-    echo "[SPARK] ERRORE: Python 3.10+ non trovato nel PATH."
-    echo "        Installalo (https://python.org) e riprova."
+    echo ""
+    echo "[SPARK] ERRORE: Python 3.10 o superiore non trovato nel PATH."
+    echo ""
+    echo " Come risolvere:"
+    echo "   1. Installa Python da: https://python.org/downloads"
+    echo "      oppure usa il package manager del tuo sistema:"
+    echo "        macOS : brew install python3"
+    echo "        Ubuntu: sudo apt install python3"
+    echo "   2. Verifica con: python3 --version"
+    echo "   3. Riesegui questo script."
+    echo ""
     exit 1
 fi
 
@@ -65,6 +74,21 @@ echo "[SPARK] Python trovato: $($PYTHON_CMD --version) ($PYTHON_CMD)"
 # ---------------------------------------------------------------------------
 # Creazione venv
 # ---------------------------------------------------------------------------
+if [[ ! -f "$VENV_PYTHON" ]]; then
+    echo ""
+    echo "[SPARK] E' necessario creare un ambiente virtuale Python in:"
+    echo "        $VENV_DIR"
+    echo ""
+    echo "        L'ambiente contiene solo la dipendenza 'mcp' richiesta"
+    echo "        dal server SPARK. Non modifica il tuo progetto."
+    echo ""
+    read -r -p "[SPARK] Premi INVIO per continuare o digita N per annullare: " confirm
+    if [[ "$confirm" =~ ^[Nn] ]]; then
+        echo "[SPARK] Operazione annullata dall'utente."
+        exit 0
+    fi
+fi
+
 if [[ ! -f "$VENV_PYTHON" ]]; then
     echo "[SPARK] Creazione ambiente virtuale .venv ..."
     "$PYTHON_CMD" -m venv "$VENV_DIR"
