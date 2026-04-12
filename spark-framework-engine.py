@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.6.0"
+ENGINE_VERSION: str = "1.7.0"
 
 
 # ---------------------------------------------------------------------------
@@ -815,7 +815,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (15) and Tools (25)
+# SparkFrameworkEngine — Resources (15) and Tools (28)
 # ---------------------------------------------------------------------------
 
 
@@ -967,7 +967,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 27 MCP tools."""
+        """Register all 28 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1947,7 +1947,102 @@ class SparkFrameworkEngine:
             """Aggiorna selettivamente lo stato runtime dell'orchestratore nel workspace."""
             return inventory.set_orchestrator_state(patch)
 
-        _log.info("Tools registered: 27 total")
+        @self._mcp.tool()
+        async def scf_bootstrap_workspace() -> dict[str, Any]:
+            """Bootstrap the base SPARK prompts and assistant agent into this workspace."""
+            engine_github_root = Path(__file__).resolve().parent / ".github"
+            prompts_source_dir = engine_github_root / "prompts"
+            agent_source = engine_github_root / "agents" / "spark-engine-maintainer.agent.md"
+            workspace_github_root = self._ctx.github_root
+            sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
+
+            prompt_sources = sorted(prompts_source_dir.glob("scf-*.prompt.md"))
+            bootstrap_targets: list[tuple[Path, Path]] = [
+                (source_path, workspace_github_root / "prompts" / source_path.name)
+                for source_path in prompt_sources
+            ]
+            bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
+
+            if sentinel.is_file():
+                present_files = [
+                    dest_path.relative_to(self._ctx.workspace_root).as_posix()
+                    for _, dest_path in bootstrap_targets
+                    if dest_path.is_file()
+                ]
+                return {
+                    "success": True,
+                    "already_bootstrapped": True,
+                    "files_copied": [],
+                    "files_skipped": present_files,
+                    "workspace": str(self._ctx.workspace_root),
+                    "note": "Bootstrap assets already present in this workspace. Run /scf-list-available to inspect the package catalog.",
+                }
+
+            missing_sources = [
+                str(source_path)
+                for source_path, _ in bootstrap_targets
+                if not source_path.is_file()
+            ]
+            if missing_sources:
+                return {
+                    "success": False,
+                    "already_bootstrapped": False,
+                    "files_copied": [],
+                    "files_skipped": [],
+                    "workspace": str(self._ctx.workspace_root),
+                    "note": f"Bootstrap sources missing from engine repository: {missing_sources}",
+                }
+
+            files_copied: list[str] = []
+            files_skipped: list[str] = []
+            written_paths: list[Path] = []
+
+            try:
+                for source_path, dest_path in bootstrap_targets:
+                    rel_path = dest_path.relative_to(self._ctx.workspace_root).as_posix()
+                    if dest_path.is_file():
+                        if manifest._sha256(dest_path) == manifest._sha256(source_path):
+                            _log.info("Bootstrap file already matches source: %s", rel_path)
+                        else:
+                            _log.warning("Bootstrap file preserved (existing different content): %s", rel_path)
+                        files_skipped.append(rel_path)
+                        continue
+
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    dest_path.write_bytes(source_path.read_bytes())
+                    written_paths.append(dest_path)
+                    files_copied.append(rel_path)
+            except OSError as exc:
+                rollback_errors: list[str] = []
+                for written_path in reversed(written_paths):
+                    try:
+                        if written_path.is_file():
+                            written_path.unlink()
+                    except OSError as rollback_exc:
+                        rollback_errors.append(f"{written_path}: {rollback_exc}")
+
+                rollback_note = ""
+                if rollback_errors:
+                    rollback_note = f" Rollback issues: {rollback_errors}"
+                return {
+                    "success": False,
+                    "already_bootstrapped": False,
+                    "files_copied": [],
+                    "files_skipped": files_skipped,
+                    "workspace": str(self._ctx.workspace_root),
+                    "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
+                }
+
+            return {
+                "success": True,
+                "already_bootstrapped": False,
+                "files_copied": files_copied,
+                "files_skipped": files_skipped,
+                "workspace": str(self._ctx.workspace_root),
+                "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
+            }
+
+        _log.info("Tools registered: 28 total")
 
 
 # ---------------------------------------------------------------------------

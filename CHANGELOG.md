@@ -6,6 +6,23 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.7.0] — 2026-04-12
+
+### Added
+
+- `scf_bootstrap_workspace()` tool: copia i prompt base SPARK e l'agente assistant dal repo engine alla cartella `.github/` del workspace utente senza usare il manifest dei pacchetti.
+
+### Changed
+
+- Conteggio tool aggiornato da 27 a 28.
+- `ENGINE_VERSION` aggiornato a `1.7.0`.
+
+### Notes
+
+- Il bootstrap usa solo I/O locale, preserva i file gia presenti con contenuto diverso e suggerisce `/scf-list-available` come passo successivo.
+
+---
+
 ## [1.6.0] — 2026-04-11
 
 ### Added

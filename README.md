@@ -88,7 +88,7 @@ scf://workspace-info
 scf://runtime-state
 ```
 
-## Tools Disponibili (27)
+## Tools Disponibili (28)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -102,6 +102,7 @@ scf_verify_workspace()
 scf_verify_system()
 scf_get_runtime_state()
 scf_update_runtime_state(patch)
+scf_bootstrap_workspace()
 scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()
