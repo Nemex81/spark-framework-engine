@@ -124,25 +124,25 @@ significa che il server non sa dove si trova il progetto attivo.
 
 Per usare SPARK la prima volta in un workspace utente:
 
-1. Registra il motore MCP in VS Code come descritto sotto.
-1. Esegui `spark-init.py` nella cartella del progetto target.
-1. Apri il progetto target in VS Code usando il file `.code-workspace`
+- Registra il motore MCP in VS Code come descritto sotto.
+- Esegui `spark-init.py` nella cartella del progetto target.
+- Apri il progetto target in VS Code usando il file `.code-workspace`
   generato oppure aprendo direttamente la cartella.
 
-Lo script prepara gia il set base sotto `.github/`:
+  Lo script prepara gia il set base sotto `.github/`:
 
-- 8 prompt `scf-*.prompt.md`
-- `spark-assistant.agent.md`
-- `spark-assistant-guide.instructions.md`
+  - 8 prompt `scf-*.prompt.md`
+  - `spark-assistant.agent.md`
+  - `spark-assistant-guide.instructions.md`
 
-1. Usa `spark-assistant` come punto di ingresso operativo nel workspace.
-1. Per installare il primo plugin SCF, usa questo flusso:
+- Usa `spark-assistant` come punto di ingresso operativo nel workspace.
+- Per installare il primo plugin SCF, usa questo flusso:
 
-- consulta il catalogo con `scf_list_available_packages()`
-- controlla dettaglio, dipendenze e compatibilita con `scf_get_package_info(package_id)`
-- installa con `scf_install_package(package_id)`
+  - consulta il catalogo con `scf_list_available_packages()`
+  - controlla dettaglio, dipendenze e compatibilita con `scf_get_package_info(package_id)`
+  - installa con `scf_install_package(package_id)`
 
-1. Dopo l'installazione, verifica lo stato locale con `scf_verify_workspace()`.
+- Dopo l'installazione, verifica lo stato locale con `scf_verify_workspace()`.
 
 Il bootstrap eseguito da `spark-init.py` non registra file nel manifest runtime
 dei pacchetti: prepara solo gli asset minimi di ingresso al sistema.
