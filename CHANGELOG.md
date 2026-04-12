@@ -6,6 +6,23 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.8.1] — 2026-04-12
+
+### Changed
+
+- `WorkspaceLocator` usa ora una cascata piu robusta: `WORKSPACE_FOLDER` valido, marker locali del workspace (`.vscode/settings.json`, `.vscode/mcp.json`, `*.code-workspace`), discovery SCF sotto `.github/`, quindi fallback finale su `cwd`.
+
+### Fixed
+
+- Il motore non accetta piu in modo cieco il path della home utente come workspace quando `WORKSPACE_FOLDER` manca o viene risolto in modo errato senza marker locali SPARK.
+- Ridotte le risoluzioni errate del workspace causate da merge parziali della configurazione MCP tra livello globale e livello workspace.
+
+### Notes
+
+- Il fix mantiene compatibile il bootstrap di workspace non inizializzati: un `WORKSPACE_FOLDER` esplicito e valido continua a essere accettato anche se `.github/` non esiste ancora.
+
+---
+
 ## [1.8.0] — 2026-04-12
 
 ### Added

@@ -170,6 +170,12 @@ WARNING: WORKSPACE_FOLDER env var not set
 
 significa che il server non sa dove si trova il progetto attivo.
 
+Da `1.8.1` il resolver del motore e piu difensivo: se `WORKSPACE_FOLDER`
+manca o punta a una cartella palesemente non valida, il motore prova prima a
+ricostruire il workspace dai marker locali (`.vscode/settings.json`,
+`.vscode/mcp.json`, `*.code-workspace`) e poi dai marker SCF in `.github/`
+prima di fare fallback sul `cwd`.
+
 ## Prima Configurazione
 
 Per usare SPARK la prima volta in un workspace utente:

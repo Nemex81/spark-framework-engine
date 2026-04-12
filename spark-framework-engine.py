@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.8.0"
+ENGINE_VERSION: str = "1.8.1"
 
 
 # ---------------------------------------------------------------------------
@@ -87,55 +87,102 @@ class FrameworkFile:
 
 
 class WorkspaceLocator:
-    """Resolve WORKSPACE_FOLDER env var with fallback to cwd."""
+    """Resolve the active workspace using env, local config and SCF markers."""
+
+    _SCF_MARKER_FILES: tuple[str, ...] = (
+        "project-profile.md",
+        "copilot-instructions.md",
+        "AGENTS.md",
+        ".scf-manifest.json",
+    )
+    _SCF_MARKER_DIRS: tuple[str, ...] = (
+        "agents",
+        "instructions",
+        "prompts",
+        "skills",
+    )
+
+    def _is_user_home(self, candidate: Path) -> bool:
+        try:
+            return candidate == Path.home().resolve()
+        except RuntimeError:
+            return False
+
+    def _has_local_workspace_config(self, candidate: Path) -> bool:
+        if any(path.is_file() for path in candidate.glob("*.code-workspace")):
+            return True
+
+        vscode_dir = candidate / ".vscode"
+        return any(
+            (vscode_dir / file_name).is_file()
+            for file_name in ("settings.json", "mcp.json")
+        )
+
+    def _has_scf_markers(self, candidate: Path) -> bool:
+        github_root = candidate / ".github"
+        if not github_root.is_dir():
+            return False
+
+        if any((github_root / file_name).is_file() for file_name in self._SCF_MARKER_FILES):
+            return True
+
+        return any((github_root / dir_name).is_dir() for dir_name in self._SCF_MARKER_DIRS)
+
+    def _discover_from_cwd(self, cwd: Path) -> Path | None:
+        for candidate in (cwd, *cwd.parents):
+            if self._is_user_home(candidate):
+                continue
+
+            if self._has_local_workspace_config(candidate):
+                _log.info("Workspace resolved via local workspace config: %s", candidate)
+                return candidate
+
+            if self._has_scf_markers(candidate):
+                _log.info("Workspace resolved via SCF .github discovery: %s", candidate)
+                return candidate
+
+        return None
 
     def resolve(self) -> WorkspaceContext:
         workspace_root_str: str | None = os.environ.get("WORKSPACE_FOLDER")
+        workspace_root: Path | None = None
+
         if workspace_root_str:
-            workspace_root = Path(workspace_root_str).expanduser().resolve()
-            _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
-        else:
-            cwd = Path.cwd().resolve()
-            workspace_candidates = sorted(
-                path for path in cwd.glob("*.code-workspace") if path.is_file()
-            )
-            if workspace_candidates:
-                if len(workspace_candidates) > 1:
-                    candidate_names = ", ".join(path.name for path in workspace_candidates)
-                    _log.info(
-                        "Multiple .code-workspace files found in %s: %s. Using: %s",
-                        cwd,
-                        candidate_names,
-                        workspace_candidates[0].name,
-                    )
-                workspace_root = cwd
-                _log.info(
-                    "Workspace resolved via .code-workspace discovery: %s",
-                    workspace_root,
+            candidate = Path(workspace_root_str).expanduser().resolve()
+            if not candidate.is_dir():
+                _log.warning(
+                    "Ignoring WORKSPACE_FOLDER because it is not a directory: %s",
+                    candidate,
+                )
+            elif self._is_user_home(candidate) and not (
+                self._has_local_workspace_config(candidate)
+                or self._has_scf_markers(candidate)
+            ):
+                _log.warning(
+                    "Ignoring WORKSPACE_FOLDER because it points to the user home without"
+                    " local workspace markers: %s",
+                    candidate,
                 )
             else:
-                parent = cwd.parent
-                parent_candidates = sorted(
-                    path for path in parent.glob("*.code-workspace") if path.is_file()
+                workspace_root = candidate
+                _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
+
+        if workspace_root is None:
+            cwd = Path.cwd().resolve()
+            workspace_root = self._discover_from_cwd(cwd)
+            if workspace_root is None:
+                workspace_root = cwd
+                _log.warning(
+                    "WORKSPACE_FOLDER env var not set or invalid and no local workspace"
+                    " markers were found."
                 )
-                if parent_candidates:
-                    workspace_root = parent.resolve()
-                    _log.info(
-                        "Workspace resolved via .code-workspace discovery (parent): %s",
-                        workspace_root,
-                    )
-                else:
-                    workspace_root = cwd
-                    _log.warning(
-                        "WORKSPACE_FOLDER env var not set and no .code-workspace found."
-                    )
-                    _log.warning("Falling back to cwd: %s", workspace_root)
-                    _log.warning(
-                        "This is likely wrong. Run spark-init.py in your project folder"
-                    )
-                    _log.warning(
-                        "or open the project via File > Open Workspace from File."
-                    )
+                _log.warning("Falling back to cwd: %s", workspace_root)
+                _log.warning(
+                    "This is likely wrong. Run spark-init.py in your project folder"
+                )
+                _log.warning(
+                    "or open the project via File > Open Workspace from File."
+                )
 
         if not workspace_root.is_dir():
             raise RuntimeError(
