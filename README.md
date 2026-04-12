@@ -38,24 +38,27 @@ pip install mcp
 python /path/to/spark-framework-engine/spark-init.py
 ```
 
-3. Apri VS Code.
-4. Usa File > Apri area di lavoro dal file.
-5. Seleziona il file .code-workspace appena creato.
-6. Riavvia il server MCP dal pannello MCP di VS Code.
+1. Apri VS Code.
+2. Usa File > Apri area di lavoro dal file.
+3. Seleziona il file .code-workspace appena creato.
+4. Riavvia il server MCP dal pannello MCP di VS Code.
 
 ### Scenario B - Progetto esistente con .code-workspace gia presente
 
-Aggiungi manualmente questo blocco al tuo file .code-workspace, dentro "settings": {} allo stesso livello:
+Aggiungi manualmente questo blocco al tuo file .code-workspace, alla radice dell'oggetto (fuori da `"settings"`):
 
 ```json
-"mcp": {
-  "servers": {
-    "sparkFrameworkEngine": {
-      "type": "stdio",
-      "command": "<path-python-venv>",
-      "args": ["<path-spark-framework-engine.py>"],
-      "env": {
-        "WORKSPACE_FOLDER": "<path-assoluto-progetto>"
+{
+  "settings": {},
+  "mcp": {
+    "servers": {
+      "sparkFrameworkEngine": {
+        "type": "stdio",
+        "command": "<path-python-venv>",
+        "args": ["<path-spark-framework-engine.py>"],
+        "env": {
+          "WORKSPACE_FOLDER": "<path-assoluto-progetto>"
+        }
       }
     }
   }

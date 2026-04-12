@@ -25,11 +25,10 @@ def _build_server_config(project_root: Path, engine_script: Path) -> dict[str, A
 def _build_workspace_template(project_root: Path, engine_script: Path) -> dict[str, Any]:
     return {
         "folders": [{"path": "."}],
-        "settings": {
-            "mcp": {
-                "servers": {
-                    SERVER_ID: _build_server_config(project_root, engine_script)
-                }
+        "settings": {},
+        "mcp": {
+            "servers": {
+                SERVER_ID: _build_server_config(project_root, engine_script)
             }
         },
     }

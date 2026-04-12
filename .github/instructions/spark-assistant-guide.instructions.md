@@ -1,5 +1,5 @@
 ---
-applyTo: ".github/**"
+applyTo: "**"
 name: spark-assistant-guide
 spark: true
 version: 1.1.0
