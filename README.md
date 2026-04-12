@@ -17,7 +17,57 @@ non contiene dati di dominio, si adatta a qualsiasi progetto.
 
 ---
 
-## Installazione
+## Quick Start (nuovo utente)
+
+3 passi per iniziare da zero.
+
+**Windows (PowerShell):**
+
+```powershell
+# 1. Clona il repo engine (una volta sola)
+git clone https://github.com/Nemex81/spark-framework-engine
+cd spark-framework-engine
+
+# 2. Lancia setup puntando alla cartella del tuo progetto
+.\setup.ps1 -Project "C:\percorso\mio-progetto"
+
+# 3. Apri il progetto in VS Code
+code "C:\percorso\mio-progetto"
+```
+
+**Mac / Linux (bash):**
+
+```bash
+# 1. Clona il repo engine (una volta sola)
+git clone https://github.com/Nemex81/spark-framework-engine
+cd spark-framework-engine
+
+# 2. Lancia setup puntando alla cartella del tuo progetto
+chmod +x setup.sh
+./setup.sh /percorso/mio-progetto
+
+# 3. Apri il progetto in VS Code
+code /percorso/mio-progetto
+```
+
+Gli script `setup.ps1` / `setup.sh` eseguono in automatico:
+
+- verifica Python 3.10+
+- creazione del `.venv` locale nel repo engine (idempotente)
+- `pip install mcp` nel venv
+- esecuzione di `spark-init.py` nella cartella del progetto
+
+Al termine VS Code avvierà il server SPARK automaticamente all'apertura del progetto.
+Per iniziare usa la chat Copilot in Agent mode e scrivi `@spark-assistant ciao`.
+
+> Il progetto da inizializzare può essere una cartella vuota o un progetto esistente.
+> `setup.ps1` / `setup.sh` sono idempotenti: possono essere rieseguiti senza danni.
+
+---
+
+## Installazione manuale
+
+Se preferisci configurare senza gli script di setup:
 
 ```bash
 # 1. Clona il repo engine in locale
@@ -28,7 +78,7 @@ cd spark-framework-engine
 pip install mcp
 ```
 
-## Primo avvio
+## Primo avvio (manuale)
 
 - Apri un terminale nella cartella del tuo progetto, non nella cartella
   del repo engine.
