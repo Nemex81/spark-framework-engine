@@ -2033,7 +2033,7 @@ class SparkFrameworkEngine:
 
         @self._mcp.tool()
         async def scf_bootstrap_workspace() -> dict[str, Any]:
-            """Bootstrap the base SPARK prompts and assistant agent into this workspace."""
+            """Bootstrap the base SPARK prompts, admin agent and user guide agent into this workspace."""
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
             agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
@@ -2048,6 +2048,8 @@ class SparkFrameworkEngine:
                 for source_path in prompt_sources
             ]
             bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
+            user_guide_source = engine_github_root / "agents" / "spark-user-guide.agent.md"
+            bootstrap_targets.append((user_guide_source, workspace_github_root / "agents" / "spark-user-guide.agent.md"))
             bootstrap_targets.append(
                 (guide_source, workspace_github_root / "instructions" / "spark-assistant-guide.instructions.md")
             )
