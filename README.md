@@ -12,6 +12,7 @@ non contiene dati di dominio, si adatta a qualsiasi progetto.
 ## Requisiti
 
 - Python 3.10 o superiore
+- VS Code con estensione GitHub Copilot
 - Dipendenza runtime: `mcp` (include FastMCP)
 
 ---
@@ -19,7 +20,7 @@ non contiene dati di dominio, si adatta a qualsiasi progetto.
 ## Installazione
 
 ```bash
-# 1. Clona il repo
+# 1. Clona il repo engine in locale
 git clone https://github.com/Nemex81/spark-framework-engine
 cd spark-framework-engine
 
@@ -29,23 +30,64 @@ pip install mcp
 
 ## Primo avvio
 
-### Scenario A - Progetto nuovo, nessun .code-workspace
-
-1. Apri un terminale nella cartella del tuo progetto.
-2. Esegui:
+1. Apri un terminale nella cartella del tuo progetto, non nella cartella
+   del repo engine.
+2. Esegui `spark-init.py` puntando al clone locale dell'engine:
 
 ```bash
-python /path/to/spark-framework-engine/spark-init.py
+python ../spark-framework-engine/spark-init.py
 ```
 
-1. Apri VS Code.
-2. Usa File > Apri area di lavoro dal file.
-3. Seleziona il file .code-workspace appena creato.
-4. Riavvia il server MCP dal pannello MCP di VS Code.
+Se il tuo progetto e il repo engine non sono allo stesso livello, usa il path
+assoluto al file `spark-init.py`.
 
-### Scenario B - Progetto esistente con .code-workspace gia presente
+1. Lo script configura in autonomia il progetto utente:
 
-Aggiungi manualmente questo blocco al tuo file .code-workspace, alla radice dell'oggetto (fuori da `"settings"`):
+- crea o aggiorna `<progetto>.code-workspace`
+- crea o aggiorna `.vscode/settings.json`
+- copia il set minimo di file SPARK in `.github/`
+
+1. Al termine stampa un riepilogo simile a questo:
+
+```text
+[SPARK] .code-workspace → creato: mio-progetto.code-workspace
+[SPARK] .vscode/settings.json → creato
+[SPARK] .github/agents/spark-assistant.agent.md → copiato
+[SPARK] .github/instructions/spark-assistant-guide.instructions.md → copiato
+[SPARK] .github/prompts/scf-install.prompt.md → copiato
+[SPARK] .github/prompts/scf-list-available.prompt.md → copiato
+[SPARK] .github/prompts/scf-list-installed.prompt.md → copiato
+[SPARK] .github/prompts/scf-package-info.prompt.md → copiato
+[SPARK] .github/prompts/scf-remove.prompt.md → copiato
+[SPARK] .github/prompts/scf-status.prompt.md → copiato
+[SPARK] .github/prompts/scf-update.prompt.md → copiato
+[SPARK] .github/prompts/scf-check-updates.prompt.md → copiato
+
+Setup completato. Il server SPARK è configurato in due modi:
+  - Workspace : apri mio-progetto.code-workspace in VS Code
+  - Cartella  : apri direttamente la cartella, funziona lo stesso
+```
+
+1. Apri il progetto in VS Code in uno dei due modi supportati:
+
+- aprendo il file `.code-workspace` generato
+- oppure aprendo direttamente la cartella del progetto
+
+In entrambi i casi il server SPARK parte automaticamente.
+
+Se esegui di nuovo lo script sullo stesso progetto:
+
+- il `.code-workspace` viene aggiornato, non ricreato
+- `.vscode/settings.json` viene aggiornato, non ricreato
+- i file `.github/` gia presenti e non modificati vengono saltati
+  silenziosamente
+- i file `.github/` modificati dall'utente vengono preservati
+
+### Configurazione manuale alternativa
+
+Se preferisci non usare `spark-init.py`, puoi configurare il file
+`.code-workspace` manualmente aggiungendo questo blocco alla radice
+dell'oggetto JSON, fuori da `settings`:
 
 ```json
 {
@@ -65,30 +107,28 @@ Aggiungi manualmente questo blocco al tuo file .code-workspace, alla radice dell
 }
 ```
 
-In alternativa, esegui spark-init.py che lo aggiunge in automatico.
+Se apri solo la cartella e non esegui `spark-init.py`, il server non parte
+automaticamente perche manca la configurazione MCP nel progetto. In quel caso,
+la soluzione consigliata resta eseguire `spark-init.py` dalla cartella utente.
 
-### Scenario C - Aperta solo la cartella senza workspace file
-
-Se nel log del server vedi:
+Se nel log del server vedi comunque:
 
 ```text
 WARNING: WORKSPACE_FOLDER env var not set
 ```
 
-significa che il server non sa dove sei. Hai due opzioni:
-
-- Opzione rapida: esegui spark-init.py nella cartella del progetto.
-- Opzione manuale: crea il file .code-workspace come da Scenario B.
+significa che il server non sa dove si trova il progetto attivo.
 
 ## Prima Configurazione
 
 Per usare SPARK la prima volta in un workspace utente:
 
 1. Registra il motore MCP in VS Code come descritto sotto.
-1. Apri il progetto target in VS Code con la variabile `WORKSPACE_FOLDER` valorizzata dal server MCP.
-1. Esegui `scf_bootstrap_workspace()` per creare il set base sotto `.github/`.
+1. Esegui `spark-init.py` nella cartella del progetto target.
+1. Apri il progetto target in VS Code usando il file `.code-workspace`
+  generato oppure aprendo direttamente la cartella.
 
-Il bootstrap crea questi asset:
+Lo script prepara gia il set base sotto `.github/`:
 
 - 8 prompt `scf-*.prompt.md`
 - `spark-assistant.agent.md`
@@ -103,7 +143,8 @@ Il bootstrap crea questi asset:
 
 1. Dopo l'installazione, verifica lo stato locale con `scf_verify_workspace()`.
 
-Il bootstrap non registra file nel manifest runtime dei pacchetti: prepara solo gli asset minimi di ingresso al sistema.
+Il bootstrap eseguito da `spark-init.py` non registra file nel manifest runtime
+dei pacchetti: prepara solo gli asset minimi di ingresso al sistema.
 
 ---
 
