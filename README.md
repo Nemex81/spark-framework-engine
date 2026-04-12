@@ -30,58 +30,59 @@ pip install mcp
 
 ## Primo avvio
 
-1. Apri un terminale nella cartella del tuo progetto, non nella cartella
-   del repo engine.
-2. Esegui `spark-init.py` puntando al clone locale dell'engine:
+- Apri un terminale nella cartella del tuo progetto, non nella cartella
+  del repo engine.
 
-```bash
-python ../spark-framework-engine/spark-init.py
-```
+- Esegui `spark-init.py` puntando al clone locale dell'engine:
 
-Se il tuo progetto e il repo engine non sono allo stesso livello, usa il path
-assoluto al file `spark-init.py`.
+    ```bash
+    python ../spark-framework-engine/spark-init.py
+    ```
 
-1. Lo script configura in autonomia il progetto utente:
+  Se il tuo progetto e il repo engine non sono allo stesso livello, usa il path
+  assoluto al file `spark-init.py`.
 
-- crea o aggiorna `<progetto>.code-workspace`
-- crea o aggiorna `.vscode/settings.json`
-- copia il set minimo di file SPARK in `.github/`
+- Lo script configura in autonomia il progetto utente:
 
-1. Al termine stampa un riepilogo simile a questo:
+  - crea o aggiorna `<progetto>.code-workspace`
+  - crea o aggiorna `.vscode/settings.json`
+  - copia il set minimo di file SPARK in `.github/`
 
-```text
-[SPARK] .code-workspace → creato: mio-progetto.code-workspace
-[SPARK] .vscode/settings.json → creato
-[SPARK] .github/agents/spark-assistant.agent.md → copiato
-[SPARK] .github/instructions/spark-assistant-guide.instructions.md → copiato
-[SPARK] .github/prompts/scf-install.prompt.md → copiato
-[SPARK] .github/prompts/scf-list-available.prompt.md → copiato
-[SPARK] .github/prompts/scf-list-installed.prompt.md → copiato
-[SPARK] .github/prompts/scf-package-info.prompt.md → copiato
-[SPARK] .github/prompts/scf-remove.prompt.md → copiato
-[SPARK] .github/prompts/scf-status.prompt.md → copiato
-[SPARK] .github/prompts/scf-update.prompt.md → copiato
-[SPARK] .github/prompts/scf-check-updates.prompt.md → copiato
+- Al termine stampa un riepilogo simile a questo:
 
-Setup completato. Il server SPARK è configurato in due modi:
-  - Workspace : apri mio-progetto.code-workspace in VS Code
-  - Cartella  : apri direttamente la cartella, funziona lo stesso
-```
+    ```text
+    [SPARK] .code-workspace → creato: mio-progetto.code-workspace
+    [SPARK] .vscode/settings.json → creato
+    [SPARK] .github/agents/spark-assistant.agent.md → copiato
+    [SPARK] .github/instructions/spark-assistant-guide.instructions.md → copiato
+    [SPARK] .github/prompts/scf-install.prompt.md → copiato
+    [SPARK] .github/prompts/scf-list-available.prompt.md → copiato
+    [SPARK] .github/prompts/scf-list-installed.prompt.md → copiato
+    [SPARK] .github/prompts/scf-package-info.prompt.md → copiato
+    [SPARK] .github/prompts/scf-remove.prompt.md → copiato
+    [SPARK] .github/prompts/scf-status.prompt.md → copiato
+    [SPARK] .github/prompts/scf-update.prompt.md → copiato
+    [SPARK] .github/prompts/scf-check-updates.prompt.md → copiato
 
-1. Apri il progetto in VS Code in uno dei due modi supportati:
+    Setup completato. Il server SPARK è configurato in due modi:
+      - Workspace : apri mio-progetto.code-workspace in VS Code
+      - Cartella  : apri direttamente la cartella, funziona lo stesso
+    ```
 
-- aprendo il file `.code-workspace` generato
-- oppure aprendo direttamente la cartella del progetto
+- Apri il progetto in VS Code in uno dei due modi supportati:
 
-In entrambi i casi il server SPARK parte automaticamente.
+  - aprendo il file `.code-workspace` generato
+  - oppure aprendo direttamente la cartella del progetto
 
-Se esegui di nuovo lo script sullo stesso progetto:
+  In entrambi i casi il server SPARK parte automaticamente.
 
-- il `.code-workspace` viene aggiornato, non ricreato
-- `.vscode/settings.json` viene aggiornato, non ricreato
-- i file `.github/` gia presenti e non modificati vengono saltati
-  silenziosamente
-- i file `.github/` modificati dall'utente vengono preservati
+- Se esegui di nuovo lo script sullo stesso progetto:
+
+  - il `.code-workspace` viene aggiornato, non ricreato
+  - `.vscode/settings.json` viene aggiornato, non ricreato
+  - i file `.github/` gia presenti e non modificati vengono saltati
+    silenziosamente
+  - i file `.github/` modificati dall'utente vengono preservati
 
 ### Configurazione manuale alternativa
 
