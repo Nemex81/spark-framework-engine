@@ -11,6 +11,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ### Added
 
 - `spark-assistant v1.0.0` — agente utente finale per onboarding, gestione pacchetti e diagnostica workspace. Sostituisce il placeholder precedente.
+- `spark-guide v1.0.0` — agente di orientamento user-facing nel repo engine; interpreta richieste in linguaggio naturale e instrada le operazioni concrete verso `spark-assistant` o `spark-engine-maintainer`.
 
 ### Changed
 

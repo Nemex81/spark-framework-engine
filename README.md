@@ -58,7 +58,7 @@ Gli script `setup.ps1` / `setup.sh` eseguono in automatico:
 - esecuzione di `spark-init.py` nella cartella del progetto
 
 Al termine VS Code avvierà il server SPARK automaticamente all'apertura del progetto.
-Per iniziare usa la chat Copilot in Agent mode e scrivi `@spark-assistant ciao`.
+Per orientarti nel repo engine usa la chat Copilot in Agent mode e scrivi `@spark-guide ciao`.
 
 > Il progetto da inizializzare può essere una cartella vuota o un progetto esistente.
 > `setup.ps1` / `setup.sh` sono idempotenti: possono essere rieseguiti senza danni.
@@ -193,7 +193,8 @@ Per usare SPARK la prima volta in un workspace utente:
   - `spark-engine-maintainer.agent.md`
   - `spark-assistant-guide.instructions.md`
 
-- Usa `spark-assistant` come punto di ingresso operativo nel workspace.
+- Usa `spark-assistant` come punto di ingresso operativo nel workspace bootstrap-pato.
+- Usa `spark-guide` nel repo engine quando ti serve orientamento sul sistema e routing verso l'agente corretto.
 - Per installare il primo plugin SCF, usa questo flusso:
 
   - consulta il catalogo con `scf_list_available_packages()`
