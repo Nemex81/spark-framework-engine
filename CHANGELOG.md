@@ -6,6 +6,19 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.8.2] — 2026-04-12
+
+### Added
+
+- `spark-assistant v1.0.0` — agente utente finale per onboarding, gestione pacchetti e diagnostica workspace. Sostituisce il placeholder precedente.
+
+### Changed
+
+- `spark-init.py` include ora anche `spark-engine-maintainer.agent.md` tra gli asset bootstrap copiati nel workspace utente.
+- `ENGINE_VERSION` aggiornato a `1.8.2`.
+
+---
+
 ## [1.8.1] — 2026-04-12
 
 ### Changed

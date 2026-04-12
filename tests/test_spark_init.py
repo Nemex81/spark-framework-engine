@@ -253,6 +253,10 @@ def _make_engine_with_assets(base: Path) -> tuple[Path, Path]:
     (gh / "instructions").mkdir(parents=True)
     (gh / "prompts").mkdir(parents=True)
     (gh / "agents" / "spark-assistant.agent.md").write_text("agent", encoding="utf-8")
+    (gh / "agents" / "spark-engine-maintainer.agent.md").write_text(
+        "maintainer",
+        encoding="utf-8",
+    )
     (gh / "instructions" / "spark-assistant-guide.instructions.md").write_text(
         "guide", encoding="utf-8"
     )
@@ -271,6 +275,9 @@ def test_bootstrap_github_files_copies_missing_files(
     assert all(msg.startswith("[SPARK] .github/") for msg in messages)
     assert all("copiato" in m for m in messages)
     assert (workspace_root / ".github" / "agents" / "spark-assistant.agent.md").exists()
+    assert (
+        workspace_root / ".github" / "agents" / "spark-engine-maintainer.agent.md"
+    ).exists()
     assert (
         workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md"
     ).exists()
@@ -347,6 +354,7 @@ def test_main_prints_ordered_summary(
         "_bootstrap_github_files",
         lambda _engine_root, _workspace_root: [
             "[SPARK] .github/agents/spark-assistant.agent.md → copiato",
+            "[SPARK] .github/agents/spark-engine-maintainer.agent.md → copiato",
             "[SPARK] .github/prompts/scf-install.prompt.md → preservato",
         ],
     )
@@ -360,6 +368,7 @@ def test_main_prints_ordered_summary(
         f"[SPARK] .code-workspace → creato: {workspace_file.name}",
         "[SPARK] .vscode/settings.json → creato",
         "[SPARK] .github/agents/spark-assistant.agent.md → copiato",
+        "[SPARK] .github/agents/spark-engine-maintainer.agent.md → copiato",
         "[SPARK] .github/prompts/scf-install.prompt.md → preservato",
         "",
         "Setup completato. Il server SPARK è configurato in due modi:",

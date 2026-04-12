@@ -104,6 +104,7 @@ pip install mcp
     [SPARK] .code-workspace → creato: mio-progetto.code-workspace
     [SPARK] .vscode/settings.json → creato
     [SPARK] .github/agents/spark-assistant.agent.md → copiato
+    [SPARK] .github/agents/spark-engine-maintainer.agent.md → copiato
     [SPARK] .github/instructions/spark-assistant-guide.instructions.md → copiato
     [SPARK] .github/prompts/scf-install.prompt.md → copiato
     [SPARK] .github/prompts/scf-list-available.prompt.md → copiato
@@ -189,6 +190,7 @@ Per usare SPARK la prima volta in un workspace utente:
 
   - 8 prompt `scf-*.prompt.md`
   - `spark-assistant.agent.md`
+  - `spark-engine-maintainer.agent.md`
   - `spark-assistant-guide.instructions.md`
 
 - Usa `spark-assistant` come punto di ingresso operativo nel workspace.

@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.8.1"
+ENGINE_VERSION: str = "1.8.2"
 
 
 # ---------------------------------------------------------------------------
