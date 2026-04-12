@@ -64,8 +64,9 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(result["success"])
             self.assertFalse(result["already_bootstrapped"])
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
-            self.assertEqual(len(result["files_copied"]), 10)
+            self.assertEqual(len(result["files_copied"]), 11)
 
     def test_bootstrap_repairs_missing_guide_when_agent_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

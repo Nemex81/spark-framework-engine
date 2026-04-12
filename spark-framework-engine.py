@@ -2048,8 +2048,8 @@ class SparkFrameworkEngine:
                 for source_path in prompt_sources
             ]
             bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
-            user_guide_source = engine_github_root / "agents" / "spark-user-guide.agent.md"
-            bootstrap_targets.append((user_guide_source, workspace_github_root / "agents" / "spark-user-guide.agent.md"))
+            user_guide_source = engine_github_root / "agents" / "spark-guide.agent.md"
+            bootstrap_targets.append((user_guide_source, workspace_github_root / "agents" / "spark-guide.agent.md"))
             bootstrap_targets.append(
                 (guide_source, workspace_github_root / "instructions" / "spark-assistant-guide.instructions.md")
             )
