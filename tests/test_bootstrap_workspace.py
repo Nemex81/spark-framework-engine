@@ -58,6 +58,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
+            expected_copied_files = len(list((_ENGINE_PATH.parent / ".github" / "prompts").glob("scf-*.prompt.md"))) + 3
 
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
 
@@ -66,7 +67,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
-            self.assertEqual(len(result["files_copied"]), 11)
+            self.assertEqual(len(result["files_copied"]), expected_copied_files)
 
     def test_bootstrap_repairs_missing_guide_when_agent_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
