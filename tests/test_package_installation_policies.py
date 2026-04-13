@@ -282,6 +282,128 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertFalse(result["success"])
             self.assertEqual(result["required_engine_version"], "9.9.9")
 
+    def test_scf_install_package_aborts_on_untracked_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content") as fetch_raw,
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+
+            self.assertFalse(result["success"])
+            self.assertTrue(result["requires_user_resolution"])
+            self.assertEqual(result["blocked_files"], [".github/agents/shared.md"])
+            self.assertEqual(
+                result["conflicts_detected"],
+                [{"file": ".github/agents/shared.md", "classification": "conflict_untracked_existing"}],
+            )
+            self.assertEqual(target_file.read_text(encoding="utf-8"), "user content")
+            fetch_raw.assert_not_called()
+
+    def test_scf_install_package_replace_mode_overwrites_untracked_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b", conflict_mode="replace"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["replaced_files"], [".github/agents/shared.md"])
+            self.assertEqual(result["resolution_applied"], "replace")
+            self.assertEqual(target_file.read_text(encoding="utf-8"), "new content")
+
+    def test_scf_plan_install_returns_conflict_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+
+            fake_mcp = self._build_engine(workspace_root)
+            plan_install = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_plan_install"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+            ):
+                result = asyncio.run(plan_install("pkg-b"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(
+                result["conflict_plan"],
+                [{"file": ".github/agents/shared.md", "classification": "conflict_untracked_existing"}],
+            )
+            self.assertTrue(result["conflict_mode_required"])
+            self.assertFalse(result["can_install"])
+            self.assertTrue(result["can_install_with_replace"])
+
     def test_scf_get_package_info_returns_manifest_v2_and_compatibility(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)

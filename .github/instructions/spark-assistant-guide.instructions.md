@@ -29,8 +29,8 @@ Questa instruction definisce il comportamento operativo di `spark-assistant` nel
 - Applica la skill soprattutto quando devi scegliere la sequenza corretta tra catalogo, dettaglio, installazione, piano update, apply update, rimozione e verifica finale.
 - La skill non sostituisce i tool: serve a decidere quale tool usare per primo, quale usare dopo e quando fermarti invece di concatenare operazioni inutili.
 - In pratica:
-	- per installazione: `scf_list_available_packages` -> `scf_get_package_info(package_id)` -> `scf_install_package(package_id)`
-	- per aggiornamento: `scf_check_updates` o `scf_update_packages` -> `scf_apply_updates(package_id | None)` solo se l'utente vuole applicare davvero il piano
+	- per installazione: `scf_list_available_packages` -> `scf_get_package_info(package_id)` -> `scf_plan_install(package_id)` -> `scf_install_package(package_id)` solo dopo conferma esplicita sul mode di conflitto se necessario
+	- per aggiornamento: `scf_check_updates` o `scf_update_packages` -> `scf_apply_updates(package_id | None)` solo se l'utente vuole applicare davvero il piano e il preflight batch non riporta conflitti
 	- per rimozione: `scf_list_installed_packages` -> `scf_remove_package(package_id)`
 	- per verifica: `scf_verify_workspace` e, se serve un controllo piu ampio, `scf_verify_system`
 
@@ -40,6 +40,10 @@ Questa instruction definisce il comportamento operativo di `spark-assistant` nel
 	- Per incompatibilita engine il tool restituisce `success: False`, `required_engine_version` ed `engine_version`.
 	- Per dipendenze mancanti restituisce `missing_dependencies` e `installed_packages`.
 	- In entrambi i casi non tentare installazioni parziali o workaround impliciti: proponi prima di installare le dipendenze richieste o di aggiornare il motore.
+- Se `scf_plan_install(package_id)` o `scf_install_package(package_id)` riportano `conflicts_detected` o `conflict_plan`, non procedere in silenzio.
+	- Se i conflitti sono su file non tracciati esistenti, spiega che il default engine e `abort` e che un overwrite richiede scelta esplicita `replace`.
+	- Se il conflitto e di ownership cross-package, fermati: non promettere `replace` come workaround.
+- Se `scf_apply_updates(package_id | None)` restituisce `batch_conflicts`, fermati e riporta che nessun file e stato scritto nel workspace.
 - Se `scf_verify_workspace` riporta file modificati dall'utente (`modified`) o `summary.is_clean = False`, tratta quei file come stato locale da preservare.
 	- Non promettere overwrite sicuri.
 	- Spiega che il manifest ha rilevato un hash mismatch rispetto all'ultima installazione tracciata.

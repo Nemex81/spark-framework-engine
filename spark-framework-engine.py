@@ -37,7 +37,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.8.2"
+ENGINE_VERSION: str = "1.9.0"
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +899,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (15) and Tools (28)
+# SparkFrameworkEngine — Resources (15) and Tools (29)
 # ---------------------------------------------------------------------------
 
 
@@ -1051,7 +1051,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 28 MCP tools."""
+        """Register all 29 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1295,6 +1295,165 @@ class SparkFrameworkEngine:
                 },
             }
 
+        def _build_install_result(success: bool, error: str | None = None, **extras: Any) -> dict[str, Any]:
+            """Build a stable install/update payload with conflict metadata."""
+            result: dict[str, Any] = {
+                "success": success,
+                "installed": [],
+                "preserved": [],
+                "removed_obsolete_files": [],
+                "preserved_obsolete_files": [],
+                "conflicts_detected": [],
+                "blocked_files": [],
+                "replaced_files": [],
+                "merged_files": [],
+                "requires_user_resolution": False,
+                "resolution_applied": "none",
+            }
+            if error is not None:
+                result["error"] = error
+            result.update(extras)
+            return result
+
+        def _get_package_install_context(package_id: str) -> dict[str, Any]:
+            """Return package installation context or a structured failure result."""
+            try:
+                packages = registry.list_packages()
+            except Exception as exc:  # noqa: BLE001
+                return _build_install_result(False, error=f"Registry unavailable: {exc}")
+
+            pkg = next((p for p in packages if p.get("id") == package_id), None)
+            if pkg is None:
+                return _build_install_result(
+                    False,
+                    error=f"Package '{package_id}' not found in registry.",
+                    available=[p.get("id") for p in packages],
+                )
+            if pkg.get("status") == "deprecated":
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Package '{package_id}' is deprecated. "
+                        "Check the registry for its successor."
+                    ),
+                )
+
+            try:
+                pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
+            except Exception as exc:  # noqa: BLE001
+                return _build_install_result(
+                    False,
+                    error=f"Cannot fetch package manifest: {exc}",
+                )
+
+            files: list[str] = pkg_manifest.get("files", [])
+            if not files:
+                return _build_install_result(
+                    False,
+                    error=f"Package '{package_id}' has no files in its manifest.",
+                )
+
+            pkg_version = str(
+                pkg_manifest.get("version", pkg.get("latest_version", "unknown"))
+            ).strip()
+            min_engine_version = str(
+                pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
+            ).strip()
+            dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
+            declared_conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
+            file_ownership_policy = (
+                str(pkg_manifest.get("file_ownership_policy", "error")).strip() or "error"
+            )
+            installed_versions = manifest.get_installed_versions()
+            missing_dependencies = [
+                dependency for dependency in dependencies if dependency not in installed_versions
+            ]
+            present_conflicts = [
+                conflict for conflict in declared_conflicts if conflict in installed_versions
+            ]
+
+            return {
+                "success": True,
+                "pkg": pkg,
+                "pkg_manifest": pkg_manifest,
+                "files": files,
+                "pkg_version": pkg_version,
+                "min_engine_version": min_engine_version,
+                "dependencies": dependencies,
+                "declared_conflicts": declared_conflicts,
+                "file_ownership_policy": file_ownership_policy,
+                "installed_versions": installed_versions,
+                "missing_dependencies": missing_dependencies,
+                "present_conflicts": present_conflicts,
+                "engine_compatible": _is_engine_version_compatible(
+                    ENGINE_VERSION,
+                    min_engine_version,
+                ),
+            }
+
+        def _classify_install_files(package_id: str, files: list[str]) -> dict[str, Any]:
+            """Classify package targets before any install or update writes."""
+            records: list[dict[str, Any]] = []
+            write_plan: list[dict[str, Any]] = []
+            preserve_plan: list[dict[str, Any]] = []
+            conflict_plan: list[dict[str, Any]] = []
+            ownership_issues: list[dict[str, Any]] = []
+
+            for file_path in files:
+                rel = file_path.removeprefix(".github/")
+                dest = self._ctx.workspace_root / file_path
+                owners = [owner for owner in manifest.get_file_owners(rel) if owner != package_id]
+                if owners:
+                    item = {
+                        "file": file_path,
+                        "classification": "conflict_cross_owner",
+                        "owners": owners,
+                    }
+                    records.append(item)
+                    conflict_plan.append(item)
+                    ownership_issues.append({"file": file_path, "owners": owners})
+                    continue
+
+                tracked_state = manifest.is_user_modified(rel)
+                if not dest.exists():
+                    item = {"file": file_path, "classification": "create_new"}
+                    records.append(item)
+                    write_plan.append(item)
+                    continue
+                if tracked_state is True:
+                    item = {
+                        "file": file_path,
+                        "classification": "preserve_tracked_modified",
+                    }
+                    records.append(item)
+                    preserve_plan.append(item)
+                    continue
+                if tracked_state is False:
+                    item = {
+                        "file": file_path,
+                        "classification": "update_tracked_clean",
+                    }
+                    records.append(item)
+                    write_plan.append(item)
+                    continue
+
+                item = {
+                    "file": file_path,
+                    "classification": "conflict_untracked_existing",
+                }
+                records.append(item)
+                conflict_plan.append(item)
+
+            return {
+                "records": records,
+                "write_plan": write_plan,
+                "preserve_plan": preserve_plan,
+                "conflict_plan": conflict_plan,
+                "ownership_issues": ownership_issues,
+                "conflict_mode_required": len(conflict_plan) > 0,
+                "can_install_with_replace": len(ownership_issues) == 0,
+            }
+
         @self._mcp.tool()
         async def scf_list_installed_packages() -> dict[str, Any]:
             """List packages currently installed in the active workspace."""
@@ -1321,136 +1480,120 @@ class SparkFrameworkEngine:
             return {"count": len(packages), "packages": packages}
 
         @self._mcp.tool()
-        async def scf_install_package(package_id: str) -> dict[str, Any]:
+        async def scf_install_package(
+            package_id: str,
+            conflict_mode: str = "abort",
+        ) -> dict[str, Any]:
             """Install an SCF package from the public registry into the active workspace .github/."""
-            try:
-                packages = registry.list_packages()
-            except Exception as exc:  # noqa: BLE001
-                return {
-                    "success": False,
-                    "error": f"Registry unavailable: {exc}",
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            pkg = next((p for p in packages if p.get("id") == package_id), None)
-            if pkg is None:
-                return {
-                    "success": False,
-                    "error": f"Package '{package_id}' not found in registry.",
-                    "available": [p.get("id") for p in packages],
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            if pkg.get("status") == "deprecated":
-                return {
-                    "success": False,
-                    "error": (
-                        f"Package '{package_id}' is deprecated. "
-                        "Check the registry for its successor."
+            if conflict_mode not in {"abort", "replace"}:
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Unsupported conflict_mode '{conflict_mode}'. "
+                        "Supported modes: abort, replace."
                     ),
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            # Fetch package file manifest
-            try:
-                pkg_manifest = registry.fetch_package_manifest(pkg["repo_url"])
-            except RuntimeError as exc:
-                return {
-                    "success": False,
-                    "error": f"Cannot fetch package manifest: {exc}",
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            files: list[str] = pkg_manifest.get("files", [])
-            if not files:
-                return {
-                    "success": False,
-                    "error": f"Package '{package_id}' has no files in its manifest.",
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            pkg_version = str(pkg_manifest.get("version", pkg.get("latest_version", "unknown"))).strip()
-            min_engine_version = str(
-                pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
-            ).strip()
-            dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
-            declared_conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
-            file_ownership_policy = (
-                str(pkg_manifest.get("file_ownership_policy", "error")).strip() or "error"
-            )
-            installed_versions = manifest.get_installed_versions()
-            if not _is_engine_version_compatible(ENGINE_VERSION, min_engine_version):
-                return {
-                    "success": False,
-                    "error": (
+                    package=package_id,
+                    conflict_mode=conflict_mode,
+                )
+
+            install_context = _get_package_install_context(package_id)
+            if install_context.get("success") is False:
+                return install_context
+
+            pkg = install_context["pkg"]
+            files = install_context["files"]
+            pkg_version = install_context["pkg_version"]
+            min_engine_version = install_context["min_engine_version"]
+            file_ownership_policy = install_context["file_ownership_policy"]
+            installed_versions = install_context["installed_versions"]
+            missing_dependencies = install_context["missing_dependencies"]
+            present_conflicts = install_context["present_conflicts"]
+            engine_compatible = install_context["engine_compatible"]
+
+            if not engine_compatible:
+                return _build_install_result(
+                    False,
+                    error=(
                         f"Package '{package_id}' requires engine version >= {min_engine_version}."
                     ),
-                    "package": package_id,
-                    "required_engine_version": min_engine_version,
-                    "engine_version": ENGINE_VERSION,
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            missing_dependencies = [
-                dependency for dependency in dependencies if dependency not in installed_versions
-            ]
+                    package=package_id,
+                    required_engine_version=min_engine_version,
+                    engine_version=ENGINE_VERSION,
+                )
             if missing_dependencies:
-                return {
-                    "success": False,
-                    "error": (
+                return _build_install_result(
+                    False,
+                    error=(
                         f"Package '{package_id}' requires missing dependencies: "
                         f"{', '.join(missing_dependencies)}"
                     ),
-                    "package": package_id,
-                    "missing_dependencies": missing_dependencies,
-                    "installed_packages": installed_versions,
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            present_conflicts = [
-                conflict for conflict in declared_conflicts if conflict in installed_versions
-            ]
+                    package=package_id,
+                    missing_dependencies=missing_dependencies,
+                    installed_packages=installed_versions,
+                )
             if present_conflicts:
-                return {
-                    "success": False,
-                    "error": (
+                return _build_install_result(
+                    False,
+                    error=(
                         f"Package '{package_id}' conflicts with installed packages: "
                         f"{', '.join(present_conflicts)}"
                     ),
-                    "package": package_id,
-                    "present_conflicts": present_conflicts,
-                    "installed_packages": installed_versions,
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            ownership_conflicts: list[dict[str, Any]] = []
-            for file_path in files:
-                rel = file_path.removeprefix(".github/")
-                owners = [owner for owner in manifest.get_file_owners(rel) if owner != package_id]
-                if owners:
-                    ownership_conflicts.append(
-                        {
-                            "file": file_path,
-                            "owners": owners,
-                        }
-                    )
+                    package=package_id,
+                    present_conflicts=present_conflicts,
+                    installed_packages=installed_versions,
+                )
+
+            classification_report = _classify_install_files(package_id, files)
+            ownership_conflicts = list(classification_report["ownership_issues"])
             if ownership_conflicts:
-                return {
-                    "success": False,
-                    "error": (
+                return _build_install_result(
+                    False,
+                    error=(
                         f"Package '{package_id}' conflicts with files already owned by another package."
                     ),
-                    "package": package_id,
-                    "file_ownership_policy": file_ownership_policy,
-                    "effective_file_ownership_policy": "error",
-                    "conflicts": ownership_conflicts,
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                }
-            preserved: list[str] = []
+                    package=package_id,
+                    version=pkg_version,
+                    file_ownership_policy=file_ownership_policy,
+                    effective_file_ownership_policy="error",
+                    conflicts=ownership_conflicts,
+                    conflicts_detected=classification_report["conflict_plan"],
+                    blocked_files=[item["file"] for item in classification_report["conflict_plan"]],
+                    requires_user_resolution=True,
+                )
+
+            unresolved_conflicts = [
+                item
+                for item in classification_report["conflict_plan"]
+                if item.get("classification") == "conflict_untracked_existing"
+            ]
+            if unresolved_conflicts and conflict_mode == "abort":
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Package '{package_id}' would overwrite existing untracked files. "
+                        "Review conflicts and retry with conflict_mode='replace'."
+                    ),
+                    package=package_id,
+                    version=pkg_version,
+                    conflicts_detected=unresolved_conflicts,
+                    blocked_files=[item["file"] for item in unresolved_conflicts],
+                    requires_user_resolution=True,
+                    conflict_mode=conflict_mode,
+                )
+
+            preserved = [item["file"] for item in classification_report["preserve_plan"]]
             fetch_errors: list[str] = []
             staged_files: list[tuple[str, str, str]] = []
-            for file_path in files:
+            replaced_files: list[str] = []
+            for item in classification_report["records"]:
+                file_path = str(item["file"])
+                item_classification = str(item["classification"])
+                if item_classification == "preserve_tracked_modified":
+                    continue
+                if item_classification == "conflict_cross_owner":
+                    continue
+                if item_classification == "conflict_untracked_existing" and conflict_mode != "replace":
+                    continue
                 raw_url = (
                     pkg["repo_url"].replace(
                         "https://github.com/", "https://raw.githubusercontent.com/"
@@ -1459,9 +1602,8 @@ class SparkFrameworkEngine:
                     + file_path
                 )
                 rel = file_path.removeprefix(".github/")
-                if manifest.is_user_modified(rel) is True:
-                    preserved.append(file_path)
-                    continue
+                if item_classification == "conflict_untracked_existing":
+                    replaced_files.append(file_path)
                 try:
                     content = registry.fetch_raw_file(raw_url)
                 except (urllib.error.URLError, OSError) as exc:
@@ -1469,16 +1611,16 @@ class SparkFrameworkEngine:
                     continue
                 staged_files.append((file_path, rel, content))
             if fetch_errors:
-                return {
-                    "success": False,
-                    "package": package_id,
-                    "version": pkg_version,
-                    "installed": [],
-                    "preserved": preserved,
-                    "removed_obsolete_files": [],
-                    "preserved_obsolete_files": [],
-                    "errors": fetch_errors,
-                }
+                return _build_install_result(
+                    False,
+                    package=package_id,
+                    version=pkg_version,
+                    preserved=preserved,
+                    replaced_files=replaced_files,
+                    conflicts_detected=classification_report["conflict_plan"],
+                    resolution_applied="replace" if replaced_files else "none",
+                    errors=fetch_errors,
+                )
             # --- Diff-based cleanup: remove files obsoleted by this update ---
             old_files: set[str] = {
                 entry["file"]
@@ -1549,15 +1691,18 @@ class SparkFrameworkEngine:
                 if rollback_errors:
                     result["rollback_errors"] = rollback_errors
                 return result
-            success_result: dict[str, Any] = {
-                "success": True,
-                "package": package_id,
-                "version": pkg_version,
-                "installed": installed,
-                "preserved": preserved,
-                "removed_obsolete_files": removed_files,
-                "preserved_obsolete_files": preserved_obsolete,
-            }
+            success_result: dict[str, Any] = _build_install_result(
+                True,
+                package=package_id,
+                version=pkg_version,
+                installed=installed,
+                preserved=preserved,
+                removed_obsolete_files=removed_files,
+                preserved_obsolete_files=preserved_obsolete,
+                replaced_files=replaced_files,
+                conflicts_detected=classification_report["conflict_plan"],
+                resolution_applied="replace" if replaced_files else "none",
+            )
             return success_result
 
         def _summarize_available_updates(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1639,7 +1784,7 @@ class SparkFrameworkEngine:
 
             apply_report = await scf_apply_updates(package_id)
             if apply_report.get("success") is False:
-                return {
+                result = {
                     "success": False,
                     "package": package_id,
                     "error": apply_report.get("error", "unknown error"),
@@ -1647,6 +1792,9 @@ class SparkFrameworkEngine:
                     "version_to": requested_update.get("latest", version_from),
                     "details": apply_report,
                 }
+                if "batch_conflicts" in apply_report:
+                    result["conflicts_detected"] = apply_report["batch_conflicts"]
+                return result
 
             applied_items = list(apply_report.get("applied", []))
             requested_result = next(
@@ -1888,10 +2036,41 @@ class SparkFrameworkEngine:
                     "failed": [],
                     "plan": plan,
                 }
+            preflight_reports: list[dict[str, Any]] = []
+            batch_conflicts: list[dict[str, Any]] = []
+            for pkg_id in target_ids:
+                preview = await scf_plan_install(pkg_id)
+                preflight_reports.append(preview)
+                if preview.get("success") is False:
+                    return {
+                        "success": False,
+                        "error": f"Cannot preflight package '{pkg_id}' before apply.",
+                        "applied": [],
+                        "failed": [],
+                        "plan": plan,
+                        "preflight": preflight_reports,
+                    }
+                if preview.get("conflict_plan"):
+                    batch_conflicts.append(
+                        {
+                            "package": pkg_id,
+                            "conflicts": list(preview.get("conflict_plan", [])),
+                        }
+                    )
+            if batch_conflicts:
+                return {
+                    "success": False,
+                    "error": "Batch preflight detected unresolved conflicts. No files written.",
+                    "applied": [],
+                    "failed": [],
+                    "plan": plan,
+                    "batch_conflicts": batch_conflicts,
+                    "preflight": preflight_reports,
+                }
             applied: list[dict[str, Any]] = []
             failed: list[dict[str, Any]] = []
             for pkg_id in target_ids:
-                result = await scf_install_package(pkg_id)
+                result = await scf_install_package(pkg_id, conflict_mode="replace")
                 if result.get("success") is True:
                     applied.append(result)
                 else:
@@ -1902,6 +2081,66 @@ class SparkFrameworkEngine:
                 "failed": failed,
                 "total_targets": len(target_ids),
                 "plan": plan,
+            }
+
+        @self._mcp.tool()
+        async def scf_plan_install(package_id: str) -> dict[str, Any]:
+            """Return a dry-run install plan for one SCF package without modifying the workspace."""
+            install_context = _get_package_install_context(package_id)
+            if install_context.get("success") is False:
+                return install_context
+
+            files = install_context["files"]
+            pkg_version = install_context["pkg_version"]
+            min_engine_version = install_context["min_engine_version"]
+            dependencies = install_context["dependencies"]
+            installed_versions = install_context["installed_versions"]
+            missing_dependencies = install_context["missing_dependencies"]
+            present_conflicts = install_context["present_conflicts"]
+            engine_compatible = install_context["engine_compatible"]
+            classification_report = _classify_install_files(package_id, files)
+
+            dependency_issues: list[dict[str, Any]] = []
+            if not engine_compatible:
+                dependency_issues.append(
+                    {
+                        "reason": "engine_version",
+                        "required_engine_version": min_engine_version,
+                        "engine_version": ENGINE_VERSION,
+                    }
+                )
+            if missing_dependencies:
+                dependency_issues.append(
+                    {
+                        "reason": "missing_dependencies",
+                        "missing_dependencies": missing_dependencies,
+                    }
+                )
+            if present_conflicts:
+                dependency_issues.append(
+                    {
+                        "reason": "declared_conflicts",
+                        "present_conflicts": present_conflicts,
+                    }
+                )
+
+            return {
+                "success": True,
+                "package": package_id,
+                "version": pkg_version,
+                "write_plan": classification_report["write_plan"],
+                "preserve_plan": classification_report["preserve_plan"],
+                "conflict_plan": classification_report["conflict_plan"],
+                "dependency_issues": dependency_issues,
+                "ownership_issues": classification_report["ownership_issues"],
+                "installed_packages": installed_versions,
+                "conflict_mode_required": classification_report["conflict_mode_required"],
+                "can_install": len(dependency_issues) == 0 and len(classification_report["conflict_plan"]) == 0,
+                "can_install_with_replace": len(dependency_issues) == 0 and classification_report["can_install_with_replace"],
+                "supported_conflict_modes": ["abort", "replace"],
+                "engine_version": ENGINE_VERSION,
+                "min_engine_version": min_engine_version,
+                "dependencies": dependencies,
             }
 
         @self._mcp.tool()
@@ -2133,7 +2372,7 @@ class SparkFrameworkEngine:
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
             }
 
-        _log.info("Tools registered: 28 total")
+        _log.info("Tools registered: 29 total")
 
 
 # ---------------------------------------------------------------------------

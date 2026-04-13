@@ -6,6 +6,27 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [1.9.0] — 2026-04-13
+
+### Added
+
+- `scf_plan_install(package_id)` — dry-run tool per classificare i target di installazione prima di qualsiasi scrittura e mostrare write plan, preserve plan e conflict plan.
+
+### Changed
+
+- `scf_install_package(package_id, conflict_mode="abort")` blocca di default i conflitti su file esistenti non tracciati e richiede un opt-in esplicito `replace` per sovrascriverli.
+- `scf_apply_updates()` esegue ora un preflight su tutti i package target prima della prima scrittura del batch, fermandosi se rileva conflitti irrisolti.
+- `scf_update_package(package_id)` propaga i conflitti di preflight restituiti dal flusso di update.
+- `spark-guide.agent.md` torna coerente con i tool realmente dichiarati nel frontmatter.
+
+### Fixed
+
+- Corretto il rischio di overwrite silenzioso su file `.github/` pre-esistenti ma non tracciati dal manifest durante installazione e update.
+- Corretta la documentazione del registry: il manifest consumer canonico usa `entries[]`, non `installed_packages[]`.
+- Allineata la documentazione del bootstrap MCP al set asset realmente copiato da `scf_bootstrap_workspace()`.
+
+---
+
 ## [1.8.2] — 2026-04-12
 
 ### Added

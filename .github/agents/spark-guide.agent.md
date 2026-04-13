@@ -15,6 +15,7 @@ execution_mode: autonomous
 tools:
   - scf_get_workspace_info
   - scf_get_framework_version
+  - scf_list_installed_packages
   - scf_list_available_packages
   - scf_get_package_info
   - scf_list_agents

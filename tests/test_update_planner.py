@@ -220,6 +220,144 @@ class TestUpdatePlanner(unittest.TestCase):
             self.assertEqual(result["plan"]["order"], [])
             self.assertEqual(result["plan"]["blocked"][0]["reason"], "missing_dependencies")
 
+    def test_apply_updates_aborts_before_first_write_on_preflight_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            agents_root = github_root / "agents"
+            agents_root.mkdir(parents=True)
+            master_file = agents_root / "Agent-Orchestrator.md"
+            plugin_file = agents_root / "py-Agent-Code.md"
+            conflicting_file = agents_root / "NewPlugin.md"
+            master_file.write_text("old master", encoding="utf-8")
+            plugin_file.write_text("old plugin", encoding="utf-8")
+            conflicting_file.write_text("user-owned", encoding="utf-8")
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry("agents/Agent-Orchestrator.md", "scf-master-codecrafter", "old master", "1.0.0"),
+                    self._entry("agents/py-Agent-Code.md", "scf-pycode-crafter", "old plugin", "2.0.0"),
+                ]
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            apply_updates = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_apply_updates"],
+            )
+
+            manifests = {
+                "https://github.com/example/scf-master-codecrafter": {
+                    "package": "scf-master-codecrafter",
+                    "version": "1.1.0",
+                    "min_engine_version": "1.5.0",
+                    "dependencies": [],
+                    "conflicts": [],
+                    "files": [".github/agents/Agent-Orchestrator.md"],
+                },
+                "https://github.com/example/scf-pycode-crafter": {
+                    "package": "scf-pycode-crafter",
+                    "version": "2.1.0",
+                    "min_engine_version": "1.5.0",
+                    "dependencies": ["scf-master-codecrafter"],
+                    "conflicts": [],
+                    "files": [".github/agents/NewPlugin.md"],
+                },
+            }
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=self._registry_packages()),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=lambda repo_url: manifests[repo_url]),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(apply_updates("scf-pycode-crafter"))
+
+            self.assertFalse(result["success"])
+            self.assertEqual(result["applied"], [])
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(master_file.read_text(encoding="utf-8"), "old master")
+            self.assertEqual(plugin_file.read_text(encoding="utf-8"), "old plugin")
+            self.assertEqual(
+                result["batch_conflicts"],
+                [
+                    {
+                        "package": "scf-pycode-crafter",
+                        "conflicts": [
+                            {
+                                "file": ".github/agents/NewPlugin.md",
+                                "classification": "conflict_untracked_existing",
+                            }
+                        ],
+                    }
+                ],
+            )
+
+    def test_update_package_surfaces_preflight_conflicts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            agents_root = github_root / "agents"
+            agents_root.mkdir(parents=True)
+            master_file = agents_root / "Agent-Orchestrator.md"
+            plugin_file = agents_root / "py-Agent-Code.md"
+            conflicting_file = agents_root / "NewPlugin.md"
+            master_file.write_text("old master", encoding="utf-8")
+            plugin_file.write_text("old plugin", encoding="utf-8")
+            conflicting_file.write_text("user-owned", encoding="utf-8")
+            ManifestManager(github_root).save(
+                [
+                    self._entry("agents/Agent-Orchestrator.md", "scf-master-codecrafter", "old master", "1.0.0"),
+                    self._entry("agents/py-Agent-Code.md", "scf-pycode-crafter", "old plugin", "2.0.0"),
+                ]
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            update_package = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_update_package"],
+            )
+
+            manifests = {
+                "https://github.com/example/scf-master-codecrafter": {
+                    "package": "scf-master-codecrafter",
+                    "version": "1.1.0",
+                    "min_engine_version": "1.5.0",
+                    "dependencies": [],
+                    "conflicts": [],
+                    "files": [".github/agents/Agent-Orchestrator.md"],
+                },
+                "https://github.com/example/scf-pycode-crafter": {
+                    "package": "scf-pycode-crafter",
+                    "version": "2.1.0",
+                    "min_engine_version": "1.5.0",
+                    "dependencies": ["scf-master-codecrafter"],
+                    "conflicts": [],
+                    "files": [".github/agents/NewPlugin.md"],
+                },
+            }
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=self._registry_packages()),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=lambda repo_url: manifests[repo_url]),
+            ):
+                result = asyncio.run(update_package("scf-pycode-crafter"))
+
+            self.assertFalse(result["success"])
+            self.assertEqual(
+                result["conflicts_detected"],
+                [
+                    {
+                        "package": "scf-pycode-crafter",
+                        "conflicts": [
+                            {
+                                "file": ".github/agents/NewPlugin.md",
+                                "classification": "conflict_untracked_existing",
+                            }
+                        ],
+                    }
+                ],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

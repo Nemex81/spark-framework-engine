@@ -267,7 +267,7 @@ scf://workspace-info
 scf://runtime-state
 ```
 
-## Tools Disponibili (28)
+## Tools Disponibili (29)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -286,6 +286,7 @@ scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()
 scf_install_package(package_id)
+scf_plan_install(package_id)
 scf_check_updates()
 scf_update_package(package_id)
 scf_update_packages()
@@ -295,20 +296,27 @@ scf_get_package_changelog(package_id)
 ```
 
 `scf_bootstrap_workspace()` copia nel workspace utente il set base di bootstrap:
-gli 8 prompt `scf-*.prompt.md`, l'agente `spark-assistant.agent.md` e
-l'instruction `spark-assistant-guide.instructions.md`. Se il workspace e gia
-bootstrap-pato ma manca qualche asset base, il tool copia solo i file mancanti.
+gli 8 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
+`spark-guide.agent.md`, e l'instruction `spark-assistant-guide.instructions.md`.
+Se il workspace e gia bootstrap-pato ma manca qualche asset base, il tool copia
+solo i file mancanti.
 
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,
 `file_ownership_policy` e `changelog_path`, insieme a una sezione di
 compatibilita calcolata sul workspace attivo.
 
-`scf_install_package(package_id)` esegue un preflight prima di scrivere file:
-verifica compatibilita del motore, dipendenze dichiarate, conflitti di package
-e ownership dei path gia tracciati nel manifest runtime. In caso di errore in
-scrittura, tenta il rollback dei file appena toccati e non aggiorna il manifest
-in modo parziale.
+`scf_install_package(package_id, conflict_mode="abort")` esegue un preflight
+prima di scrivere file: verifica compatibilita del motore, dipendenze dichiarate,
+conflitti di package, ownership dei path gia tracciati nel manifest runtime e
+collisioni con file `.github/` esistenti ma non tracciati. Il mode di default
+`abort` blocca i conflitti irrisolti; `replace` li sovrascrive in modo esplicito.
+In caso di errore in scrittura, il tool tenta il rollback dei file appena toccati
+e non aggiorna il manifest in modo parziale.
+
+`scf_plan_install(package_id)` restituisce un'anteprima read-only del risultato
+di installazione: file scrivibili, file da preservare e conflitti che richiedono
+una decisione esplicita prima di procedere.
 
 `scf_check_updates()` restituisce solo i pacchetti installati che risultano
 aggiornabili rispetto al registry, con versione installata e versione disponibile.
@@ -322,8 +330,9 @@ anche una preview ordinata del piano di update, includendo dipendenze tra packag
 blocchi operativi e ordine di applicazione previsto.
 
 `scf_apply_updates(package_id | None)` usa lo stesso piano dependency-aware per
-aggiornare i package in ordine topologico. Se il piano e bloccato, il tool si ferma
-prima di modificare il workspace e restituisce i motivi del blocco.
+aggiornare i package in ordine topologico. Prima di scrivere, esegue un preflight
+su tutti i target del batch e si ferma se rileva conflitti irrisolti, restituendo
+il dettaglio dei package bloccati.
 
 ---
 

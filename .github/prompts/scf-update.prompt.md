@@ -27,5 +27,6 @@ Istruzioni operative:
    - pacchetti falliti
    - ordine effettivamente applicato
    - dettagli installati/preservati/errori
+9. Se `scf_apply_updates()` restituisce `batch_conflicts`, spiega che il preflight del batch ha bloccato l'operazione prima della prima scrittura e riporta i package coinvolti.
 
 Se l'utente non conferma, interrompi senza modificare nulla.
