@@ -194,8 +194,4 @@ def test_plan_and_install_block_python_package_without_master_dependency(
     assert "scf-master-codecrafter" in result["missing_dependencies"]
     assert not (tmp_workspace.github_root / ".scf-manifest.json").exists()
     for file_rel in python_manifest["files"]:
-<<<<<<< HEAD
         assert not (tmp_workspace.workspace_root / file_rel).exists()
-=======
-        assert not (tmp_workspace.workspace_root / file_rel).exists()
->>>>>>> cea1f3a5809bc4a3fcca352b7121d949fbf30a1c

@@ -14,9 +14,14 @@ SERVER_ID = "sparkFrameworkEngine"
 
 
 def _build_server_config(project_root: Path, engine_script: Path) -> dict[str, Any]:
+    engine_root = engine_script.parent
+    if sys.platform == "win32":
+        python_cmd = engine_root / ".venv" / "Scripts" / "python.exe"
+    else:
+        python_cmd = engine_root / ".venv" / "bin" / "python"
     return {
         "type": "stdio",
-        "command": sys.executable,
+        "command": str(python_cmd),
         "args": [str(engine_script)],
         "env": {
             "WORKSPACE_FOLDER": str(project_root),
@@ -110,79 +115,66 @@ def _create_workspace_file(
     return f"File salvato: {workspace_path}"
 
 
-def _update_vscode_settings(
-    workspace_path: Path,
+def _write_vscode_mcp_json(
     project_root: Path,
     engine_script: Path,
 ) -> tuple[bool, str]:
-    """Create or update .vscode/settings.json with mcp.servers.sparkFrameworkEngine.
+    """Create or update .vscode/mcp.json with servers.sparkFrameworkEngine.
 
-    Touches only the ``mcp.servers.sparkFrameworkEngine`` key; all other
-    existing settings are preserved.  If the file contains corrupted or
+    Touches only the ``servers.sparkFrameworkEngine`` key; all other
+    existing server entries are preserved.  If the file contains corrupted or
     non-object JSON the error is logged to stderr and the file is recreated
     from scratch.
 
     Args:
-        workspace_path: Path to the ``.code-workspace`` file (for reference only).
         project_root: Root directory of the target workspace.
         engine_script: Absolute path to ``spark-framework-engine.py``.
 
     Returns:
-        A success flag and the action applied to ``.vscode/settings.json``.
+        A success flag and the action applied to ``.vscode/mcp.json``.
     """
-    del workspace_path
-
-    vscode_dir = project_root / ".vscode"
-    settings_path = vscode_dir / "settings.json"
-    file_exists = settings_path.exists()
+    mcp_config_path = project_root / ".vscode" / "mcp.json"
+    file_exists = mcp_config_path.exists()
 
     # Always ensure the directory exists before reading or writing.
-    vscode_dir.mkdir(parents=True, exist_ok=True)
+    mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    settings: dict[str, Any] = {}
-    if settings_path.exists():
+    existing: dict[str, Any] = {}
+    if mcp_config_path.exists():
         try:
-            raw = json.loads(settings_path.read_text(encoding="utf-8"))
+            raw = json.loads(mcp_config_path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 print(
-                    "[SPARK-INIT][ERROR] .vscode/settings.json non contiene un oggetto"
+                    "[SPARK-INIT][ERROR] .vscode/mcp.json non contiene un oggetto"
                     " JSON valido; verra ricreato.",
                     file=sys.stderr,
                 )
             else:
-                settings = raw
+                existing = raw
         except json.JSONDecodeError as exc:
             print(
-                f"[SPARK-INIT][ERROR] .vscode/settings.json JSON corrotto ({exc});"
+                f"[SPARK-INIT][ERROR] .vscode/mcp.json JSON corrotto ({exc});"
                 " verra ricreato.",
                 file=sys.stderr,
             )
 
-    # Update only mcp.servers.sparkFrameworkEngine; leave other keys intact.
-    mcp: dict[str, Any] = settings.get("mcp", {})
-    if not isinstance(mcp, dict):
-        print(
-            "[SPARK-INIT][ERROR] la chiave 'mcp' in .vscode/settings.json non e un"
-            " oggetto JSON; verra ricostruita.",
-            file=sys.stderr,
-        )
-        mcp = {}
-    servers: dict[str, Any] = mcp.get("servers", {})
+    # Update only servers.sparkFrameworkEngine; leave other server entries intact.
+    servers: dict[str, Any] = existing.get("servers", {})
     if not isinstance(servers, dict):
         print(
-            "[SPARK-INIT][ERROR] la chiave 'mcp.servers' in .vscode/settings.json"
-            " non e un oggetto JSON; verra ricostruita.",
+            "[SPARK-INIT][ERROR] la chiave 'servers' in .vscode/mcp.json non e un"
+            " oggetto JSON; verra ricostruita.",
             file=sys.stderr,
         )
         servers = {}
     servers[SERVER_ID] = _build_server_config(project_root, engine_script)
-    mcp["servers"] = servers
-    settings["mcp"] = mcp
+    existing["servers"] = servers
 
-    settings_path.write_text(
-        json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+    mcp_config_path.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    print(f"[SPARK-ENGINE][INFO] MCP config written to: {mcp_config_path}", file=sys.stderr)
     return True, "creato" if not file_exists else "aggiornato"
 
 
@@ -322,9 +314,8 @@ def main() -> int:
         workspace_action = "creato"
         message = _create_workspace_file(workspace_path, project_root, engine_script)
 
-    # Update .vscode/settings.json with mcp.servers.sparkFrameworkEngine.
-    _settings_success, settings_action = _update_vscode_settings(
-        workspace_path,
+    # Update .vscode/mcp.json with servers.sparkFrameworkEngine.
+    _settings_success, settings_action = _write_vscode_mcp_json(
         project_root,
         engine_script,
     )
@@ -335,7 +326,7 @@ def main() -> int:
     # Ordered summary — the only output on stdout.
     del message
     print(f"[SPARK] .code-workspace → {workspace_action}: {workspace_path.name}")
-    print(f"[SPARK] .vscode/settings.json → {settings_action}")
+    print(f"[SPARK] .vscode/mcp.json → {settings_action}")
     for msg in bootstrap_messages:
         print(msg)
     print()

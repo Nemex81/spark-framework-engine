@@ -2342,6 +2342,9 @@ class SparkFrameworkEngine:
                     dest_path.write_bytes(source_path.read_bytes())
                     written_paths.append(dest_path)
                     files_copied.append(rel_path)
+                    sys.stderr.write(
+                        f"[SPARK-ENGINE][INFO] Bootstrapped: {dest_path.relative_to(workspace_github_root).as_posix()}\n"
+                    )
             except OSError as exc:
                 rollback_errors: list[str] = []
                 for written_path in reversed(written_paths):
@@ -2362,6 +2365,16 @@ class SparkFrameworkEngine:
                     "workspace": str(self._ctx.workspace_root),
                     "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 }
+
+            if written_paths:
+                manifest.upsert_many(
+                    "spark-framework-engine",
+                    ENGINE_VERSION,
+                    [
+                        (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
+                        for dest_path in written_paths
+                    ],
+                )
 
             return {
                 "success": True,

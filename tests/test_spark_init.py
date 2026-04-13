@@ -110,57 +110,55 @@ def test_update_existing_workspace_returns_error_when_root_mcp_is_not_an_object(
 
 
 # ---------------------------------------------------------------------------
-# _update_vscode_settings
+# _write_vscode_mcp_json
 # ---------------------------------------------------------------------------
 
 
-def test_update_vscode_settings_creates_settings_json_when_absent(tmp_path: Path) -> None:
+def test_write_vscode_mcp_json_creates_file_when_absent(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
     engine_script = tmp_path / "spark-framework-engine.py"
 
-    success, action = _MODULE._update_vscode_settings(
-        project_root / "ws.code-workspace",
+    success, action = _MODULE._write_vscode_mcp_json(
         project_root,
         engine_script,
     )
 
-    settings_path = project_root / ".vscode" / "settings.json"
-    assert settings_path.exists()
+    mcp_path = project_root / ".vscode" / "mcp.json"
+    assert mcp_path.exists()
     assert success is True
     assert action == "creato"
-    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
-    assert "mcp" in data
-    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
-    assert data["mcp"]["servers"][_MODULE.SERVER_ID]["args"] == [str(engine_script)]
+    data = _MODULE.json.loads(mcp_path.read_text(encoding="utf-8"))
+    assert "servers" in data
+    assert _MODULE.SERVER_ID in data["servers"]
+    assert data["servers"][_MODULE.SERVER_ID]["args"] == [str(engine_script)]
 
 
-def test_update_vscode_settings_preserves_other_keys(tmp_path: Path) -> None:
+def test_write_vscode_mcp_json_preserves_other_servers(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
     engine_script = tmp_path / "spark-framework-engine.py"
     vscode_dir = project_root / ".vscode"
     vscode_dir.mkdir()
-    settings_path = vscode_dir / "settings.json"
-    settings_path.write_text(
-        '{"editor.tabSize": 2, "mcp": {"servers": {}}}',
+    mcp_path = vscode_dir / "mcp.json"
+    mcp_path.write_text(
+        '{"servers": {"other-server": {"type": "stdio"}}}',
         encoding="utf-8",
     )
 
-    success, action = _MODULE._update_vscode_settings(
-        project_root / "ws.code-workspace",
+    success, action = _MODULE._write_vscode_mcp_json(
         project_root,
         engine_script,
     )
 
-    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
+    data = _MODULE.json.loads(mcp_path.read_text(encoding="utf-8"))
     assert success is True
     assert action == "aggiornato"
-    assert data["editor.tabSize"] == 2
-    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+    assert "other-server" in data["servers"]
+    assert _MODULE.SERVER_ID in data["servers"]
 
 
-def test_update_vscode_settings_handles_corrupted_json(
+def test_write_vscode_mcp_json_handles_corrupted_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     project_root = tmp_path / "workspace"
@@ -168,11 +166,10 @@ def test_update_vscode_settings_handles_corrupted_json(
     engine_script = tmp_path / "spark-framework-engine.py"
     vscode_dir = project_root / ".vscode"
     vscode_dir.mkdir()
-    settings_path = vscode_dir / "settings.json"
-    settings_path.write_text("{not valid json{{", encoding="utf-8")
+    mcp_path = vscode_dir / "mcp.json"
+    mcp_path.write_text("{not valid json{{", encoding="utf-8")
 
-    success, action = _MODULE._update_vscode_settings(
-        project_root / "ws.code-workspace",
+    success, action = _MODULE._write_vscode_mcp_json(
         project_root,
         engine_script,
     )
@@ -181,11 +178,11 @@ def test_update_vscode_settings_handles_corrupted_json(
     assert success is True
     assert action == "aggiornato"
     assert "[SPARK-INIT][ERROR]" in captured.err
-    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
-    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+    data = _MODULE.json.loads(mcp_path.read_text(encoding="utf-8"))
+    assert _MODULE.SERVER_ID in data["servers"]
 
 
-def test_update_vscode_settings_handles_non_dict_json(
+def test_write_vscode_mcp_json_handles_non_dict_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     project_root = tmp_path / "workspace"
@@ -193,10 +190,9 @@ def test_update_vscode_settings_handles_non_dict_json(
     engine_script = tmp_path / "spark-framework-engine.py"
     vscode_dir = project_root / ".vscode"
     vscode_dir.mkdir()
-    (vscode_dir / "settings.json").write_text("[1, 2, 3]", encoding="utf-8")
+    (vscode_dir / "mcp.json").write_text("[1, 2, 3]", encoding="utf-8")
 
-    success, action = _MODULE._update_vscode_settings(
-        project_root / "ws.code-workspace",
+    success, action = _MODULE._write_vscode_mcp_json(
         project_root,
         engine_script,
     )
@@ -205,11 +201,11 @@ def test_update_vscode_settings_handles_non_dict_json(
     assert success is True
     assert action == "aggiornato"
     assert "[SPARK-INIT][ERROR]" in captured.err
-    data = _MODULE.json.loads((vscode_dir / "settings.json").read_text(encoding="utf-8"))
-    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+    data = _MODULE.json.loads((vscode_dir / "mcp.json").read_text(encoding="utf-8"))
+    assert _MODULE.SERVER_ID in data["servers"]
 
 
-def test_update_vscode_settings_handles_invalid_mcp_shape(
+def test_write_vscode_mcp_json_handles_invalid_servers_shape(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     project_root = tmp_path / "workspace"
@@ -217,24 +213,22 @@ def test_update_vscode_settings_handles_invalid_mcp_shape(
     engine_script = tmp_path / "spark-framework-engine.py"
     vscode_dir = project_root / ".vscode"
     vscode_dir.mkdir()
-    settings_path = vscode_dir / "settings.json"
-    settings_path.write_text(
-        '{"editor.tabSize": 2, "mcp": []}',
+    mcp_path = vscode_dir / "mcp.json"
+    mcp_path.write_text(
+        '{"servers": []}',
         encoding="utf-8",
     )
 
-    success, action = _MODULE._update_vscode_settings(
-        project_root / "ws.code-workspace",
+    success, action = _MODULE._write_vscode_mcp_json(
         project_root,
         engine_script,
     )
 
     captured = capsys.readouterr()
-    data = _MODULE.json.loads(settings_path.read_text(encoding="utf-8"))
+    data = _MODULE.json.loads(mcp_path.read_text(encoding="utf-8"))
     assert success is True
     assert action == "aggiornato"
-    assert data["editor.tabSize"] == 2
-    assert _MODULE.SERVER_ID in data["mcp"]["servers"]
+    assert _MODULE.SERVER_ID in data["servers"]
     assert "[SPARK-INIT][ERROR]" in captured.err
 
 
@@ -346,8 +340,8 @@ def test_main_prints_ordered_summary(
     )
     monkeypatch.setattr(
         _MODULE,
-        "_update_vscode_settings",
-        lambda _workspace_path, _project_root, _engine_script: (True, "creato"),
+        "_write_vscode_mcp_json",
+        lambda _project_root, _engine_script: (True, "creato"),
     )
     monkeypatch.setattr(
         _MODULE,
@@ -366,7 +360,7 @@ def test_main_prints_ordered_summary(
     assert captured.err == ""
     assert captured.out.splitlines() == [
         f"[SPARK] .code-workspace → creato: {workspace_file.name}",
-        "[SPARK] .vscode/settings.json → creato",
+        "[SPARK] .vscode/mcp.json → creato",
         "[SPARK] .github/agents/spark-assistant.agent.md → copiato",
         "[SPARK] .github/agents/spark-engine-maintainer.agent.md → copiato",
         "[SPARK] .github/prompts/scf-install.prompt.md → preservato",
