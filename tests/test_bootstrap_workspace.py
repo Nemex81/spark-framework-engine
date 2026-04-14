@@ -85,6 +85,45 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
             self.assertIn(".github/agents/spark-assistant.agent.md", result["files_skipped"])
 
+    def test_bootstrap_idempotent_manifest_sync(self) -> None:
+        """Second bootstrap on an already-populated workspace must keep the manifest in sync.
+
+        Scenario: first run copies all files and writes the manifest. The manifest is then
+        deleted to simulate a corrupt/missing state. The second run finds all files already
+        present with identical SHA-256, skips them, but must still call upsert_many so that
+        manifest.get_installed_versions() returns 'spark-framework-engine' after both runs.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            # First bootstrap — copies all files and writes the manifest.
+            result1 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertTrue(result1["success"])
+
+            manifest_path = workspace_root / ".github" / ".scf-manifest.json"
+            self.assertTrue(manifest_path.is_file(), "Manifest must exist after first bootstrap")
+
+            # Simulate manifest loss (corrupt / deleted externally).
+            manifest_path.unlink()
+            self.assertFalse(manifest_path.is_file())
+
+            # Second bootstrap — all files already present with identical SHA-256.
+            # The manifest must be re-populated for files with matching hashes.
+            result2 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertTrue(result2["success"])
+
+            # The manifest must now exist again and track the engine package.
+            self.assertTrue(manifest_path.is_file(), "Manifest must be recreated after second bootstrap")
+            ManifestManager = _module.ManifestManager
+            manifest = ManifestManager(workspace_root / ".github")
+            versions = manifest.get_installed_versions()
+            self.assertIn(
+                "spark-framework-engine",
+                versions,
+                "manifest must track spark-framework-engine after idempotent bootstrap",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2299,6 +2299,23 @@ class SparkFrameworkEngine:
                     for _, dest_path in bootstrap_targets
                     if dest_path.is_file()
                 ]
+                # Re-sync manifest for files whose content still matches the source.
+                # This ensures manifest integrity even if the file was deleted externally.
+                early_identical = [
+                    dest_path
+                    for source_path, dest_path in bootstrap_targets
+                    if dest_path.is_file()
+                    and manifest._sha256(dest_path) == manifest._sha256(source_path)
+                ]
+                if early_identical:
+                    manifest.upsert_many(
+                        "spark-framework-engine",
+                        ENGINE_VERSION,
+                        [
+                            (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
+                            for dest_path in early_identical
+                        ],
+                    )
                 return {
                     "success": True,
                     "already_bootstrapped": True,
@@ -2326,6 +2343,7 @@ class SparkFrameworkEngine:
             files_copied: list[str] = []
             files_skipped: list[str] = []
             written_paths: list[Path] = []
+            identical_paths: list[Path] = []
 
             try:
                 for source_path, dest_path in bootstrap_targets:
@@ -2333,6 +2351,7 @@ class SparkFrameworkEngine:
                     if dest_path.is_file():
                         if manifest._sha256(dest_path) == manifest._sha256(source_path):
                             _log.info("Bootstrap file already matches source: %s", rel_path)
+                            identical_paths.append(dest_path)
                         else:
                             _log.warning("Bootstrap file preserved (existing different content): %s", rel_path)
                         files_skipped.append(rel_path)
@@ -2366,13 +2385,13 @@ class SparkFrameworkEngine:
                     "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 }
 
-            if written_paths:
+            if written_paths or identical_paths:
                 manifest.upsert_many(
                     "spark-framework-engine",
                     ENGINE_VERSION,
                     [
                         (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
-                        for dest_path in written_paths
+                        for dest_path in written_paths + identical_paths
                     ],
                 )
 
