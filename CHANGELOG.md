@@ -6,6 +6,37 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.0.0] — 2026-04-14
+
+### Added
+
+- Sistema di merge a 3 vie per file markdown: snapshot BASE, versione utente e nuova versione pacchetto vengono combinati da `MergeEngine` con percorsi `manual`, `auto` e `assisted`.
+- `conflict_mode: "manual"` — apre una sessione stateful e scrive i marker di conflitto nel file finche' l'utente non li risolve e chiude la sessione con `scf_finalize_update`.
+- `conflict_mode: "auto"` — tenta una risoluzione best-effort deterministica tramite `scf_resolve_conflict_ai`; se il caso non e sicuro o i validator falliscono, degrada esplicitamente a `manual`.
+- `conflict_mode: "assisted"` — apre una sessione stateful, conserva i marker sul file e permette di proporre, approvare o rifiutare una risoluzione per singolo conflitto.
+- `scf_finalize_update(session_id)` — finalizza una sessione di merge chiudendola e applicando le decisioni confermate al manifest e ai file del workspace.
+- `scf_resolve_conflict_ai(session_id, conflict_id)` — propone automaticamente una risoluzione conservativa per un singolo conflitto in una sessione attiva.
+- `scf_approve_conflict(session_id, conflict_id)` — approva la risoluzione proposta per un conflitto, marcandolo come risolto nella sessione.
+- `scf_reject_conflict(session_id, conflict_id)` — rifiuta la risoluzione proposta per un conflitto, mantenendo la versione utente corrente.
+- Validator post-merge: verifica strutturale, completezza heading e coerenza del blocco `tools:` per i file `.agent.md`.
+- Policy multi-owner `extend` e `delegate`: gestione di file condivisi tra più pacchetti con regole di ownership esplicite e risoluzione conflitti cross-package.
+
+### Changed
+
+- `scf_install_package(package_id, conflict_mode)` supporta ora i nuovi valori `"manual"`, `"auto"` e `"assisted"` in aggiunta ai precedenti `"abort"` e `"replace"`. Il default rimane `"abort"`.
+- `scf_plan_install(package_id)` restituisce ora anche l'anteprima del piano di merge quando il `conflict_mode` richiesto e un merge mode.
+- `scf_update_package(package_id, conflict_mode)` propaga il `conflict_mode` alla pipeline di merge durante l'aggiornamento del pacchetto.
+- `ManifestManager` permette ora ownership multiple sullo stesso file quando il package differisce, abilitando il modello multi-owner con policy per-file.
+- `ENGINE_VERSION` aggiornato a `2.0.0`.
+
+### Notes
+
+- Versione major per cambio architetturale: introduzione `MergeEngine`, sessioni stateful e policy multi-owner rappresentano un'estensione dell'interfaccia MCP non retrocompatibile con motori `< 2.0.0` per i nuovi `conflict_mode`.
+- `scf_cleanup_sessions` resta helper interno e non e esposto come tool MCP pubblico.
+- Il numero totale di tool registrati passa da 29 a 33.
+
+---
+
 ## [1.9.0] — 2026-04-13
 
 ### Added

@@ -267,7 +267,7 @@ scf://workspace-info
 scf://runtime-state
 ```
 
-## Tools Disponibili (29)
+## Tools Disponibili (33)
 
 ```
 scf_list_agents           scf_get_agent(name)
@@ -293,6 +293,10 @@ scf_update_packages()
 scf_apply_updates(package_id | None)
 scf_remove_package(package_id)
 scf_get_package_changelog(package_id)
+scf_finalize_update(session_id)
+scf_resolve_conflict_ai(session_id, conflict_id)
+scf_approve_conflict(session_id, conflict_id)
+scf_reject_conflict(session_id, conflict_id)
 ```
 
 `scf_bootstrap_workspace()` copia nel workspace utente il set base di bootstrap:
@@ -309,21 +313,29 @@ compatibilita calcolata sul workspace attivo.
 `scf_install_package(package_id, conflict_mode="abort")` esegue un preflight
 prima di scrivere file: verifica compatibilita del motore, dipendenze dichiarate,
 conflitti di package, ownership dei path gia tracciati nel manifest runtime e
-collisioni con file `.github/` esistenti ma non tracciati. Il mode di default
-`abort` blocca i conflitti irrisolti; `replace` li sovrascrive in modo esplicito.
+collisioni con file `.github/` esistenti ma non tracciati. Il `conflict_mode`
+controlla il comportamento in caso di conflitto:
+
+- `abort` (default): blocca i conflitti irrisolti.
+- `replace`: sovrascrive i file in conflitto in modo esplicito.
+- `manual`: apre una sessione interattiva per risolvere ogni conflitto singolarmente.
+- `auto`: il motore tenta una risoluzione best-effort deterministica e degrada a `manual` se il caso non e sicuro.
+- `assisted`: apre una sessione con marker su disco e permette approvazione/rifiuto per singolo conflitto.
+
 In caso di errore in scrittura, il tool tenta il rollback dei file appena toccati
 e non aggiorna il manifest in modo parziale.
 
 `scf_plan_install(package_id)` restituisce un'anteprima read-only del risultato
-di installazione: file scrivibili, file da preservare e conflitti che richiedono
-una decisione esplicita prima di procedere.
+di installazione: file scrivibili, file da preservare, conflitti che richiedono
+una decisione esplicita e, per i merge mode, una preview del piano di merge.
 
 `scf_check_updates()` restituisce solo i pacchetti installati che risultano
 aggiornabili rispetto al registry, con versione installata e versione disponibile.
 
-`scf_update_package(package_id)` aggiorna un singolo pacchetto installato,
-preservando i file modificati dall'utente e aggiornando il manifest locale con
-nuove versioni e SHA-256 dei file sovrascritti.
+`scf_update_package(package_id, conflict_mode)` aggiorna un singolo pacchetto
+installato, preservando i file modificati dall'utente. Supporta gli stessi
+`conflict_mode` di `scf_install_package`: `abort`, `replace`, `manual`, `auto`,
+`assisted`.
 
 `scf_update_packages()` non si limita piu a segnalare i delta di versione: costruisce
 anche una preview ordinata del piano di update, includendo dipendenze tra package,
@@ -333,6 +345,58 @@ blocchi operativi e ordine di applicazione previsto.
 aggiornare i package in ordine topologico. Prima di scrivere, esegue un preflight
 su tutti i target del batch e si ferma se rileva conflitti irrisolti, restituendo
 il dettaglio dei package bloccati.
+
+`scf_finalize_update(session_id)` finalizza una sessione di merge aperta in modo
+`manual` o `assisted`, applicando le decisioni confermate ai file del workspace e
+aggiornando il manifest.
+
+`scf_resolve_conflict_ai(session_id, conflict_id)` propone automaticamente una
+risoluzione conservativa per un singolo conflitto aperto, validandola prima di
+renderla approvabile.
+
+`scf_approve_conflict(session_id, conflict_id)` approva la risoluzione proposta
+per un conflitto nella sessione, marcandolo come risolto.
+
+`scf_reject_conflict(session_id, conflict_id)` rifiuta la risoluzione proposta,
+lasciando il file in fallback manuale con marker di conflitto.
+
+---
+
+## Sistema di Merge a 3 Vie
+
+A partire dalla versione `2.0.0`, il motore supporta il merge a 3 vie per file
+markdown durante installazione e aggiornamento di pacchetti.
+
+Il merge combina tre versioni: il **BASE** (snapshot salvato all'installazione
+precedente), la **versione utente** (modifiche locali) e la **nuova versione
+pacchetto** (contenuto aggiornato nel registry).
+
+### Modalita disponibili
+
+| conflict_mode | Comportamento |
+|---|---|
+| `abort` | Blocca se esistono conflitti irrisolti (default) |
+| `replace` | Sovrascrive sempre con la versione pacchetto |
+| `manual` | Apre sessione interattiva, decisione per ogni conflitto |
+| `auto` | Il motore risolve in autonomia via euristiche AI |
+| `assisted` | Proposta automatica, conferma utente per conflitti a bassa confidenza |
+
+### Flusso sessione manual / assisted
+
+```
+scf_install_package / scf_update_package (conflict_mode="manual")
+  → sessione aperta → session_id restituito
+
+scf_approve_conflict(session_id, conflict_id)   ← accetta ogni conflitto
+scf_reject_conflict(session_id, conflict_id)    ← rifiuta e mantieni versione utente
+scf_resolve_conflict_ai(session_id, conflict_id) ← delega all'AI integrata
+
+scf_finalize_update(session_id)  ← applica le decisioni e chiude la sessione
+```
+
+Per i merge `auto`, il motore chiude automaticamente solo i casi che passano le
+euristiche conservative e i validator; i casi ambigui vengono degradati a una
+sessione manuale attiva.
 
 ---
 

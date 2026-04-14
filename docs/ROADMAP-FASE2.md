@@ -1,11 +1,14 @@
 # SPARK Framework Engine — Roadmap Fase 2
 
-## 1. conflict_mode: "merge"
+## 1. conflict_mode: "merge" — REALIZZATA in v2.0.0
 
-- Comportamento atteso: merge a 3 vie sui file markdown tra versione installata, versione utente e nuova versione pacchetto.
-- Euristica sui blocchi frontmatter: i campi utente hanno precedenza su quelli del pacchetto salvo una lista esplicita di campi protetti.
-- Prerequisiti tecnici: parser diff dedicato per markdown strutturato e funzione `_merge_markdown_blocks()` in ManifestManager.
-- Stima complessità: alta — richiede versione motore 2.0.0.
+- Comportamento implementato: merge a 3 vie sui file markdown tra versione installata (snapshot BASE), versione utente e nuova versione pacchetto.
+- Modalita supportate: `manual`, `auto`, `assisted` — in aggiunta ai precedenti `abort` e `replace`.
+- Euristica frontmatter: i casi divergenti vengono trattati in modo conservativo e degradano a `manual`.
+- `MergeEngine` e i validator post-merge sono implementati nel motore come helper puri; il merge non e delegato a `ManifestManager`.
+- Validator post-merge per verifica coerenza strutturale del file risultante.
+- Sessioni stateful per `manual` / `assisted`: `scf_finalize_update`, `scf_approve_conflict`, `scf_reject_conflict`, `scf_resolve_conflict_ai`.
+- Versione motore: 2.0.0 (come pianificato).
 
 ## 2. scf_plan_install batch
 
@@ -23,8 +26,8 @@
 
 ## 4. Stato attuale
 
-- Engine version: 1.9.0
-- Tool registrati: 29
-- Test: 83 passed (unit) + 3 passed (integration)
-- conflict_mode supportati in produzione: "abort", "replace"
-- conflict_mode pianificati: "merge" (Fase 2, motore 2.0.0)
+- Engine version: 2.0.0
+- Tool registrati: 33
+- conflict_mode supportati in produzione: "abort", "replace", "manual", "auto", "assisted"
+- Note operative: `auto` usa una risoluzione best-effort conservativa e degrada a `manual` nei casi ambigui; `scf_apply_updates()` batch resta sul percorso replace.
+- conflict_mode pianificati Fase 2: tutti implementati e rilasciati in v2.0.0

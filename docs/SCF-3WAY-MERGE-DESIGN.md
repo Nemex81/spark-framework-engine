@@ -328,6 +328,8 @@ Caso 5: entrambi fanno la stessa modifica identica → applica una volta (merge 
 
 Il Caso 5 è importante: se l'utente e il pacchetto hanno apportato la stessa modifica allo stesso blocco, il merge è clean e il contenuto viene incluso una sola volta.
 
+Regola esplicita (deduplicazione): quando si verifica il pattern "OURS == THEIRS != BASE" (cioè l'utente e il pacchetto hanno applicato la stessa modifica rispetto a BASE), il motore tratta la sezione come un merge "clean" e applica il delta una sola volta nel risultato finale. Questa regola evita duplicazioni di contenuto e garantisce che il testo condiviso non compaia due volte nel file risultante.
+
 #### Fase 3 — Costruzione del risultato
 
 Le sezioni vengono concatenate in ordine mantenendo la sequenza originale di BASE. Per i conflitti viene istanziato un `MergeConflict` con il testo delle tre versioni e le righe di contesto adiacenti.
@@ -794,7 +796,27 @@ orphaned     → crash rilevato, sessione in stato inconsistente
 
 **Rilevamento crash**: se il campo `finalized_at` è `null` e `expires_at` è nel passato, la sessione è considerata orfana. Il motore non riprende mai automaticamente una sessione orfana; deve essere scartata dall'utente o da un tool esplicito.
 
+**Nota helper cleanup**: il meccanismo di pulizia delle sessioni è implementato come helper interno invocato dai tool session-related (cleanup chiamato internamente da `scf_update_package`, `scf_apply_updates`, `scf_finalize_update`). `scf_cleanup_sessions` NON è un tool MCP pubblico in questa release 2.0.0; non va esposto come entrypoint tool nel registro pubblico. Questa scelta mantiene il conteggio finale dei tool a 33 (vedi piano implementativo).
+
 **Conflitto sessione concorrente**: non possono esistere due sessioni `active` per lo stesso `package_id` contemporaneamente. Prima di creare una nuova sessione, il motore verifica l'assenza di sessioni attive per il pacchetto target.
+
+### 7.6 Atomicità delle scritture JSON di sessione
+
+Tutte le scritture sui file di sessione (`.json`) devono essere atomiche. L'implementazione obbligatoria usa la tecnica "write-to-temp-then-rename" con un file temporaneo creato nella STESSA directory del file di destinazione e il rename effettuato tramite `os.replace()` (o equivalente), per garantire compatibilità su Windows e comportamento deterministico nei test.
+
+Esempio (pseudocodice):
+
+```
+tmp_path = target_path.with_suffix(target_path.suffix + ".tmp")
+with open(tmp_path, "w", encoding="utf-8") as f:
+  json.dump(data, f, ensure_ascii=False, indent=2)
+os.replace(tmp_path, target_path)
+```
+
+Note operative:
+- Il file temporaneo deve essere creato nella stessa directory del target per evitare problemi cross-filesystem su Windows.
+- Se un file `.tmp` esiste già all'avvio, il motore lo considera un artefatto di scrittura interrotta e la sessione relativa deve essere marcata `orphaned` o riesaminata dal `cleanup`.
+- Questa regola si applica anche alle scritture atomiche degli snapshot e alle scritture di sessione nella `MergeSessionManager`.
 
 ### 7.5 Sicurezza delle sessioni
 
@@ -1128,7 +1150,29 @@ I campi già esistenti in `_build_install_result` non vengono rinominati né eli
 
 I nuovi campi sono aggiunti come estensioni additive. I client che consumano la risposta ignorando i campi sconosciuti non saranno impattati.
 
----
+### 11.4 Mapping dettagliato e casi di valore null/empty
+
+Questo paragrafo mappa esplicitamente il contratto esistente `_build_install_result` con i nuovi campi introdotti dal sistema di merge e specifica i casi in cui i campi possono risultare vuoti o `null`.
+
+- `success` (esistente): riflette l'esito complessivo dell'operazione batch; `False` indica errore bloccante (es. `conflict_cross_owner`), `True` anche se sono presenti conflitti risolvibili tramite sessione.
+- `installed` / `preserved` (esistenti): rispettano il comportamento storico. Un file che è stato merge-committato con successo compare in `installed` o in `merged_files` a seconda del percorso di applicazione.
+- `merged_files` (esistente): viene mantenuto come elenco generale di file su cui è stato effettuato un merge (sia clean che conflict). Dal punto di vista semantico: `merged_files == merge_clean ∪ merge_conflict`.
+- `merge_clean` (nuovo): lista di file per cui `MergeEngine` ha prodotto un risultato `clean` e il sistema ha scritto il contenuto risultante su disco. Può essere vuota (`[]`) se nessun merge è stato eseguito o se tutti i merge hanno generato conflitti.
+- `merge_conflict` (nuovo): lista di file con conflitti non risolti automaticamente. Se vuota (`[]`) non è necessario intervento utente. Se non presente o `null`, il chiamante deve considerare che non sono state avviate sessioni stateful.
+- `conflicts_detected` (esistente): rimane una lista di file dove sono stati individuati conflitti; in pratica è sinonimo iniziale di `merge_conflict` al termine della fase di detection.
+- `requires_user_resolution` (esistente): `True` se `merge_conflict` non è vuoto o se `resolution_applied` indica che è necessaria interazione (`manual` o `assisted`). Può essere `False` anche se `conflicts_detected` contiene voci, quando la modalità `auto` ha risolto tutti i conflitti con successo.
+- `resolution_applied` (esistente): stringa che indica quale strategia è stata applicata per i file nel batch. Valori possibili: `none`, `replace`, `manual`, `auto`, `assisted`. Se `none`, non è stata applicata alcuna risoluzione; se `manual` o `assisted`, è possibile che `session_id` sia presente.
+- `session_id` (nuovo): `str` o `null`. Presente solo per operazioni stateful (`manual`, `assisted`) o quando `auto` ha creato una sessione per tracking. `null` per operazioni sincrone non-stateful (`abort`, `replace`) o quando non è stata creata alcuna sessione.
+- `session_status` (nuovo): `str` o `null`. Valori: `active`, `auto_completed`, `finalized`, `expired`, `orphaned`. `null` se `session_id` è `null`.
+- `session_expires_at` (nuovo): timestamp ISO 8601 o `null`. Presente solo se `session_id` non è `null`.
+- `snapshot_written` (nuovo): lista dei file per cui lo snapshot BASE è stato creato o aggiornato durante l'operazione. Può essere vuota `[]` se non sono stati creati snapshot in questo batch.
+- `snapshot_skipped` (nuovo): lista dei file per cui lo snapshot non è stato creato (file binari, errori I/O). Può essere vuota `[]` se tutti gli snapshot sono stati scritti.
+- `validator_results` (nuovo, opzionale): presente principalmente nel ritorno di `scf_finalize_update` e nelle risposte `auto`/`finalize`. È una mappa per-file con l'esito dei validator post-merge. Se non popolato, significa che non sono stati eseguiti validator per quel batch.
+
+Alcune regole pratiche di interpretazione:
+- Se `session_id` è non-`null` ma `merged_files` è vuoto, la sessione è stata aperta ma non sono state scritture definitive (es. sessione `active` in attesa di finalize).
+- `merged_files` mantiene la compatibilità con client esistenti: i client che leggono solo `merged_files` vedranno l'elenco generale; i client aggiornati dovrebbero preferire `merge_clean` e `merge_conflict` per dettagli.
+- I campi non applicabili sono preferibilmente restituiti come valori vuoti (`[]`) o `null` per evitare ambiguità: liste vuote per insiemi, `null` per singoli identificatori (es. `session_id`).
 
 ## 12. Vincoli di sicurezza e accessibilità
 

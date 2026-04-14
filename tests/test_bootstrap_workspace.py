@@ -19,6 +19,7 @@ sys.modules["spark_framework_engine"] = _module
 _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 
 FrameworkInventory = _module.FrameworkInventory
+SnapshotManager = _module.SnapshotManager
 SparkFrameworkEngine = _module.SparkFrameworkEngine
 WorkspaceContext = _module.WorkspaceContext
 
@@ -104,9 +105,21 @@ class TestBootstrapWorkspace(unittest.TestCase):
             manifest_path = workspace_root / ".github" / ".scf-manifest.json"
             self.assertTrue(manifest_path.is_file(), "Manifest must exist after first bootstrap")
 
+            snapshots = SnapshotManager(
+                workspace_root / ".github" / "runtime" / "snapshots"
+            )
+            self.assertTrue(
+                snapshots.snapshot_exists(
+                    "spark-framework-engine",
+                    "agents/spark-assistant.agent.md",
+                )
+            )
+
             # Simulate manifest loss (corrupt / deleted externally).
             manifest_path.unlink()
             self.assertFalse(manifest_path.is_file())
+            deleted_snapshots = snapshots.delete_package_snapshots("spark-framework-engine")
+            self.assertIn("agents/spark-assistant.agent.md", deleted_snapshots)
 
             # Second bootstrap — all files already present with identical SHA-256.
             # The manifest must be re-populated for files with matching hashes.
@@ -122,6 +135,13 @@ class TestBootstrapWorkspace(unittest.TestCase):
                 "spark-framework-engine",
                 versions,
                 "manifest must track spark-framework-engine after idempotent bootstrap",
+            )
+            self.assertTrue(
+                snapshots.snapshot_exists(
+                    "spark-framework-engine",
+                    "agents/spark-assistant.agent.md",
+                ),
+                "Snapshots must be recreated for identical bootstrap files",
             )
 
 

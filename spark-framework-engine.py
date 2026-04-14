@@ -18,9 +18,10 @@ import re
 import sys
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -37,13 +38,15 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "1.9.0"
+ENGINE_VERSION: str = "2.0.0"
 
 
 # ---------------------------------------------------------------------------
 # Changelogs directory
 # ---------------------------------------------------------------------------
 _CHANGELOGS_SUBDIR: str = "changelogs"
+_SNAPSHOTS_SUBDIR: str = "runtime/snapshots"
+_MERGE_SESSIONS_SUBDIR: str = "runtime/merge-sessions"
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -79,6 +82,198 @@ class FrameworkFile:
     category: str
     summary: str
     metadata: dict[str, Any]
+
+
+MERGE_STATUS_IDENTICAL: str = "identical"
+MERGE_STATUS_CLEAN: str = "clean"
+MERGE_STATUS_CONFLICT: str = "conflict"
+
+
+@dataclass(frozen=True)
+class MergeConflict:
+    """Describe a single unresolved block produced by a 3-way merge."""
+
+    start_line: int
+    end_line: int
+    base_text: str
+    ours_text: str
+    theirs_text: str
+
+
+@dataclass(frozen=True)
+class MergeResult:
+    """Describe the outcome of a 3-way merge attempt."""
+
+    status: str
+    merged_text: str
+    conflicts: tuple[MergeConflict, ...] = ()
+    sections: tuple[str | MergeConflict, ...] = ()
+
+
+class MergeEngine:
+    """Compute a normalized 3-way merge without filesystem or MCP dependencies."""
+
+    OURS_MARKER: str = "<<<<<<< YOURS"
+    SEPARATOR_MARKER: str = "======="
+    THEIRS_MARKER: str = ">>>>>>> OFFICIAL"
+
+    def diff3_merge(self, base: str, ours: str, theirs: str) -> MergeResult:
+        """Merge three text versions using explicit clean-path rules first."""
+        normalized_base = self._normalize_newlines(base)
+        normalized_ours = self._normalize_newlines(ours)
+        normalized_theirs = self._normalize_newlines(theirs)
+
+        if normalized_base == normalized_ours == normalized_theirs:
+            return MergeResult(
+                status=MERGE_STATUS_IDENTICAL,
+                merged_text=normalized_base,
+                sections=(normalized_base,),
+            )
+
+        if normalized_ours == normalized_theirs:
+            return MergeResult(
+                status=MERGE_STATUS_CLEAN,
+                merged_text=normalized_ours,
+                sections=(normalized_ours,),
+            )
+
+        if normalized_base == normalized_ours:
+            return MergeResult(
+                status=MERGE_STATUS_CLEAN,
+                merged_text=normalized_theirs,
+                sections=(normalized_theirs,),
+            )
+
+        if normalized_base == normalized_theirs:
+            return MergeResult(
+                status=MERGE_STATUS_CLEAN,
+                merged_text=normalized_ours,
+                sections=(normalized_ours,),
+            )
+
+        return self._build_conflict_result(
+            base=normalized_base,
+            ours=normalized_ours,
+            theirs=normalized_theirs,
+        )
+
+    def render_with_markers(self, result: MergeResult) -> str:
+        """Render a merge result, adding conflict markers when needed."""
+        if not result.conflicts:
+            return result.merged_text
+
+        rendered_sections: list[str] = []
+        for section in result.sections:
+            if isinstance(section, MergeConflict):
+                rendered_sections.append(self._render_conflict(section))
+            else:
+                rendered_sections.append(section)
+        return "".join(rendered_sections)
+
+    def has_conflict_markers(self, text: str) -> bool:
+        """Return True when a text already contains merge markers."""
+        normalized_text = self._normalize_newlines(text)
+        marker_pattern = re.compile(
+            rf"(?m)^({re.escape(self.OURS_MARKER)}|"
+            rf"{re.escape(self.SEPARATOR_MARKER)}|{re.escape(self.THEIRS_MARKER)})$"
+        )
+        return bool(marker_pattern.search(normalized_text))
+
+    def _build_conflict_result(self, base: str, ours: str, theirs: str) -> MergeResult:
+        ours_lines = self._split_lines(ours)
+        theirs_lines = self._split_lines(theirs)
+        base_lines = self._split_lines(base)
+
+        prefix_len = self._shared_prefix_len(ours_lines, theirs_lines)
+        suffix_len = self._shared_suffix_len(ours_lines, theirs_lines, prefix_len)
+        ours_end = len(ours_lines) - suffix_len if suffix_len else len(ours_lines)
+        theirs_end = len(theirs_lines) - suffix_len if suffix_len else len(theirs_lines)
+
+        prefix_text = "".join(ours_lines[:prefix_len])
+        suffix_text = "".join(ours_lines[len(ours_lines) - suffix_len :]) if suffix_len else ""
+
+        base_start = min(prefix_len, len(base_lines))
+        base_end = len(base_lines) - suffix_len if suffix_len else len(base_lines)
+        if base_end < base_start:
+            base_end = base_start
+
+        conflict = MergeConflict(
+            start_line=base_start + 1,
+            end_line=max(base_start + 1, base_end),
+            base_text="".join(base_lines[base_start:base_end]),
+            ours_text="".join(ours_lines[prefix_len:ours_end]),
+            theirs_text="".join(theirs_lines[prefix_len:theirs_end]),
+        )
+        return MergeResult(
+            status=MERGE_STATUS_CONFLICT,
+            merged_text="",
+            conflicts=(conflict,),
+            sections=(prefix_text, conflict, suffix_text),
+        )
+
+    def _render_conflict(self, conflict: MergeConflict) -> str:
+        ours_text = self._ensure_conflict_body_newline(conflict.ours_text)
+        theirs_text = self._ensure_conflict_body_newline(conflict.theirs_text)
+        return (
+            f"{self.OURS_MARKER}\n"
+            f"{ours_text}"
+            f"{self.SEPARATOR_MARKER}\n"
+            f"{theirs_text}"
+            f"{self.THEIRS_MARKER}\n"
+        )
+
+    @staticmethod
+    def _ensure_conflict_body_newline(text: str) -> str:
+        if not text or text.endswith("\n"):
+            return text
+        return f"{text}\n"
+
+    @staticmethod
+    def _normalize_newlines(text: str) -> str:
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+    @staticmethod
+    def _split_lines(text: str) -> list[str]:
+        return text.splitlines(keepends=True)
+
+    @staticmethod
+    def _shared_prefix_len(left: list[str], right: list[str]) -> int:
+        limit = min(len(left), len(right))
+        index = 0
+        while index < limit and left[index] == right[index]:
+            index += 1
+        return index
+
+    @staticmethod
+    def _shared_suffix_len(left: list[str], right: list[str], prefix_len: int) -> int:
+        max_suffix = min(len(left), len(right)) - prefix_len
+        index = 0
+        while index < max_suffix and left[-(index + 1)] == right[-(index + 1)]:
+            index += 1
+        return index
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC timestamp as an aware datetime."""
+    return datetime.now(timezone.utc)
+
+
+def _format_utc_timestamp(value: datetime) -> str:
+    """Serialize an aware UTC datetime to the engine timestamp format."""
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_utc_timestamp(value: str) -> datetime | None:
+    """Parse a stored UTC timestamp, returning None for invalid values."""
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _sha256_text(text: str) -> str:
+    """Return the SHA-256 of a UTF-8 text payload."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +538,195 @@ def _resolve_dependency_update_order(
     }
 
 
+_SUPPORTED_CONFLICT_MODES: set[str] = {"abort", "replace", "manual", "auto", "assisted"}
+_MARKDOWN_HEADING_RE: re.Pattern[str] = re.compile(r"(?m)^(#{1,2})\s+(.+?)\s*$")
+
+
+def _normalize_merge_text(text: str) -> str:
+    """Normalize line endings for merge-related comparisons."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _extract_frontmatter_block(text: str) -> str | None:
+    """Return the raw frontmatter block when present and closed correctly."""
+    normalized = _normalize_merge_text(text)
+    if not normalized.startswith("---\n") and normalized != "---":
+        return None
+
+    lines = normalized.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return None
+
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            return "".join(lines[: index + 1])
+    return None
+
+
+def _extract_markdown_headings(text: str) -> list[str]:
+    """Extract normalized H1/H2 headings from markdown text."""
+    normalized = _normalize_merge_text(text)
+    return [match.group(2).strip() for match in _MARKDOWN_HEADING_RE.finditer(normalized)]
+
+
+def validate_structural(merged_text: str, base_text: str) -> tuple[bool, str]:
+    """Validate conflict markers, frontmatter delimiters and basic markdown structure."""
+    normalized_merged = _normalize_merge_text(merged_text)
+    normalized_base = _normalize_merge_text(base_text)
+    merge_engine = MergeEngine()
+
+    if merge_engine.has_conflict_markers(normalized_merged):
+        return (False, "conflict_markers_present")
+
+    base_frontmatter = _extract_frontmatter_block(normalized_base)
+    merged_frontmatter = _extract_frontmatter_block(normalized_merged)
+    if base_frontmatter is not None and merged_frontmatter is None:
+        return (False, "frontmatter_missing_or_unbalanced")
+    if normalized_merged.startswith("---") and merged_frontmatter is None:
+        return (False, "frontmatter_missing_or_unbalanced")
+
+    if _extract_markdown_headings(normalized_base) and not _extract_markdown_headings(normalized_merged):
+        return (False, "base_headings_removed")
+
+    return (True, "")
+
+
+def validate_completeness(merged_text: str, ours_text: str) -> tuple[bool, str]:
+    """Validate that H1/H2 headings from OURS survive in the merged content."""
+    ours_headings = _extract_markdown_headings(ours_text)
+    if not ours_headings:
+        return (True, "no_h1_h2_headings_in_ours")
+
+    merged_headings = {heading.casefold() for heading in _extract_markdown_headings(merged_text)}
+    missing = [heading for heading in ours_headings if heading.casefold() not in merged_headings]
+    if missing:
+        return (False, f"missing_headings: {', '.join(missing)}")
+    return (True, "")
+
+
+def validate_tool_coherence(merged_text: str, ours_text: str) -> tuple[bool, str]:
+    """Validate that tools declared in OURS frontmatter remain present after merge."""
+    ours_tools = _normalize_string_list(parse_markdown_frontmatter(ours_text).get("tools", []))
+    if not ours_tools:
+        return (True, "tools_block_not_applicable")
+
+    merged_tools = _normalize_string_list(parse_markdown_frontmatter(merged_text).get("tools", []))
+    if not merged_tools:
+        return (False, "merged_tools_block_missing")
+
+    missing = [tool for tool in ours_tools if tool not in merged_tools]
+    if missing:
+        return (False, f"missing_tools: {', '.join(missing)}")
+
+    duplicates = sorted({tool for tool in merged_tools if merged_tools.count(tool) > 1})
+    if duplicates:
+        return (True, f"duplicate_tools_warning: {', '.join(duplicates)}")
+    return (True, "")
+
+
+def run_post_merge_validators(
+    merged_text: str,
+    base_text: str,
+    ours_text: str,
+    file_rel: str,
+) -> dict[str, Any]:
+    """Run all post-merge validators and return a structured result."""
+    results: list[dict[str, Any]] = []
+
+    structural_ok, structural_msg = validate_structural(merged_text, base_text)
+    results.append(
+        {
+            "check": "structural",
+            "passed": structural_ok,
+            "message": structural_msg,
+        }
+    )
+
+    completeness_ok, completeness_msg = validate_completeness(merged_text, ours_text)
+    results.append(
+        {
+            "check": "completeness",
+            "passed": completeness_ok,
+            "message": completeness_msg,
+        }
+    )
+
+    if file_rel.endswith(".agent.md"):
+        tool_ok, tool_msg = validate_tool_coherence(merged_text, ours_text)
+        results.append(
+            {
+                "check": "tool_coherence",
+                "passed": tool_ok,
+                "message": tool_msg,
+            }
+        )
+
+    return {
+        "passed": all(bool(item.get("passed")) for item in results),
+        "results": results,
+    }
+
+
+def _resolve_disjoint_line_additions(base_text: str, ours_text: str, theirs_text: str) -> str | None:
+    """Combine simple prefix/suffix additions around the unchanged BASE text."""
+    normalized_base = _normalize_merge_text(base_text)
+    normalized_ours = _normalize_merge_text(ours_text)
+    normalized_theirs = _normalize_merge_text(theirs_text)
+
+    if not normalized_base:
+        return None
+
+    ours_index = normalized_ours.find(normalized_base)
+    theirs_index = normalized_theirs.find(normalized_base)
+    if ours_index < 0 or theirs_index < 0:
+        return None
+
+    ours_prefix = normalized_ours[:ours_index]
+    ours_suffix = normalized_ours[ours_index + len(normalized_base) :]
+    theirs_prefix = normalized_theirs[:theirs_index]
+    theirs_suffix = normalized_theirs[theirs_index + len(normalized_base) :]
+
+    if ours_prefix and theirs_prefix and ours_prefix != theirs_prefix:
+        return None
+    if ours_suffix and theirs_suffix and ours_suffix != theirs_suffix:
+        return None
+    if ours_prefix == theirs_prefix and ours_suffix == theirs_suffix:
+        return None
+
+    merged_prefix = ours_prefix or theirs_prefix
+    merged_suffix = ours_suffix or theirs_suffix
+    return f"{merged_prefix}{normalized_base}{merged_suffix}"
+
+
+def _section_markers_for_package(package_id: str) -> tuple[str, str]:
+    """Return begin/end markers for one package-owned shared section."""
+    return (
+        f"<!-- SCF:SECTION:{package_id}:BEGIN -->",
+        f"<!-- SCF:SECTION:{package_id}:END -->",
+    )
+
+
+def _strip_package_section(text: str, package_id: str) -> str:
+    """Remove one package-owned marked section from a shared file, when present."""
+    normalized_text = _normalize_merge_text(text)
+    begin_marker, end_marker = _section_markers_for_package(package_id)
+    begin_index = normalized_text.find(begin_marker)
+    if begin_index < 0:
+        return normalized_text
+
+    end_index = normalized_text.find(end_marker, begin_index + len(begin_marker))
+    if end_index < 0:
+        return normalized_text
+
+    section_end = end_index + len(end_marker)
+    if section_end < len(normalized_text) and normalized_text[section_end] == "\n":
+        section_end += 1
+
+    stripped = f"{normalized_text[:begin_index]}{normalized_text[section_end:]}"
+    stripped = re.sub(r"\n{3,}", "\n\n", stripped)
+    return stripped.lstrip("\n")
+
+
 # ---------------------------------------------------------------------------
 # FrameworkInventory
 # ---------------------------------------------------------------------------
@@ -590,7 +974,11 @@ class ManifestManager:
             "installed_at": now,
             "sha256": sha,
         }
-        entries = [e for e in entries if e.get("file") != file_rel]
+        entries = [
+            e
+            for e in entries
+            if not (e.get("file") == file_rel and e.get("package") == package)
+        ]
         entries.append(new_entry)
         self.save(entries)
 
@@ -607,9 +995,25 @@ class ManifestManager:
                 remaining.append(entry)
                 continue
             file_path = self._github_root / entry["file"]
+            shared_with_other_packages = any(
+                other_entry.get("package") != package and other_entry.get("file") == entry.get("file")
+                for other_entry in entries
+            )
             if self._is_user_modified(entry, file_path):
                 _log.warning("Preserving user-modified file: %s", file_path)
                 preserved.append(entry["file"])
+            elif shared_with_other_packages:
+                if file_path.is_file():
+                    try:
+                        current_text = file_path.read_text(encoding="utf-8")
+                        updated_text = _strip_package_section(current_text, str(entry.get("package", "")).strip())
+                        if updated_text != current_text:
+                            file_path.write_text(updated_text, encoding="utf-8")
+                            _log.info("Removed package section for shared file: %s", file_path)
+                        else:
+                            _log.info("Preserved shared file owned by other packages: %s", file_path)
+                    except (OSError, UnicodeDecodeError) as exc:
+                        _log.warning("Cannot update shared file %s during package removal: %s", file_path, exc)
             else:
                 if file_path.is_file():
                     try:
@@ -656,7 +1060,14 @@ class ManifestManager:
         """Add or update manifest entries for many installed files in one save."""
         entries = self.load()
         replacements = {file_rel for file_rel, _ in files}
-        entries = [entry for entry in entries if str(entry.get("file", "")).strip() not in replacements]
+        entries = [
+            entry
+            for entry in entries
+            if not (
+                str(entry.get("file", "")).strip() in replacements
+                and str(entry.get("package", "")).strip() == package
+            )
+        ]
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         for file_rel, file_abs in files:
             entries.append(
@@ -780,6 +1191,309 @@ class ManifestManager:
         return self._sha256(file_path) != stored
 
 
+class SnapshotManager:
+    """Manage UTF-8 BASE snapshots stored under .github/runtime/snapshots/."""
+
+    def __init__(self, snapshots_root: Path) -> None:
+        self._snapshots_root = snapshots_root
+
+    def save_snapshot(self, package_id: str, file_rel: str, file_abs: Path) -> bool:
+        """Persist a UTF-8 snapshot for one package-managed file."""
+        snapshot_path = self._snapshot_path(package_id, file_rel)
+        if snapshot_path is None:
+            return False
+
+        try:
+            content = file_abs.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _log.warning("Snapshot skipped for %s (%s): %s", file_rel, package_id, exc)
+            return False
+
+        try:
+            snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            snapshot_path.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            _log.warning("Cannot write snapshot for %s (%s): %s", file_rel, package_id, exc)
+            return False
+        return True
+
+    def load_snapshot(self, package_id: str, file_rel: str) -> str | None:
+        """Return the stored UTF-8 snapshot content, if available and decodable."""
+        snapshot_path = self._snapshot_path(package_id, file_rel)
+        if snapshot_path is None or not snapshot_path.is_file():
+            return None
+        try:
+            return snapshot_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _log.warning("Cannot read snapshot for %s (%s): %s", file_rel, package_id, exc)
+            return None
+
+    def delete_package_snapshots(self, package_id: str) -> list[str]:
+        """Delete all snapshots for one package and return removed relative paths."""
+        package_root = self._package_root(package_id)
+        if package_root is None or not package_root.exists():
+            return []
+
+        deleted_files = sorted(
+            path.relative_to(package_root).as_posix()
+            for path in package_root.rglob("*")
+            if path.is_file()
+        )
+
+        try:
+            for file_path in sorted(
+                (path for path in package_root.rglob("*") if path.is_file()),
+                key=lambda path: len(path.parts),
+                reverse=True,
+            ):
+                file_path.unlink()
+            for dir_path in sorted(
+                (path for path in package_root.rglob("*") if path.is_dir()),
+                key=lambda path: len(path.parts),
+                reverse=True,
+            ):
+                dir_path.rmdir()
+            package_root.rmdir()
+        except OSError as exc:
+            _log.warning("Cannot delete snapshots for %s: %s", package_id, exc)
+            return []
+
+        return deleted_files
+
+    def snapshot_exists(self, package_id: str, file_rel: str) -> bool:
+        """Return True when a snapshot file exists for the given package/file pair."""
+        snapshot_path = self._snapshot_path(package_id, file_rel)
+        return snapshot_path is not None and snapshot_path.is_file()
+
+    def list_package_snapshots(self, package_id: str) -> list[str]:
+        """Return sorted snapshot paths relative to the package snapshot root."""
+        package_root = self._package_root(package_id)
+        if package_root is None or not package_root.is_dir():
+            return []
+        return sorted(
+            path.relative_to(package_root).as_posix()
+            for path in package_root.rglob("*")
+            if path.is_file()
+        )
+
+    def _package_root(self, package_id: str) -> Path | None:
+        normalized_package = self._validate_relative_path(package_id)
+        if normalized_package is None or "/" in normalized_package:
+            return None
+        return self._snapshots_root / normalized_package
+
+    def _snapshot_path(self, package_id: str, file_rel: str) -> Path | None:
+        package_root = self._package_root(package_id)
+        normalized_rel = self._validate_relative_path(file_rel)
+        if package_root is None or normalized_rel is None:
+            return None
+        return package_root / PurePosixPath(normalized_rel)
+
+    def _validate_relative_path(self, path_value: str) -> str | None:
+        normalized = path_value.replace("\\", "/").strip()
+        if not normalized:
+            return None
+        if normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+            return None
+
+        candidate = PurePosixPath(normalized)
+        parts = candidate.parts
+        if not parts or any(part in {"", ".", ".."} for part in parts):
+            return None
+        return candidate.as_posix()
+
+
+class MergeSessionManager:
+    """Manage manual merge sessions persisted under .github/runtime/merge-sessions/."""
+
+    SESSION_TTL_HOURS: int = 24
+
+    def __init__(self, sessions_root: Path) -> None:
+        self._sessions_root = sessions_root
+
+    def create_session(
+        self,
+        package_id: str,
+        package_version: str,
+        files: list[dict[str, Any]],
+        conflict_mode: str = "manual",
+    ) -> dict[str, Any]:
+        """Create and persist a new active manual merge session."""
+        created_at = _utc_now()
+        expires_at = created_at + timedelta(hours=self.SESSION_TTL_HOURS)
+        payload: dict[str, Any] = {
+            "session_id": str(uuid.uuid4()),
+            "package": package_id,
+            "package_version": package_version,
+            "conflict_mode": conflict_mode,
+            "status": "active",
+            "created_at": _format_utc_timestamp(created_at),
+            "expires_at": _format_utc_timestamp(expires_at),
+            "files": [self._normalize_session_file_entry(file_entry) for file_entry in files],
+        }
+        self._write_session(payload)
+        return payload
+
+    def load_session(self, session_id: str) -> dict[str, Any] | None:
+        """Return a persisted session payload or None when unavailable."""
+        session_path = self._session_path(session_id)
+        if session_path is None or not session_path.is_file():
+            return None
+        try:
+            raw = json.loads(session_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            _log.warning("Cannot read merge session %s: %s", session_id, exc)
+            return None
+        return self._normalize_session_payload(raw) if isinstance(raw, dict) else None
+
+    def load_active_session(self, session_id: str) -> dict[str, Any] | None:
+        """Return an active session, expiring it automatically when overdue."""
+        session = self.load_session(session_id)
+        if session is None:
+            return None
+        if str(session.get("status", "")).strip() != "active":
+            return session
+
+        expires_at = _parse_utc_timestamp(str(session.get("expires_at", "")).strip())
+        if expires_at is not None and expires_at <= _utc_now():
+            expired_session = dict(session)
+            expired_session["status"] = "expired"
+            self._write_session(expired_session)
+            return expired_session
+        return session
+
+    def mark_finalized(self, session_id: str) -> dict[str, Any] | None:
+        """Mark a session as finalized and persist the updated payload."""
+        return self.mark_status(session_id, "finalized")
+
+    def mark_status(
+        self,
+        session_id: str,
+        status: str,
+        session: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Update the persisted status for a merge session."""
+        current = self.load_session(session_id) if session is None else self._normalize_session_payload(session)
+        if current is None:
+            return None
+        current["status"] = status
+        self._write_session(current)
+        return current
+
+    def save_session(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Persist a normalized session payload and return the stored result."""
+        normalized = self._normalize_session_payload(payload)
+        self._write_session(normalized)
+        return normalized
+
+    def cleanup_expired_sessions(self) -> list[str]:
+        """Mark overdue active sessions as expired and return their ids."""
+        if not self._sessions_root.is_dir():
+            return []
+
+        expired: list[str] = []
+        for session_file in sorted(self._sessions_root.glob("*.json")):
+            session_id = session_file.stem
+            session = self.load_session(session_id)
+            if session is None:
+                continue
+            if str(session.get("status", "")).strip() != "active":
+                continue
+            expires_at = _parse_utc_timestamp(str(session.get("expires_at", "")).strip())
+            if expires_at is None or expires_at > _utc_now():
+                continue
+            updated = dict(session)
+            updated["status"] = "expired"
+            self._write_session(updated)
+            expired.append(session_id)
+        return expired
+
+    @staticmethod
+    def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+        """Persist JSON atomically using a .tmp file in the target directory."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        try:
+            with tmp_path.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_path, path)
+        except OSError:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+            raise
+
+    def _write_session(self, payload: dict[str, Any]) -> None:
+        session_id = str(payload.get("session_id", "")).strip()
+        session_path = self._session_path(session_id)
+        if session_path is None:
+            raise ValueError(f"Invalid merge session id: {session_id!r}")
+        self._atomic_write_json(session_path, self._normalize_session_payload(payload))
+
+    def _session_path(self, session_id: str) -> Path | None:
+        normalized = session_id.strip()
+        if not re.fullmatch(r"[A-Za-z0-9-]+", normalized):
+            return None
+        return self._sessions_root / f"{normalized}.json"
+
+    def _normalize_session_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(payload)
+        normalized["conflict_mode"] = str(payload.get("conflict_mode", "manual")).strip() or "manual"
+        normalized["status"] = str(payload.get("status", "active")).strip() or "active"
+        files = payload.get("files", [])
+        if isinstance(files, list):
+            normalized["files"] = [
+                self._normalize_session_file_entry(file_entry)
+                for file_entry in files
+                if isinstance(file_entry, dict)
+            ]
+        else:
+            normalized["files"] = []
+        return normalized
+
+    @staticmethod
+    def _normalize_session_file_entry(entry: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(entry)
+        manifest_rel = str(entry.get("manifest_rel", "")).strip()
+        public_file = str(entry.get("file", "")).strip()
+        workspace_path = str(entry.get("workspace_path", public_file)).strip()
+
+        if not public_file and manifest_rel:
+            public_file = f".github/{manifest_rel}"
+        if not workspace_path:
+            workspace_path = public_file
+        if not manifest_rel and public_file.startswith(".github/"):
+            manifest_rel = public_file.removeprefix(".github/")
+
+        proposed_text = entry.get("proposed_text")
+        validator_results = entry.get("validator_results")
+        marker_text = entry.get("marker_text")
+
+        normalized.update(
+            {
+                "file": public_file,
+                "workspace_path": workspace_path,
+                "manifest_rel": manifest_rel,
+                "conflict_id": str(entry.get("conflict_id", manifest_rel or public_file)).strip()
+                or manifest_rel
+                or public_file,
+                "base_text": str(entry.get("base_text", "") or ""),
+                "ours_text": str(entry.get("ours_text", "") or ""),
+                "theirs_text": str(entry.get("theirs_text", "") or ""),
+                "proposed_text": proposed_text if isinstance(proposed_text, str) else None,
+                "resolution_status": str(entry.get("resolution_status", "pending")).strip()
+                or "pending",
+                "validator_results": validator_results if isinstance(validator_results, dict) else None,
+                "marker_text": marker_text if isinstance(marker_text, str) else None,
+            }
+        )
+        return normalized
+
+
 # ---------------------------------------------------------------------------
 # RegistryClient (A4 — package registry)
 # ---------------------------------------------------------------------------
@@ -899,7 +1613,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (15) and Tools (29)
+# SparkFrameworkEngine — Resources (15) and Tools (33)
 # ---------------------------------------------------------------------------
 
 
@@ -1051,7 +1765,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 29 MCP tools."""
+        """Register all 33 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -1172,6 +1886,193 @@ class SparkFrameworkEngine:
 
         manifest = ManifestManager(self._ctx.github_root)
         registry = RegistryClient(self._ctx.github_root)
+        merge_engine = MergeEngine()
+        snapshots = SnapshotManager(self._ctx.github_root / _SNAPSHOTS_SUBDIR)
+        sessions = MergeSessionManager(self._ctx.github_root / _MERGE_SESSIONS_SUBDIR)
+        sessions.cleanup_expired_sessions()
+
+        def _save_snapshots(package_id: str, files: list[tuple[str, Path]]) -> dict[str, list[str]]:
+            """Persist BASE snapshots for written files without blocking the main operation."""
+            written: list[str] = []
+            skipped: list[str] = []
+            for file_rel, file_abs in files:
+                public_path = f".github/{file_rel}"
+                if snapshots.save_snapshot(package_id, file_rel, file_abs):
+                    written.append(public_path)
+                else:
+                    skipped.append(public_path)
+            return {"written": written, "skipped": skipped}
+
+        def _read_text_if_possible(path: Path) -> str | None:
+            """Read a UTF-8 workspace file, returning None for undecodable content."""
+            try:
+                return path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                _log.warning("Cannot read text file %s: %s", path, exc)
+                return None
+
+        def _supports_stateful_merge(conflict_mode: str) -> bool:
+            """Return True for conflict modes that use a persistent merge session."""
+            return conflict_mode in {"manual", "auto", "assisted"}
+
+        def _render_marker_text(file_entry: dict[str, Any]) -> str:
+            """Render or reuse the persisted marker text for one conflicting file."""
+            existing = file_entry.get("marker_text")
+            if isinstance(existing, str) and existing:
+                return existing
+            merge_result = merge_engine.diff3_merge(
+                str(file_entry.get("base_text", "") or ""),
+                str(file_entry.get("ours_text", "") or ""),
+                str(file_entry.get("theirs_text", "") or ""),
+            )
+            return merge_engine.render_with_markers(merge_result)
+
+        def _build_session_entry(
+            file_path: str,
+            rel: str,
+            base_text: str,
+            ours_text: str,
+            theirs_text: str,
+            marker_text: str,
+        ) -> dict[str, Any]:
+            """Build the persisted session payload for one conflicting file."""
+            return {
+                "file": file_path,
+                "workspace_path": file_path,
+                "manifest_rel": rel,
+                "conflict_id": rel,
+                "base_text": base_text,
+                "ours_text": ours_text,
+                "theirs_text": theirs_text,
+                "proposed_text": None,
+                "resolution_status": "pending",
+                "validator_results": None,
+                "marker_text": marker_text,
+                "original_sha_at_session_open": _sha256_text(ours_text),
+            }
+
+        def _replace_session_entry(
+            session: dict[str, Any],
+            index: int,
+            file_entry: dict[str, Any],
+        ) -> None:
+            """Replace one normalized file entry inside an in-memory session payload."""
+            files = list(session.get("files", []))
+            files[index] = MergeSessionManager._normalize_session_file_entry(file_entry)
+            session["files"] = files
+
+        def _find_session_entry(
+            session: dict[str, Any],
+            conflict_id: str,
+        ) -> tuple[int, dict[str, Any]] | None:
+            """Find one conflict entry in a session by its stable conflict id."""
+            for index, file_entry in enumerate(list(session.get("files", []))):
+                if str(file_entry.get("conflict_id", "")).strip() == conflict_id:
+                    return (index, dict(file_entry))
+            return None
+
+        def _count_remaining_conflicts(session: dict[str, Any]) -> int:
+            """Count session entries that still need approval or manual resolution."""
+            return sum(
+                1
+                for file_entry in list(session.get("files", []))
+                if str(file_entry.get("resolution_status", "pending")).strip() != "approved"
+            )
+
+        def _resolve_conflict_automatically(file_entry: dict[str, Any]) -> str | None:
+            """Return a safe automatic merge proposal only for clearly unambiguous cases."""
+            base_text = _normalize_merge_text(str(file_entry.get("base_text", "") or ""))
+            ours_text = _normalize_merge_text(str(file_entry.get("ours_text", "") or ""))
+            theirs_text = _normalize_merge_text(str(file_entry.get("theirs_text", "") or ""))
+
+            frontmatter_blocks = {
+                frontmatter
+                for frontmatter in (
+                    _extract_frontmatter_block(base_text),
+                    _extract_frontmatter_block(ours_text),
+                    _extract_frontmatter_block(theirs_text),
+                )
+                if frontmatter is not None
+            }
+            if len(frontmatter_blocks) > 1:
+                return None
+
+            if ours_text == theirs_text:
+                return ours_text
+            if base_text == ours_text:
+                return theirs_text
+            if base_text == theirs_text:
+                return ours_text
+            if ours_text and ours_text in theirs_text:
+                return theirs_text
+            if theirs_text and theirs_text in ours_text:
+                return ours_text
+            return _resolve_disjoint_line_additions(base_text, ours_text, theirs_text)
+
+        def _propose_conflict_resolution(
+            session: dict[str, Any],
+            conflict_id: str,
+            persist: bool = True,
+        ) -> dict[str, Any]:
+            """Populate proposed_text and validator results for one conflict when safe."""
+            found = _find_session_entry(session, conflict_id)
+            if found is None:
+                return {
+                    "success": False,
+                    "error": "conflict_not_found",
+                    "conflict_id": conflict_id,
+                }
+
+            index, file_entry = found
+            proposed_text = _resolve_conflict_automatically(file_entry)
+            if proposed_text is None:
+                file_entry["proposed_text"] = None
+                file_entry["validator_results"] = None
+                file_entry["resolution_status"] = "manual"
+                _replace_session_entry(session, index, file_entry)
+                if persist:
+                    sessions.save_session(session)
+                return {
+                    "success": False,
+                    "conflict_id": conflict_id,
+                    "fallback": "manual",
+                    "reason": "best_effort_auto_resolution_not_safe",
+                    "validator_results": None,
+                }
+
+            validator_results = run_post_merge_validators(
+                proposed_text,
+                str(file_entry.get("base_text", "") or ""),
+                str(file_entry.get("ours_text", "") or ""),
+                str(file_entry.get("file", file_entry.get("workspace_path", "")) or ""),
+            )
+            file_entry["validator_results"] = validator_results
+            if not validator_results.get("passed", False):
+                file_entry["proposed_text"] = None
+                file_entry["resolution_status"] = "manual"
+                _replace_session_entry(session, index, file_entry)
+                if persist:
+                    sessions.save_session(session)
+                return {
+                    "success": False,
+                    "conflict_id": conflict_id,
+                    "fallback": "manual",
+                    "reason": "post_merge_validation_failed",
+                    "validator_results": validator_results,
+                }
+
+            file_entry["proposed_text"] = proposed_text
+            file_entry["resolution_status"] = "auto_resolved"
+            _replace_session_entry(session, index, file_entry)
+            if persist:
+                sessions.save_session(session)
+            return {
+                "success": True,
+                "conflict_id": conflict_id,
+                "proposed_text": proposed_text,
+                "validator_results": validator_results,
+                "resolution_status": "auto_resolved",
+            }
 
         @self._mcp.tool()
         async def scf_list_available_packages() -> dict[str, Any]:
@@ -1270,6 +2171,9 @@ class SparkFrameworkEngine:
                         pkg_manifest.get("file_ownership_policy", "error")
                     ).strip()
                     or "error",
+                    "file_policies": _normalize_file_policies(
+                        pkg_manifest.get("file_policies", {})
+                    ),
                     "changelog_path": str(pkg_manifest.get("changelog_path", "")).strip(),
                     "file_count": len(files),
                     "categories": categories,
@@ -1300,6 +2204,8 @@ class SparkFrameworkEngine:
             result: dict[str, Any] = {
                 "success": success,
                 "installed": [],
+                "extended_files": [],
+                "delegated_files": [],
                 "preserved": [],
                 "removed_obsolete_files": [],
                 "preserved_obsolete_files": [],
@@ -1307,6 +2213,13 @@ class SparkFrameworkEngine:
                 "blocked_files": [],
                 "replaced_files": [],
                 "merged_files": [],
+                "merge_clean": [],
+                "merge_conflict": [],
+                "session_id": None,
+                "session_status": None,
+                "session_expires_at": None,
+                "snapshot_written": [],
+                "snapshot_skipped": [],
                 "requires_user_resolution": False,
                 "resolution_applied": "none",
             }
@@ -1314,6 +2227,91 @@ class SparkFrameworkEngine:
                 result["error"] = error
             result.update(extras)
             return result
+
+        def _normalize_file_policies(raw_policies: Any) -> dict[str, str]:
+            """Normalize manifest file policies declared as {'.github/path': 'extend|delegate|error'}."""
+            if not isinstance(raw_policies, dict):
+                return {}
+
+            normalized: dict[str, str] = {}
+            for raw_path, raw_policy in raw_policies.items():
+                if not isinstance(raw_path, str) or not isinstance(raw_policy, str):
+                    continue
+                path = raw_path.replace("\\", "/").strip()
+                policy = raw_policy.strip().lower()
+                if not path.startswith(".github/") or policy not in {"error", "extend", "delegate"}:
+                    continue
+                normalized[path] = policy
+            return normalized
+
+        def _validate_extend_policy_target(file_path: str) -> None:
+            """Reject extend on file types that cannot safely host SCF section markers."""
+            if file_path.endswith(".agent.md"):
+                raise ValueError(
+                    f"Policy 'extend' is not supported for files ending with '.agent.md': {file_path}"
+                )
+
+        def _section_markers(package_id: str) -> tuple[str, str]:
+            """Return begin/end markers for the package-owned section inside a shared file."""
+            return (
+                f"<!-- SCF:SECTION:{package_id}:BEGIN -->",
+                f"<!-- SCF:SECTION:{package_id}:END -->",
+            )
+
+        def _parse_section_markers(text: str, package_id: str) -> tuple[int, int] | None:
+            """Return the normalized content slice between package section markers, if present."""
+            normalized_text = _normalize_merge_text(text)
+            begin_marker, end_marker = _section_markers(package_id)
+            begin_index = normalized_text.find(begin_marker)
+            if begin_index < 0:
+                return None
+
+            content_start = begin_index + len(begin_marker)
+            if content_start < len(normalized_text) and normalized_text[content_start] == "\n":
+                content_start += 1
+
+            end_index = normalized_text.find(end_marker, content_start)
+            if end_index < 0:
+                return None
+
+            content_end = end_index
+            if content_end > content_start and normalized_text[content_end - 1] == "\n":
+                content_end -= 1
+            return (content_start, content_end)
+
+        def _render_package_section(package_id: str, content: str) -> str:
+            """Render one package-owned section bounded by SCF HTML comment markers."""
+            begin_marker, end_marker = _section_markers(package_id)
+            normalized_content = _normalize_merge_text(content)
+            if normalized_content and not normalized_content.endswith("\n"):
+                normalized_content = f"{normalized_content}\n"
+            return f"{begin_marker}\n{normalized_content}{end_marker}\n"
+
+        def _create_file_with_section(file_path: str, package_id: str, content: str) -> str:
+            """Create a new shared file that initially contains only the current package section."""
+            _validate_extend_policy_target(file_path)
+            return _render_package_section(package_id, content)
+
+        def _update_package_section(existing_text: str, package_id: str, content: str) -> str:
+            """Insert or replace only the current package section while preserving outer content."""
+            normalized_existing = _normalize_merge_text(existing_text)
+            parsed_section = _parse_section_markers(normalized_existing, package_id)
+            rendered_section = _render_package_section(package_id, content)
+            if parsed_section is None:
+                stripped_existing = normalized_existing.rstrip("\n")
+                if not stripped_existing:
+                    return rendered_section
+                return f"{stripped_existing}\n\n{rendered_section}"
+
+            begin_marker, end_marker = _section_markers(package_id)
+            begin_index = normalized_existing.find(begin_marker)
+            end_index = normalized_existing.find(end_marker, parsed_section[1])
+            if begin_index < 0 or end_index < 0:
+                return rendered_section
+            section_end = end_index + len(end_marker)
+            if section_end < len(normalized_existing) and normalized_existing[section_end] == "\n":
+                section_end += 1
+            return f"{normalized_existing[:begin_index]}{rendered_section}{normalized_existing[section_end:]}"
 
         def _get_package_install_context(package_id: str) -> dict[str, Any]:
             """Return package installation context or a structured failure result."""
@@ -1364,6 +2362,7 @@ class SparkFrameworkEngine:
             file_ownership_policy = (
                 str(pkg_manifest.get("file_ownership_policy", "error")).strip() or "error"
             )
+            file_policies = _normalize_file_policies(pkg_manifest.get("file_policies", {}))
             installed_versions = manifest.get_installed_versions()
             missing_dependencies = [
                 dependency for dependency in dependencies if dependency not in installed_versions
@@ -1382,6 +2381,7 @@ class SparkFrameworkEngine:
                 "dependencies": dependencies,
                 "declared_conflicts": declared_conflicts,
                 "file_ownership_policy": file_ownership_policy,
+                "file_policies": file_policies,
                 "installed_versions": installed_versions,
                 "missing_dependencies": missing_dependencies,
                 "present_conflicts": present_conflicts,
@@ -1391,19 +2391,54 @@ class SparkFrameworkEngine:
                 ),
             }
 
-        def _classify_install_files(package_id: str, files: list[str]) -> dict[str, Any]:
-            """Classify package targets before any install or update writes."""
+        def _classify_install_files(
+            package_id: str,
+            files: list[str],
+            file_policies: dict[str, str] | None = None,
+        ) -> dict[str, Any]:
+            """Classify package targets before any install or update writes.
+
+            ``file_policies`` uses the simple manifest shape
+            {".github/path.md": "extend|delegate|error"}.
+            """
             records: list[dict[str, Any]] = []
             write_plan: list[dict[str, Any]] = []
+            extend_plan: list[dict[str, Any]] = []
+            delegate_plan: list[dict[str, Any]] = []
             preserve_plan: list[dict[str, Any]] = []
             conflict_plan: list[dict[str, Any]] = []
+            merge_plan: list[dict[str, Any]] = []
             ownership_issues: list[dict[str, Any]] = []
+            normalized_file_policies = file_policies or {}
 
             for file_path in files:
                 rel = file_path.removeprefix(".github/")
                 dest = self._ctx.workspace_root / file_path
                 owners = [owner for owner in manifest.get_file_owners(rel) if owner != package_id]
+                per_file_policy = normalized_file_policies.get(file_path, "error")
                 if owners:
+                    if per_file_policy == "extend":
+                        _validate_extend_policy_target(file_path)
+                        item = {
+                            "file": file_path,
+                            "classification": "extend_section",
+                            "owners": owners,
+                            "policy": "extend",
+                            "file_exists": dest.exists(),
+                        }
+                        records.append(item)
+                        extend_plan.append(item)
+                        continue
+                    if per_file_policy == "delegate":
+                        item = {
+                            "file": file_path,
+                            "classification": "delegate_skip",
+                            "owners": owners,
+                            "policy": "delegate",
+                        }
+                        records.append(item)
+                        delegate_plan.append(item)
+                        continue
                     item = {
                         "file": file_path,
                         "classification": "conflict_cross_owner",
@@ -1421,9 +2456,18 @@ class SparkFrameworkEngine:
                     write_plan.append(item)
                     continue
                 if tracked_state is True:
+                    if snapshots.snapshot_exists(package_id, rel):
+                        item = {
+                            "file": file_path,
+                            "classification": "merge_candidate",
+                        }
+                        records.append(item)
+                        merge_plan.append(item)
+                        continue
                     item = {
                         "file": file_path,
                         "classification": "preserve_tracked_modified",
+                        "base_unavailable": True,
                     }
                     records.append(item)
                     preserve_plan.append(item)
@@ -1447,8 +2491,11 @@ class SparkFrameworkEngine:
             return {
                 "records": records,
                 "write_plan": write_plan,
+                "extend_plan": extend_plan,
+                "delegate_plan": delegate_plan,
                 "preserve_plan": preserve_plan,
                 "conflict_plan": conflict_plan,
+                "merge_plan": merge_plan,
                 "ownership_issues": ownership_issues,
                 "conflict_mode_required": len(conflict_plan) > 0,
                 "can_install_with_replace": len(ownership_issues) == 0,
@@ -1485,12 +2532,12 @@ class SparkFrameworkEngine:
             conflict_mode: str = "abort",
         ) -> dict[str, Any]:
             """Install an SCF package from the public registry into the active workspace .github/."""
-            if conflict_mode not in {"abort", "replace"}:
+            if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
                 return _build_install_result(
                     False,
                     error=(
                         f"Unsupported conflict_mode '{conflict_mode}'. "
-                        "Supported modes: abort, replace."
+                        "Supported modes: abort, replace, manual, auto, assisted."
                     ),
                     package=package_id,
                     conflict_mode=conflict_mode,
@@ -1505,6 +2552,7 @@ class SparkFrameworkEngine:
             pkg_version = install_context["pkg_version"]
             min_engine_version = install_context["min_engine_version"]
             file_ownership_policy = install_context["file_ownership_policy"]
+            file_policies = install_context["file_policies"]
             installed_versions = install_context["installed_versions"]
             missing_dependencies = install_context["missing_dependencies"]
             present_conflicts = install_context["present_conflicts"]
@@ -1543,7 +2591,20 @@ class SparkFrameworkEngine:
                     installed_packages=installed_versions,
                 )
 
-            classification_report = _classify_install_files(package_id, files)
+            try:
+                classification_report = _classify_install_files(
+                    package_id,
+                    files,
+                    file_policies=file_policies,
+                )
+            except ValueError as exc:
+                return _build_install_result(
+                    False,
+                    error=str(exc),
+                    package=package_id,
+                    version=pkg_version,
+                    file_ownership_policy=file_ownership_policy,
+                )
             ownership_conflicts = list(classification_report["ownership_issues"])
             if ownership_conflicts:
                 return _build_install_result(
@@ -1583,12 +2644,35 @@ class SparkFrameworkEngine:
 
             preserved = [item["file"] for item in classification_report["preserve_plan"]]
             fetch_errors: list[str] = []
-            staged_files: list[tuple[str, str, str]] = []
+            staged_files: list[tuple[str, str, str, str]] = []
             replaced_files: list[str] = []
+            extended_files: list[str] = []
+            delegated_files = [
+                str(item["file"])
+                for item in classification_report["delegate_plan"]
+                if item.get("classification") == "delegate_skip"
+            ]
+            merge_clean: list[dict[str, Any]] = []
+            merge_conflict: list[dict[str, Any]] = []
+            session_entries: list[dict[str, Any]] = []
+            manifest_targets: list[tuple[str, Path]] = []
+            snapshot_written: list[str] = []
+            snapshot_skipped: list[str] = []
+            merge_candidates = {
+                str(item["file"])
+                for item in classification_report["merge_plan"]
+                if item.get("classification") == "merge_candidate"
+            }
+            used_manual_merge = False
             for item in classification_report["records"]:
                 file_path = str(item["file"])
                 item_classification = str(item["classification"])
                 if item_classification == "preserve_tracked_modified":
+                    continue
+                if item_classification == "delegate_skip":
+                    continue
+                if item_classification == "merge_candidate" and not _supports_stateful_merge(conflict_mode):
+                    preserved.append(file_path)
                     continue
                 if item_classification == "conflict_cross_owner":
                     continue
@@ -1609,12 +2693,13 @@ class SparkFrameworkEngine:
                 except (urllib.error.URLError, OSError) as exc:
                     fetch_errors.append(f"{file_path}: {exc}")
                     continue
-                staged_files.append((file_path, rel, content))
+                staged_files.append((file_path, rel, content, item_classification))
             if fetch_errors:
                 return _build_install_result(
                     False,
                     package=package_id,
                     version=pkg_version,
+                    delegated_files=delegated_files,
                     preserved=preserved,
                     replaced_files=replaced_files,
                     conflicts_detected=classification_report["conflict_plan"],
@@ -1649,22 +2734,172 @@ class SparkFrameworkEngine:
             installed: list[str] = []
             backups: dict[Path, str | None] = {}
             written_paths: list[tuple[str, str, Path]] = []
+            session_payload: dict[str, Any] | None = None
+            auto_validator_results: dict[str, Any] = {}
             try:
-                for file_path, rel, content in staged_files:
+                for file_path, rel, content, staged_classification in staged_files:
                     dest = self._ctx.workspace_root / file_path
-                    previous_content: str | None = None
-                    if dest.is_file():
-                        previous_content = dest.read_text(encoding="utf-8")
+                    previous_content = _read_text_if_possible(dest) if dest.is_file() else None
                     backups[dest] = previous_content
+
+                    if staged_classification == "extend_section":
+                        if dest.exists() and previous_content is None:
+                            raise OSError(f"Cannot extend non-text file: {dest}")
+                        next_text = (
+                            _create_file_with_section(file_path, package_id, content)
+                            if previous_content is None
+                            else _update_package_section(previous_content, package_id, content)
+                        )
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(next_text, encoding="utf-8")
+                        written_paths.append((file_path, rel, dest))
+                        manifest_targets.append((rel, dest))
+                        installed.append(file_path)
+                        extended_files.append(file_path)
+                        continue
+
+                    if file_path in merge_candidates and _supports_stateful_merge(conflict_mode):
+                        base_text = snapshots.load_snapshot(package_id, rel)
+                        ours_text = previous_content
+                        if base_text is None or ours_text is None:
+                            preserved.append(file_path)
+                            snapshot_skipped.append(file_path)
+                            continue
+
+                        used_manual_merge = conflict_mode == "manual"
+                        merge_result = merge_engine.diff3_merge(base_text, ours_text, content)
+                        if merge_result.status in {MERGE_STATUS_CLEAN, MERGE_STATUS_IDENTICAL}:
+                            merged_text = merge_result.merged_text
+                            if merged_text != ours_text:
+                                dest.parent.mkdir(parents=True, exist_ok=True)
+                                dest.write_text(merged_text, encoding="utf-8")
+                                written_paths.append((file_path, rel, dest))
+                            merge_clean.append(
+                                {
+                                    "file": file_path,
+                                    "status": merge_result.status,
+                                }
+                            )
+                            manifest_targets.append((rel, dest))
+                            installed.append(file_path)
+                            continue
+
+                        merged_text = merge_engine.render_with_markers(merge_result)
+                        if conflict_mode in {"manual", "assisted"}:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(merged_text, encoding="utf-8")
+                            written_paths.append((file_path, rel, dest))
+                        merge_conflict.append(
+                            {
+                                "file": file_path,
+                                "status": merge_result.status,
+                                "conflict_count": len(merge_result.conflicts),
+                            }
+                        )
+                        session_entries.append(
+                            _build_session_entry(
+                                file_path,
+                                rel,
+                                base_text,
+                                ours_text,
+                                content,
+                                merged_text,
+                            )
+                        )
+                        continue
+
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(content, encoding="utf-8")
                     written_paths.append((file_path, rel, dest))
-                manifest.upsert_many(
-                    package_id,
-                    pkg_version,
-                    [(rel, dest) for _, rel, dest in written_paths],
-                )
-                installed = [file_path for file_path, _, _ in written_paths]
+                    manifest_targets.append((rel, dest))
+                    installed.append(file_path)
+
+                if session_entries:
+                    session_payload = sessions.create_session(
+                        package_id,
+                        pkg_version,
+                        session_entries,
+                        conflict_mode=conflict_mode,
+                    )
+
+                    if conflict_mode == "auto":
+                        auto_clean_entries: list[dict[str, Any]] = []
+                        remaining_conflict_entries: list[dict[str, Any]] = []
+                        for conflict in list(session_payload.get("files", [])):
+                            conflict_id = str(conflict.get("conflict_id", "")).strip()
+                            resolution = _propose_conflict_resolution(
+                                session_payload,
+                                conflict_id,
+                                persist=False,
+                            )
+                            current = _find_session_entry(session_payload, conflict_id)
+                            if current is None:
+                                continue
+                            current_index, current_entry = current
+                            public_file = str(current_entry.get("file", "")).strip()
+                            manifest_rel = str(current_entry.get("manifest_rel", "")).strip()
+                            workspace_path = str(current_entry.get("workspace_path", public_file)).strip()
+                            dest = self._ctx.workspace_root / workspace_path
+                            validator_results = current_entry.get("validator_results")
+                            if isinstance(validator_results, dict):
+                                auto_validator_results[public_file] = validator_results
+
+                            if resolution.get("success") is True:
+                                proposed_text = str(current_entry.get("proposed_text", "") or "")
+                                dest.parent.mkdir(parents=True, exist_ok=True)
+                                dest.write_text(proposed_text, encoding="utf-8")
+                                written_paths.append((public_file, manifest_rel, dest))
+                                current_entry["resolution_status"] = "approved"
+                                _replace_session_entry(session_payload, current_index, current_entry)
+                                auto_clean_entries.append(
+                                    {
+                                        "file": public_file,
+                                        "status": "auto_resolved",
+                                    }
+                                )
+                                continue
+
+                            marker_text = _render_marker_text(current_entry)
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(marker_text, encoding="utf-8")
+                            written_paths.append((public_file, manifest_rel, dest))
+                            current_entry["resolution_status"] = "manual"
+                            _replace_session_entry(session_payload, current_index, current_entry)
+                            remaining_conflict_entries.append(
+                                {
+                                    "file": public_file,
+                                    "status": MERGE_STATUS_CONFLICT,
+                                    "conflict_count": 1,
+                                }
+                            )
+
+                        merge_clean.extend(auto_clean_entries)
+                        merge_conflict = remaining_conflict_entries
+                        if remaining_conflict_entries:
+                            sessions.save_session(session_payload)
+                        else:
+                            for file_entry in list(session_payload.get("files", [])):
+                                manifest_rel = str(file_entry.get("manifest_rel", "")).strip()
+                                workspace_path = str(file_entry.get("workspace_path", "")).strip()
+                                if manifest_rel and workspace_path:
+                                    manifest_targets.append(
+                                        (manifest_rel, self._ctx.workspace_root / workspace_path)
+                                    )
+                            session_payload = sessions.mark_status(
+                                str(session_payload.get("session_id", "")).strip(),
+                                "auto_completed",
+                                session=session_payload,
+                            )
+
+                if manifest_targets:
+                    manifest.upsert_many(
+                        package_id,
+                        pkg_version,
+                        manifest_targets,
+                    )
+                    snapshot_report = _save_snapshots(package_id, manifest_targets)
+                    snapshot_written.extend(snapshot_report["written"])
+                    snapshot_skipped.extend(snapshot_report["skipped"])
             except OSError as exc:
                 rollback_errors: list[str] = []
                 for _, _, dest in reversed(written_paths):
@@ -1696,12 +2931,35 @@ class SparkFrameworkEngine:
                 package=package_id,
                 version=pkg_version,
                 installed=installed,
+                extended_files=extended_files,
+                delegated_files=delegated_files,
                 preserved=preserved,
                 removed_obsolete_files=removed_files,
                 preserved_obsolete_files=preserved_obsolete,
                 replaced_files=replaced_files,
+                merged_files=[item["file"] for item in merge_clean + merge_conflict],
+                merge_clean=merge_clean,
+                merge_conflict=merge_conflict,
                 conflicts_detected=classification_report["conflict_plan"],
-                resolution_applied="replace" if replaced_files else "none",
+                session_id=None if session_payload is None else session_payload["session_id"],
+                session_status=None if session_payload is None else session_payload["status"],
+                session_expires_at=None if session_payload is None else session_payload["expires_at"],
+                snapshot_written=snapshot_written,
+                snapshot_skipped=snapshot_skipped,
+                requires_user_resolution=len(merge_conflict) > 0,
+                resolution_applied=(
+                    "auto"
+                    if conflict_mode == "auto" and not merge_conflict and session_payload is not None
+                    else "manual"
+                    if conflict_mode == "auto" and merge_conflict
+                    else "assisted"
+                    if conflict_mode == "assisted" and session_payload is not None
+                    else "manual"
+                    if used_manual_merge or (conflict_mode == "manual" and session_payload is not None)
+                    else "replace" if replaced_files else "none"
+                ),
+                validator_results=auto_validator_results if auto_validator_results else None,
+                remaining_conflicts=len(merge_conflict) if merge_conflict else None,
             )
             return success_result
 
@@ -1731,8 +2989,22 @@ class SparkFrameworkEngine:
             }
 
         @self._mcp.tool()
-        async def scf_update_package(package_id: str) -> dict[str, Any]:
+        async def scf_update_package(
+            package_id: str,
+            conflict_mode: str = "abort",
+        ) -> dict[str, Any]:
             """Update one installed SCF package while preserving user-modified files."""
+            if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unsupported conflict_mode '{conflict_mode}'. "
+                        "Supported modes: abort, replace, manual, auto, assisted."
+                    ),
+                    "package": package_id,
+                    "conflict_mode": conflict_mode,
+                }
+
             installed_versions = manifest.get_installed_versions()
             if package_id not in installed_versions:
                 return {
@@ -1782,46 +3054,48 @@ class SparkFrameworkEngine:
                     "version_to": requested_update.get("latest", version_from),
                 }
 
-            apply_report = await scf_apply_updates(package_id)
-            if apply_report.get("success") is False:
+            install_report = await scf_install_package(package_id, conflict_mode=conflict_mode)
+            if install_report.get("success") is False:
                 result = {
                     "success": False,
                     "package": package_id,
-                    "error": apply_report.get("error", "unknown error"),
+                    "error": install_report.get("error", "unknown error"),
                     "version_from": version_from,
                     "version_to": requested_update.get("latest", version_from),
-                    "details": apply_report,
+                    "details": install_report,
                 }
-                if "batch_conflicts" in apply_report:
-                    result["conflicts_detected"] = apply_report["batch_conflicts"]
+                if "conflicts_detected" in install_report:
+                    result["conflicts_detected"] = [
+                        {
+                            "package": package_id,
+                            "conflicts": list(install_report.get("conflicts_detected", [])),
+                        }
+                    ]
                 return result
 
-            applied_items = list(apply_report.get("applied", []))
-            requested_result = next(
-                (item for item in applied_items if item.get("package") == package_id),
-                None,
-            )
-            if requested_result is None:
-                return {
-                    "success": False,
-                    "package": package_id,
-                    "error": f"Update completed without an applied result for '{package_id}'.",
-                    "version_from": version_from,
-                    "version_to": requested_update.get("latest", version_from),
-                    "details": apply_report,
-                }
-
-            preserved_files = list(requested_result.get("preserved", [])) + list(
-                requested_result.get("preserved_obsolete_files", [])
+            preserved_files = list(install_report.get("preserved", [])) + list(
+                install_report.get("preserved_obsolete_files", [])
             )
             return {
                 "success": True,
                 "package": package_id,
                 "version_from": version_from,
-                "version_to": requested_result.get("version", requested_update.get("latest", version_from)),
-                "updated_files": list(requested_result.get("installed", [])),
+                "version_to": install_report.get("version", requested_update.get("latest", version_from)),
+                "updated_files": list(install_report.get("installed", [])),
                 "preserved_files": preserved_files,
-                "removed_obsolete_files": list(requested_result.get("removed_obsolete_files", [])),
+                "removed_obsolete_files": list(install_report.get("removed_obsolete_files", [])),
+                "merged_files": list(install_report.get("merged_files", [])),
+                "merge_clean": list(install_report.get("merge_clean", [])),
+                "merge_conflict": list(install_report.get("merge_conflict", [])),
+                "session_id": install_report.get("session_id"),
+                "session_status": install_report.get("session_status"),
+                "session_expires_at": install_report.get("session_expires_at"),
+                "snapshot_written": list(install_report.get("snapshot_written", [])),
+                "snapshot_skipped": list(install_report.get("snapshot_skipped", [])),
+                "requires_user_resolution": bool(install_report.get("requires_user_resolution", False)),
+                "resolution_applied": install_report.get("resolution_applied", "none"),
+                "validator_results": install_report.get("validator_results"),
+                "remaining_conflicts": install_report.get("remaining_conflicts"),
                 "already_up_to_date": False,
             }
 
@@ -2094,11 +3368,24 @@ class SparkFrameworkEngine:
             pkg_version = install_context["pkg_version"]
             min_engine_version = install_context["min_engine_version"]
             dependencies = install_context["dependencies"]
+            file_policies = install_context["file_policies"]
             installed_versions = install_context["installed_versions"]
             missing_dependencies = install_context["missing_dependencies"]
             present_conflicts = install_context["present_conflicts"]
             engine_compatible = install_context["engine_compatible"]
-            classification_report = _classify_install_files(package_id, files)
+            try:
+                classification_report = _classify_install_files(
+                    package_id,
+                    files,
+                    file_policies=file_policies,
+                )
+            except ValueError as exc:
+                return {
+                    "success": False,
+                    "package": package_id,
+                    "version": pkg_version,
+                    "error": str(exc),
+                }
 
             dependency_issues: list[dict[str, Any]] = []
             if not engine_compatible:
@@ -2129,15 +3416,18 @@ class SparkFrameworkEngine:
                 "package": package_id,
                 "version": pkg_version,
                 "write_plan": classification_report["write_plan"],
+                "extend_plan": classification_report["extend_plan"],
+                "delegate_plan": classification_report["delegate_plan"],
                 "preserve_plan": classification_report["preserve_plan"],
                 "conflict_plan": classification_report["conflict_plan"],
+                "merge_plan": classification_report["merge_plan"],
                 "dependency_issues": dependency_issues,
                 "ownership_issues": classification_report["ownership_issues"],
                 "installed_packages": installed_versions,
                 "conflict_mode_required": classification_report["conflict_mode_required"],
                 "can_install": len(dependency_issues) == 0 and len(classification_report["conflict_plan"]) == 0,
                 "can_install_with_replace": len(dependency_issues) == 0 and classification_report["can_install_with_replace"],
-                "supported_conflict_modes": ["abort", "replace"],
+                "supported_conflict_modes": ["abort", "replace", "manual", "auto", "assisted"],
                 "engine_version": ENGINE_VERSION,
                 "min_engine_version": min_engine_version,
                 "dependencies": dependencies,
@@ -2161,10 +3451,12 @@ class SparkFrameworkEngine:
                     "package": package_id,
                 }
             preserved = manifest.remove_package(package_id)
+            deleted_snapshots = snapshots.delete_package_snapshots(package_id)
             return {
                 "success": True,
                 "package": package_id,
                 "preserved_user_modified": preserved,
+                "deleted_snapshots": deleted_snapshots,
             }
 
         @self._mcp.tool()
@@ -2316,6 +3608,13 @@ class SparkFrameworkEngine:
                             for dest_path in early_identical
                         ],
                     )
+                    _save_snapshots(
+                        "spark-framework-engine",
+                        [
+                            (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
+                            for dest_path in early_identical
+                        ],
+                    )
                 return {
                     "success": True,
                     "already_bootstrapped": True,
@@ -2394,6 +3693,13 @@ class SparkFrameworkEngine:
                         for dest_path in written_paths + identical_paths
                     ],
                 )
+                _save_snapshots(
+                    "spark-framework-engine",
+                    [
+                        (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
+                        for dest_path in written_paths + identical_paths
+                    ],
+                )
 
             return {
                 "success": True,
@@ -2404,7 +3710,268 @@ class SparkFrameworkEngine:
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
             }
 
-        _log.info("Tools registered: 29 total")
+        @self._mcp.tool()
+        async def scf_resolve_conflict_ai(session_id: str, conflict_id: str) -> dict[str, Any]:
+            """Proponi una risoluzione automatica conservativa per un conflitto di merge."""
+            session = sessions.load_active_session(session_id)
+            if session is None:
+                return {
+                    "success": False,
+                    "error": "session_not_found",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            session_status = str(session.get("status", "")).strip() or "unknown"
+            if session_status != "active":
+                return {
+                    "success": False,
+                    "error": "session_not_active",
+                    "session_id": session_id,
+                    "session_status": session_status,
+                    "conflict_id": conflict_id,
+                }
+
+            resolution = _propose_conflict_resolution(session, conflict_id)
+            if resolution.get("error") == "conflict_not_found":
+                return {
+                    "success": False,
+                    "error": "conflict_not_found",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            return {
+                "success": bool(resolution.get("success", False)),
+                "session_id": session_id,
+                "conflict_id": conflict_id,
+                "proposed_text": resolution.get("proposed_text"),
+                "validator_results": resolution.get("validator_results"),
+                "resolution_status": resolution.get("resolution_status", "manual"),
+                "fallback": resolution.get("fallback"),
+                "reason": resolution.get("reason"),
+            }
+
+        @self._mcp.tool()
+        async def scf_approve_conflict(session_id: str, conflict_id: str) -> dict[str, Any]:
+            """Approva e scrivi nel workspace una proposta gia' validata per un conflitto."""
+            session = sessions.load_active_session(session_id)
+            if session is None:
+                return {
+                    "success": False,
+                    "error": "session_not_found",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            session_status = str(session.get("status", "")).strip() or "unknown"
+            if session_status != "active":
+                return {
+                    "success": False,
+                    "error": "session_not_active",
+                    "session_id": session_id,
+                    "session_status": session_status,
+                    "conflict_id": conflict_id,
+                }
+
+            found = _find_session_entry(session, conflict_id)
+            if found is None:
+                return {
+                    "success": False,
+                    "error": "conflict_not_found",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            index, file_entry = found
+            proposed_text = file_entry.get("proposed_text")
+            if not isinstance(proposed_text, str) or not proposed_text:
+                return {
+                    "success": False,
+                    "error": "proposed_text_missing",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            validator_results = file_entry.get("validator_results")
+            if not isinstance(validator_results, dict):
+                validator_results = run_post_merge_validators(
+                    proposed_text,
+                    str(file_entry.get("base_text", "") or ""),
+                    str(file_entry.get("ours_text", "") or ""),
+                    str(file_entry.get("file", file_entry.get("workspace_path", "")) or ""),
+                )
+            if not validator_results.get("passed", False):
+                file_entry["validator_results"] = validator_results
+                file_entry["resolution_status"] = "manual"
+                _replace_session_entry(session, index, file_entry)
+                sessions.save_session(session)
+                return {
+                    "success": False,
+                    "error": "validator_failed",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                    "validator_results": validator_results,
+                }
+
+            workspace_path = str(file_entry.get("workspace_path", "")).strip()
+            dest = self._ctx.workspace_root / workspace_path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(proposed_text, encoding="utf-8")
+
+            file_entry["validator_results"] = validator_results
+            file_entry["resolution_status"] = "approved"
+            _replace_session_entry(session, index, file_entry)
+            sessions.save_session(session)
+
+            return {
+                "success": True,
+                "session_id": session_id,
+                "conflict_id": conflict_id,
+                "approved": True,
+                "remaining_conflicts": _count_remaining_conflicts(session),
+            }
+
+        @self._mcp.tool()
+        async def scf_reject_conflict(session_id: str, conflict_id: str) -> dict[str, Any]:
+            """Rifiuta una proposta e mantiene il file in fallback manuale con marker."""
+            session = sessions.load_active_session(session_id)
+            if session is None:
+                return {
+                    "success": False,
+                    "error": "session_not_found",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            session_status = str(session.get("status", "")).strip() or "unknown"
+            if session_status != "active":
+                return {
+                    "success": False,
+                    "error": "session_not_active",
+                    "session_id": session_id,
+                    "session_status": session_status,
+                    "conflict_id": conflict_id,
+                }
+
+            found = _find_session_entry(session, conflict_id)
+            if found is None:
+                return {
+                    "success": False,
+                    "error": "conflict_not_found",
+                    "session_id": session_id,
+                    "conflict_id": conflict_id,
+                }
+
+            index, file_entry = found
+            marker_text = _render_marker_text(file_entry)
+            workspace_path = str(file_entry.get("workspace_path", "")).strip()
+            dest = self._ctx.workspace_root / workspace_path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(marker_text, encoding="utf-8")
+
+            file_entry["resolution_status"] = "rejected"
+            _replace_session_entry(session, index, file_entry)
+            sessions.save_session(session)
+
+            return {
+                "success": True,
+                "session_id": session_id,
+                "conflict_id": conflict_id,
+                "rejected": True,
+                "fallback": "manual",
+                "remaining_conflicts": _count_remaining_conflicts(session),
+            }
+
+        @self._mcp.tool()
+        async def scf_finalize_update(session_id: str) -> dict[str, Any]:
+            """Finalize a manual merge session after the user resolves all conflict markers."""
+            session = sessions.load_active_session(session_id)
+            if session is None:
+                return {
+                    "success": False,
+                    "error": f"Merge session '{session_id}' not found.",
+                    "session_id": session_id,
+                }
+
+            session_status = str(session.get("status", "")).strip() or "unknown"
+            if session_status != "active":
+                return {
+                    "success": False,
+                    "error": f"Merge session '{session_id}' is not active.",
+                    "session_id": session_id,
+                    "session_status": session_status,
+                }
+
+            package_id = str(session.get("package", "")).strip()
+            package_version = str(session.get("package_version", "")).strip()
+            pending: list[dict[str, Any]] = []
+            written_files: list[str] = []
+            manifest_targets: list[tuple[str, Path]] = []
+            validator_results_map: dict[str, Any] = {}
+            updated_session = dict(session)
+            updated_files = list(updated_session.get("files", []))
+
+            for index, file_entry in enumerate(list(session.get("files", []))):
+                workspace_path = str(file_entry.get("workspace_path", "")).strip()
+                manifest_rel = str(file_entry.get("manifest_rel", "")).strip()
+                public_file = str(file_entry.get("file", workspace_path)).strip()
+                dest = self._ctx.workspace_root / workspace_path
+                if not dest.is_file():
+                    pending.append({
+                        "file": public_file,
+                        "reason": "missing_file",
+                    })
+                    continue
+                content = _read_text_if_possible(dest)
+                if content is None:
+                    pending.append({
+                        "file": public_file,
+                        "reason": "unreadable_text",
+                    })
+                    continue
+                if merge_engine.has_conflict_markers(content):
+                    pending.append({
+                        "file": public_file,
+                        "reason": "conflict_markers_present",
+                    })
+                    continue
+
+                if isinstance(file_entry.get("validator_results"), dict):
+                    validator_results_map[public_file] = file_entry["validator_results"]
+
+                updated_file_entry = dict(file_entry)
+                updated_file_entry["resolution_status"] = "approved"
+                updated_files[index] = MergeSessionManager._normalize_session_file_entry(updated_file_entry)
+                written_files.append(public_file)
+                manifest_targets.append((manifest_rel, dest))
+
+            if pending:
+                return {
+                    "success": False,
+                    "error": "Manual merge session still has unresolved files.",
+                    "session_id": session_id,
+                    "session_status": session_status,
+                    "manual_pending": pending,
+                }
+
+            manifest.upsert_many(package_id, package_version, manifest_targets)
+            snapshot_report = _save_snapshots(package_id, manifest_targets)
+            updated_session["files"] = updated_files
+            finalized_session = sessions.mark_status(session_id, "finalized", session=updated_session)
+            return {
+                "success": True,
+                "session_id": session_id,
+                "session_status": None if finalized_session is None else finalized_session.get("status"),
+                "written_files": written_files,
+                "manifest_updated": [manifest_rel for manifest_rel, _ in manifest_targets],
+                "snapshot_updated": snapshot_report["written"],
+                "snapshot_skipped": snapshot_report["skipped"],
+                "manual_pending": [],
+                "validator_results": validator_results_map,
+            }
+
+        _log.info("Tools registered: 33 total")
 
 
 # ---------------------------------------------------------------------------

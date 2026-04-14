@@ -24,6 +24,7 @@ _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 FrameworkInventory = _module.FrameworkInventory
 ManifestManager = _module.ManifestManager
 RegistryClient = _module.RegistryClient
+SnapshotManager = _module.SnapshotManager
 SparkFrameworkEngine = _module.SparkFrameworkEngine
 WorkspaceContext = _module.WorkspaceContext
 
@@ -181,6 +182,46 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertEqual(result["installed"], [".github/agents/shared.md"])
             self.assertEqual(shared_file.read_text(encoding="utf-8"), "new content")
             self.assertEqual(manifest.get_installed_versions(), {"pkg-b": "2.0.0"})
+            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            self.assertTrue(snapshots.snapshot_exists("pkg-b", "agents/shared.md"))
+            self.assertEqual(
+                snapshots.load_snapshot("pkg-b", "agents/shared.md"),
+                "new content",
+            )
+
+    def test_scf_remove_package_returns_deleted_snapshots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("installed content", encoding="utf-8")
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry(
+                        "agents/shared.md",
+                        "pkg-b",
+                        "installed content",
+                        "2.0.0",
+                    )
+                ]
+            )
+            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            self.assertTrue(snapshots.save_snapshot("pkg-b", "agents/shared.md", target_file))
+
+            fake_mcp = self._build_engine(workspace_root)
+            remove_package = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_remove_package"],
+            )
+
+            result = asyncio.run(remove_package("pkg-b"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["deleted_snapshots"], ["agents/shared.md"])
+            self.assertFalse(snapshots.snapshot_exists("pkg-b", "agents/shared.md"))
+            self.assertFalse(target_file.exists())
 
     def test_scf_install_package_blocks_missing_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -403,6 +444,10 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertTrue(result["conflict_mode_required"])
             self.assertFalse(result["can_install"])
             self.assertTrue(result["can_install_with_replace"])
+            self.assertEqual(
+                result["supported_conflict_modes"],
+                ["abort", "replace", "manual", "auto", "assisted"],
+            )
 
     def test_scf_get_package_info_returns_manifest_v2_and_compatibility(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
