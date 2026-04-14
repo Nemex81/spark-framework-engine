@@ -20,6 +20,7 @@ _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 validate_completeness = _module.validate_completeness
 validate_structural = _module.validate_structural
 validate_tool_coherence = _module.validate_tool_coherence
+run_post_merge_validators = _module.run_post_merge_validators
 
 
 class TestMergeValidators(unittest.TestCase):
@@ -58,11 +59,86 @@ class TestMergeValidators(unittest.TestCase):
             "# Agent\n"
         )
 
-        ok, message = validate_tool_coherence(merged_text, ours_text)
+        ok, message, warning = validate_tool_coherence(merged_text, ours_text)
 
         self.assertFalse(ok)
         self.assertIn("missing_tools", message)
         self.assertIn("scf_get_agent", message)
+        self.assertEqual(warning, "")
+
+    def test_validate_tool_coherence_duplicate_tools_returns_warning_not_error(self) -> None:
+        ours_text = (
+            "---\n"
+            "tools:\n"
+            "  - scf_list_agents\n"
+            "---\n"
+            "# Agent\n"
+        )
+        merged_text = (
+            "---\n"
+            "tools:\n"
+            "  - scf_list_agents\n"
+            "  - scf_list_agents\n"
+            "---\n"
+            "# Agent\n"
+        )
+
+        ok, message, warning = validate_tool_coherence(merged_text, ours_text)
+
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+        self.assertIn("duplicate_tools", warning)
+        self.assertIn("scf_list_agents", warning)
+
+    def test_run_post_merge_validators_result_items_have_warning_field(self) -> None:
+        merged_text = "# Agent\nsome content\n"
+        base_text = "# Agent\nbase\n"
+        ours_text = "# Agent\nours\n"
+
+        result = run_post_merge_validators(merged_text, base_text, ours_text, "agents/test.md")
+
+        for item in result["results"]:
+            self.assertIn("warning", item)
+            self.assertIsInstance(item["warning"], str)
+
+    def test_run_post_merge_validators_payload_has_warnings_list(self) -> None:
+        merged_text = "# Agent\nsome content\n"
+        base_text = "# Agent\nbase\n"
+        ours_text = "# Agent\nours\n"
+
+        result = run_post_merge_validators(merged_text, base_text, ours_text, "agents/test.md")
+
+        self.assertIn("warnings", result)
+        self.assertIsInstance(result["warnings"], list)
+
+    def test_run_post_merge_validators_duplicate_tools_surfaced_as_warning(self) -> None:
+        ours_text = (
+            "---\n"
+            "tools:\n"
+            "  - scf_list_agents\n"
+            "---\n"
+            "# Agent\n"
+        )
+        merged_text = (
+            "---\n"
+            "tools:\n"
+            "  - scf_list_agents\n"
+            "  - scf_list_agents\n"
+            "---\n"
+            "# Agent\n"
+        )
+
+        result = run_post_merge_validators(merged_text, "# Agent\n", ours_text, "agents/test.agent.md")
+
+        self.assertTrue(result["passed"])
+        self.assertIn("passed", result)
+        tool_item = next(r for r in result["results"] if r["check"] == "tool_coherence")
+        self.assertTrue(tool_item["passed"])
+        self.assertEqual(tool_item["message"], "")
+        self.assertIn("duplicate_tools", tool_item["warning"])
+        self.assertIn("scf_list_agents", tool_item["warning"])
+        self.assertTrue(len(result["warnings"]) >= 1)
+        self.assertTrue(any("scf_list_agents" in w for w in result["warnings"]))
 
 
 if __name__ == "__main__":

@@ -364,12 +364,13 @@ class TestMultiOwnerPolicy(unittest.TestCase):
                 ["pkg-a", "pkg-b"],
             )
 
-    def test_remove_package_on_multi_owner_extend_file_preserves_shared_file(self) -> None:
+    def test_remove_package_on_multi_owner_extend_file_strips_section_from_shared_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             github_root = workspace_root / ".github"
             target_file = github_root / "copilot-instructions.md"
             target_file.parent.mkdir(parents=True)
+            # Write with explicit \n to avoid platform CRLF ambiguity in SHA
             shared_text = (
                 "intro\n\n"
                 "<!-- SCF:SECTION:pkg-a:BEGIN -->\n"
@@ -379,7 +380,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
                 "pkg-b rules\n"
                 "<!-- SCF:SECTION:pkg-b:END -->\n"
             )
-            target_file.write_text(shared_text, encoding="utf-8")
+            target_file.write_bytes(shared_text.encode("utf-8"))
 
             manifest = ManifestManager(github_root)
             manifest.save(
@@ -405,12 +406,86 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertTrue(target_file.is_file())
             updated_text = target_file.read_text(encoding="utf-8")
             self.assertIn("pkg-a rules", updated_text)
-            self.assertIn("pkg-b rules", updated_text)
+            self.assertNotIn("pkg-b rules", updated_text)
             self.assertEqual(
                 manifest.get_file_owners("copilot-instructions.md"),
                 ["pkg-a"],
             )
             self.assertEqual(result["deleted_snapshots"], ["copilot-instructions.md"])
+            self.assertEqual(result["preserved_user_modified"], [])
+
+    def test_remove_package_shared_user_modified_strips_section_with_warning(self) -> None:
+        """shared=True, user_modified=True: strip is attempted and applied with WARNING log."""
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            installed_text = (
+                "<!-- SCF:SECTION:pkg-a:BEGIN -->\n"
+                "pkg-a section\n"
+                "<!-- SCF:SECTION:pkg-a:END -->\n"
+                "<!-- SCF:SECTION:pkg-b:BEGIN -->\n"
+                "pkg-b section\n"
+                "<!-- SCF:SECTION:pkg-b:END -->\n"
+            )
+            # Simulate user-modified: write content that differs from manifest SHA
+            user_modified_text = installed_text + "# user addition\n"
+            target_file.write_bytes(user_modified_text.encode("utf-8"))
+
+            manifest = ManifestManager(github_root)
+            # Store SHA of installed_text, not user_modified_text → user_modified = True
+            manifest.save(
+                [
+                    self._entry("copilot-instructions.md", "pkg-a", installed_text, "1.0.0"),
+                    self._entry("copilot-instructions.md", "pkg-b", installed_text, "1.0.0"),
+                ]
+            )
+
+            import logging
+            with self.assertLogs("spark-framework-engine", level=logging.WARNING) as log_ctx:
+                preserved = ManifestManager(github_root).remove_package("pkg-b")
+
+            result_text = target_file.read_text(encoding="utf-8")
+            self.assertNotIn("pkg-b section", result_text)
+            self.assertIn("pkg-a section", result_text)
+            self.assertIn("# user addition", result_text)
+            self.assertEqual(preserved, [])
+            self.assertTrue(
+                any("user-modified shared file" in msg for msg in log_ctx.output)
+            )
+
+    def test_remove_package_shared_user_modified_strip_noop_logs_info_and_not_preserved(self) -> None:
+        """shared=True, user_modified=True, but no SCF section for pkg-b: no-op, not preserved."""
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            installed_text = (
+                "<!-- SCF:SECTION:pkg-a:BEGIN -->\n"
+                "pkg-a section\n"
+                "<!-- SCF:SECTION:pkg-a:END -->\n"
+            )
+            # User modified: different content on disk
+            user_modified_text = installed_text + "# user addition\n"
+            target_file.write_bytes(user_modified_text.encode("utf-8"))
+
+            manifest = ManifestManager(github_root)
+            # Both pkg-a and pkg-b own the file; pkg-b has no section in the file
+            manifest.save(
+                [
+                    self._entry("copilot-instructions.md", "pkg-a", installed_text, "1.0.0"),
+                    self._entry("copilot-instructions.md", "pkg-b", installed_text, "1.0.0"),
+                ]
+            )
+
+            preserved = ManifestManager(github_root).remove_package("pkg-b")
+
+            # File unchanged: strip was a no-op
+            result_text = target_file.read_text(encoding="utf-8")
+            self.assertEqual(result_text, user_modified_text)
+            self.assertEqual(preserved, [])
 
 
 if __name__ == "__main__":

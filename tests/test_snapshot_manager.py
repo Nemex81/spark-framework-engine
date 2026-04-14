@@ -78,5 +78,49 @@ class TestSnapshotManager(unittest.TestCase):
             self.assertEqual(manager.delete_package_snapshots("../pkg-a"), [])
 
 
+    def test_delete_package_snapshots_partial_failure_returns_already_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            snapshots_root = workspace_root / ".github" / "runtime" / "snapshots"
+            manager = SnapshotManager(snapshots_root)
+
+            source_a = workspace_root / "a.md"
+            source_b = workspace_root / "b.md"
+            source_a.write_text("content a", encoding="utf-8")
+            source_b.write_text("content b", encoding="utf-8")
+            manager.save_snapshot("pkg-x", "a.md", source_a)
+            manager.save_snapshot("pkg-x", "b.md", source_b)
+
+            self.assertEqual(sorted(manager.list_package_snapshots("pkg-x")), ["a.md", "b.md"])
+
+            package_root = snapshots_root / "pkg-x"
+            call_count = 0
+            original_unlink = Path.unlink
+
+            def failing_unlink(self: Path, missing_ok: bool = False) -> None:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    raise OSError("simulated failure")
+                original_unlink(self, missing_ok=missing_ok)
+
+            with MagicMock() as _:
+                import unittest.mock as _mock
+                with _mock.patch.object(Path, "unlink", failing_unlink):
+                    result = manager.delete_package_snapshots("pkg-x")
+
+            self.assertEqual(len(result), 1)
+            self.assertIsInstance(result, list)
+
+    def test_delete_package_snapshots_empty_package_returns_empty_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            manager = SnapshotManager(workspace_root / ".github" / "runtime" / "snapshots")
+
+            result = manager.delete_package_snapshots("pkg-nonexistent")
+
+            self.assertEqual(result, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -604,24 +604,24 @@ def validate_completeness(merged_text: str, ours_text: str) -> tuple[bool, str]:
     return (True, "")
 
 
-def validate_tool_coherence(merged_text: str, ours_text: str) -> tuple[bool, str]:
+def validate_tool_coherence(merged_text: str, ours_text: str) -> tuple[bool, str, str]:
     """Validate that tools declared in OURS frontmatter remain present after merge."""
     ours_tools = _normalize_string_list(parse_markdown_frontmatter(ours_text).get("tools", []))
     if not ours_tools:
-        return (True, "tools_block_not_applicable")
+        return (True, "tools_block_not_applicable", "")
 
     merged_tools = _normalize_string_list(parse_markdown_frontmatter(merged_text).get("tools", []))
     if not merged_tools:
-        return (False, "merged_tools_block_missing")
+        return (False, "merged_tools_block_missing", "")
 
     missing = [tool for tool in ours_tools if tool not in merged_tools]
     if missing:
-        return (False, f"missing_tools: {', '.join(missing)}")
+        return (False, f"missing_tools: {', '.join(missing)}", "")
 
     duplicates = sorted({tool for tool in merged_tools if merged_tools.count(tool) > 1})
     if duplicates:
-        return (True, f"duplicate_tools_warning: {', '.join(duplicates)}")
-    return (True, "")
+        return (True, "", f"duplicate_tools: {', '.join(duplicates)}")
+    return (True, "", "")
 
 
 def run_post_merge_validators(
@@ -639,6 +639,7 @@ def run_post_merge_validators(
             "check": "structural",
             "passed": structural_ok,
             "message": structural_msg,
+            "warning": "",
         }
     )
 
@@ -648,22 +649,26 @@ def run_post_merge_validators(
             "check": "completeness",
             "passed": completeness_ok,
             "message": completeness_msg,
+            "warning": "",
         }
     )
 
     if file_rel.endswith(".agent.md"):
-        tool_ok, tool_msg = validate_tool_coherence(merged_text, ours_text)
+        tool_ok, tool_msg, tool_warning = validate_tool_coherence(merged_text, ours_text)
         results.append(
             {
                 "check": "tool_coherence",
                 "passed": tool_ok,
                 "message": tool_msg,
+                "warning": tool_warning,
             }
         )
 
+    warnings = [item["warning"] for item in results if item.get("warning")]
     return {
         "passed": all(bool(item.get("passed")) for item in results),
         "results": results,
+        "warnings": warnings,
     }
 
 
@@ -999,21 +1004,34 @@ class ManifestManager:
                 other_entry.get("package") != package and other_entry.get("file") == entry.get("file")
                 for other_entry in entries
             )
-            if self._is_user_modified(entry, file_path):
-                _log.warning("Preserving user-modified file: %s", file_path)
-                preserved.append(entry["file"])
-            elif shared_with_other_packages:
+            user_modified = self._is_user_modified(entry, file_path)
+            if shared_with_other_packages:
                 if file_path.is_file():
                     try:
                         current_text = file_path.read_text(encoding="utf-8")
                         updated_text = _strip_package_section(current_text, str(entry.get("package", "")).strip())
                         if updated_text != current_text:
+                            if user_modified:
+                                _log.warning(
+                                    "Strip attempted on user-modified shared file (not guaranteed): %s",
+                                    file_path,
+                                )
                             file_path.write_text(updated_text, encoding="utf-8")
                             _log.info("Removed package section for shared file: %s", file_path)
                         else:
-                            _log.info("Preserved shared file owned by other packages: %s", file_path)
+                            if user_modified:
+                                _log.info(
+                                    "Strip no-op on user-modified shared file; leaving unchanged: %s",
+                                    file_path,
+                                )
+                            else:
+                                _log.info("Preserved shared file owned by other packages: %s", file_path)
                     except (OSError, UnicodeDecodeError) as exc:
                         _log.warning("Cannot update shared file %s during package removal: %s", file_path, exc)
+                        preserved.append(entry["file"])
+            elif user_modified:
+                _log.warning("Preserving user-modified file: %s", file_path)
+                preserved.append(entry["file"])
             else:
                 if file_path.is_file():
                     try:
@@ -1234,31 +1252,43 @@ class SnapshotManager:
         if package_root is None or not package_root.exists():
             return []
 
-        deleted_files = sorted(
-            path.relative_to(package_root).as_posix()
-            for path in package_root.rglob("*")
-            if path.is_file()
+        all_files = sorted(
+            (path for path in package_root.rglob("*") if path.is_file()),
+            key=lambda path: len(path.parts),
+            reverse=True,
         )
-
-        try:
-            for file_path in sorted(
-                (path for path in package_root.rglob("*") if path.is_file()),
-                key=lambda path: len(path.parts),
-                reverse=True,
-            ):
+        deleted_files: list[str] = []
+        for file_path in all_files:
+            try:
+                rel = file_path.relative_to(package_root).as_posix()
                 file_path.unlink()
-            for dir_path in sorted(
-                (path for path in package_root.rglob("*") if path.is_dir()),
-                key=lambda path: len(path.parts),
-                reverse=True,
-            ):
-                dir_path.rmdir()
-            package_root.rmdir()
-        except OSError as exc:
-            _log.warning("Cannot delete snapshots for %s: %s", package_id, exc)
-            return []
+                deleted_files.append(rel)
+            except OSError as exc:
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] delete_package_snapshots partial failure for %s: "
+                    "deleted %d file(s), blocked at %s: %s",
+                    package_id,
+                    len(deleted_files),
+                    file_path,
+                    exc,
+                )
+                return sorted(deleted_files)
 
-        return deleted_files
+        for dir_path in sorted(
+            (path for path in package_root.rglob("*") if path.is_dir()),
+            key=lambda path: len(path.parts),
+            reverse=True,
+        ):
+            try:
+                dir_path.rmdir()
+            except OSError:
+                pass
+        try:
+            package_root.rmdir()
+        except OSError:
+            pass
+
+        return sorted(deleted_files)
 
     def snapshot_exists(self, package_id: str, file_rel: str) -> bool:
         """Return True when a snapshot file exists for the given package/file pair."""
