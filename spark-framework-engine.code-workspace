@@ -4,13 +4,13 @@
 			"path": "."
 		},
 		{
-			"path": "../scf-pycode-crafter"
-		},
-		{
 			"path": "../scf-registry"
 		},
 		{
 			"path": "../scf-master-codecrafter"
+		},
+		{
+			"path": "../scf-pycode-crafter"
 		}
 	],
 	"settings": {},
