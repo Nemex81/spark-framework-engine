@@ -93,7 +93,6 @@ class TestSnapshotManager(unittest.TestCase):
 
             self.assertEqual(sorted(manager.list_package_snapshots("pkg-x")), ["a.md", "b.md"])
 
-            package_root = snapshots_root / "pkg-x"
             call_count = 0
             original_unlink = Path.unlink
 

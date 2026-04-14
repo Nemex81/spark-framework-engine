@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
@@ -22,12 +23,12 @@ _module = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
 sys.modules["spark_framework_engine"] = _module
 _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 
-FrameworkInventory = _module.FrameworkInventory
-WorkspaceContext = _module.WorkspaceContext
+FrameworkInventory: Any = _module.FrameworkInventory
+WorkspaceContext: Any = _module.WorkspaceContext
 
 
 class TestFrameworkInventoryListSkills(unittest.TestCase):
-    def _build_inventory(self, workspace_root: Path) -> object:
+    def _build_inventory(self, workspace_root: Path) -> Any:
         ctx = WorkspaceContext(
             workspace_root=workspace_root,
             github_root=workspace_root / ".github",

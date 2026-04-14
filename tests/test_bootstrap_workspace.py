@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
@@ -18,15 +19,15 @@ _module = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
 sys.modules["spark_framework_engine"] = _module
 _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 
-FrameworkInventory = _module.FrameworkInventory
-SnapshotManager = _module.SnapshotManager
-SparkFrameworkEngine = _module.SparkFrameworkEngine
-WorkspaceContext = _module.WorkspaceContext
+FrameworkInventory: Any = _module.FrameworkInventory
+SnapshotManager: Any = _module.SnapshotManager
+SparkFrameworkEngine: Any = _module.SparkFrameworkEngine
+WorkspaceContext: Any = _module.WorkspaceContext
 
 
 class _FakeMCP:
     def __init__(self) -> None:
-        self.tools: dict[str, object] = {}
+        self.tools: dict[str, Any] = {}
 
     def tool(self):
         def _decorator(func):
@@ -43,7 +44,7 @@ class _FakeMCP:
 
 
 class TestBootstrapWorkspace(unittest.TestCase):
-    def _build_engine(self, workspace_root: Path) -> tuple[object, object]:
+    def _build_engine(self, workspace_root: Path) -> tuple[Any, _FakeMCP]:
         ctx = WorkspaceContext(
             workspace_root=workspace_root,
             github_root=workspace_root / ".github",

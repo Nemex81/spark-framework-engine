@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
 
@@ -19,7 +20,7 @@ _module = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
 sys.modules["spark_framework_engine"] = _module
 _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 
-ManifestManager = _module.ManifestManager
+ManifestManager: Any = _module.ManifestManager
 
 
 def _sha256(content: str) -> str:
