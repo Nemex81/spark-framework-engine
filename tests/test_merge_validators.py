@@ -25,7 +25,7 @@ run_post_merge_validators = _module.run_post_merge_validators
 
 class TestMergeValidators(unittest.TestCase):
     def test_validate_structural_when_conflict_markers_present_returns_false(self) -> None:
-        ok, message = validate_structural(
+        ok, message, _ = validate_structural(
             "# Title\n<<<<<<< YOURS\nours\n=======\ntheirs\n>>>>>>> OFFICIAL\n",
             "# Title\nbase\n",
         )
@@ -37,7 +37,7 @@ class TestMergeValidators(unittest.TestCase):
         ours_text = "# Agent\n## Local Rules\nBody\n"
         merged_text = "# Agent\n## Local Rules\nBody\n## Remote Rules\nMore\n"
 
-        ok, message = validate_completeness(merged_text, ours_text)
+        ok, message, _ = validate_completeness(merged_text, ours_text)
 
         self.assertTrue(ok)
         self.assertEqual(message, "")

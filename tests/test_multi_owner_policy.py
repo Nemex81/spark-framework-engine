@@ -414,8 +414,8 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertEqual(result["deleted_snapshots"], ["copilot-instructions.md"])
             self.assertEqual(result["preserved_user_modified"], [])
 
-    def test_remove_package_shared_user_modified_strips_section_with_warning(self) -> None:
-        """shared=True, user_modified=True: strip is attempted and applied with WARNING log."""
+    def test_remove_package_shared_user_modified_validate_passes_writes_file(self) -> None:
+        """shared=True, user_modified=True, validate_structural passes: strip applied, file written, not preserved."""
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             github_root = workspace_root / ".github"
@@ -443,7 +443,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             )
 
             import logging
-            with self.assertLogs("spark-framework-engine", level=logging.WARNING) as log_ctx:
+            with self.assertLogs("spark-framework-engine", level=logging.INFO) as log_ctx:
                 preserved = ManifestManager(github_root).remove_package("pkg-b")
 
             result_text = target_file.read_text(encoding="utf-8")
@@ -452,7 +452,47 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertIn("# user addition", result_text)
             self.assertEqual(preserved, [])
             self.assertTrue(
-                any("user-modified shared file" in msg for msg in log_ctx.output)
+                any("[SPARK-ENGINE][INFO]" in msg and "user-modified shared file" in msg for msg in log_ctx.output)
+            )
+
+    def test_remove_package_shared_user_modified_structural_validation_fails_preserves_file(self) -> None:
+        """shared=True, user_modified=True, validate_structural fails: file preserved, WARNING logged."""
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            # on_disk_text: the entire file is a pkg-b section containing a heading.
+            # Stripping pkg-b leaves an empty result, and base had headings → structural fail.
+            installed_text = "# Title\n"
+            on_disk_text = (
+                "<!-- SCF:SECTION:pkg-b:BEGIN -->\n"
+                "# Title\n"
+                "pkg-b body\n"
+                "<!-- SCF:SECTION:pkg-b:END -->\n"
+            )
+            target_file.write_bytes(on_disk_text.encode("utf-8"))
+
+            manifest = ManifestManager(github_root)
+            # SHA stored for installed_text (differs from on_disk_text) → user_modified = True
+            # Both pkg-a and pkg-b own the file → shared
+            manifest.save(
+                [
+                    self._entry("copilot-instructions.md", "pkg-a", installed_text, "1.0.0"),
+                    self._entry("copilot-instructions.md", "pkg-b", installed_text, "1.0.0"),
+                ]
+            )
+
+            import logging
+            with self.assertLogs("spark-framework-engine", level=logging.WARNING) as log_ctx:
+                preserved = ManifestManager(github_root).remove_package("pkg-b")
+
+            # File must be unchanged
+            result_text = target_file.read_text(encoding="utf-8")
+            self.assertEqual(result_text, on_disk_text)
+            self.assertIn("copilot-instructions.md", preserved)
+            self.assertTrue(
+                any("[SPARK-ENGINE][WARNING]" in msg for msg in log_ctx.output)
             )
 
     def test_remove_package_shared_user_modified_strip_noop_logs_info_and_not_preserved(self) -> None:

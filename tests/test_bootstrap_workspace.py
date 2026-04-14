@@ -59,16 +59,16 @@ class TestBootstrapWorkspace(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
-            expected_copied_files = len(list((_ENGINE_PATH.parent / ".github" / "prompts").glob("scf-*.prompt.md"))) + 3
+            expected_written_files = len(list((_ENGINE_PATH.parent / ".github" / "prompts").glob("scf-*.prompt.md"))) + 3
 
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
 
             self.assertTrue(result["success"])
-            self.assertFalse(result["already_bootstrapped"])
+            self.assertEqual(result["status"], "bootstrapped")
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
-            self.assertEqual(len(result["files_copied"]), expected_copied_files)
+            self.assertEqual(len(result["files_written"]), expected_written_files)
 
     def test_bootstrap_repairs_missing_guide_when_agent_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -82,9 +82,9 @@ class TestBootstrapWorkspace(unittest.TestCase):
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
 
             self.assertTrue(result["success"])
-            self.assertTrue(result["already_bootstrapped"])
+            self.assertEqual(result["status"], "bootstrapped")
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
-            self.assertIn(".github/agents/spark-assistant.agent.md", result["files_skipped"])
+            self.assertIn(".github/agents/spark-assistant.agent.md", result["preserved"])
 
     def test_bootstrap_idempotent_manifest_sync(self) -> None:
         """Second bootstrap on an already-populated workspace must keep the manifest in sync.
@@ -92,7 +92,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
         Scenario: first run copies all files and writes the manifest. The manifest is then
         deleted to simulate a corrupt/missing state. The second run finds all files already
         present with identical SHA-256, skips them, but must still call upsert_many so that
-        manifest.get_installed_versions() returns 'spark-framework-engine' after both runs.
+        manifest.get_installed_versions() returns 'scf-engine-bootstrap' after both runs.
         """
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
@@ -110,7 +110,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             )
             self.assertTrue(
                 snapshots.snapshot_exists(
-                    "spark-framework-engine",
+                    "scf-engine-bootstrap",
                     "agents/spark-assistant.agent.md",
                 )
             )
@@ -118,7 +118,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             # Simulate manifest loss (corrupt / deleted externally).
             manifest_path.unlink()
             self.assertFalse(manifest_path.is_file())
-            deleted_snapshots = snapshots.delete_package_snapshots("spark-framework-engine")
+            deleted_snapshots = snapshots.delete_package_snapshots("scf-engine-bootstrap")
             self.assertIn("agents/spark-assistant.agent.md", deleted_snapshots)
 
             # Second bootstrap — all files already present with identical SHA-256.
@@ -126,23 +126,63 @@ class TestBootstrapWorkspace(unittest.TestCase):
             result2 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
             self.assertTrue(result2["success"])
 
-            # The manifest must now exist again and track the engine package.
+            # The manifest must now exist again and track the engine bootstrap package.
             self.assertTrue(manifest_path.is_file(), "Manifest must be recreated after second bootstrap")
             ManifestManager = _module.ManifestManager
             manifest = ManifestManager(workspace_root / ".github")
             versions = manifest.get_installed_versions()
             self.assertIn(
-                "spark-framework-engine",
+                "scf-engine-bootstrap",
                 versions,
-                "manifest must track spark-framework-engine after idempotent bootstrap",
+                "manifest must track scf-engine-bootstrap after idempotent bootstrap",
             )
             self.assertTrue(
                 snapshots.snapshot_exists(
-                    "spark-framework-engine",
+                    "scf-engine-bootstrap",
                     "agents/spark-assistant.agent.md",
                 ),
                 "Snapshots must be recreated for identical bootstrap files",
             )
+
+    def test_bootstrap_returns_already_bootstrapped_when_sentinel_tracked_and_matching(self) -> None:
+        """status='already_bootstrapped' when sentinel is tracked with matching SHA."""
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            # First bootstrap writes all files and manifest.
+            result1 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertEqual(result1["status"], "bootstrapped")
+
+            # Second bootstrap — sentinel tracked, SHA still matches.
+            result2 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertTrue(result2["success"])
+            self.assertEqual(result2["status"], "already_bootstrapped")
+            self.assertEqual(result2["files_written"], [])
+            self.assertEqual(result2["preserved"], [])
+
+    def test_bootstrap_returns_user_modified_when_sentinel_tracked_and_modified(self) -> None:
+        """status='user_modified' when sentinel is tracked but user has modified it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            # First bootstrap.
+            result1 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertEqual(result1["status"], "bootstrapped")
+
+            # Modify the sentinel on disk to simulate user edit.
+            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel.write_text("# user modified content", encoding="utf-8")
+
+            # Second bootstrap — sentinel tracked but SHA mismatch.
+            result2 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertTrue(result2["success"])
+            self.assertEqual(result2["status"], "user_modified")
+            self.assertIn("agents/spark-assistant.agent.md", result2["preserved"])
+            self.assertEqual(result2["files_written"], [])
+            # User modification preserved.
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "# user modified content")
 
 
 if __name__ == "__main__":

@@ -569,39 +569,39 @@ def _extract_markdown_headings(text: str) -> list[str]:
     return [match.group(2).strip() for match in _MARKDOWN_HEADING_RE.finditer(normalized)]
 
 
-def validate_structural(merged_text: str, base_text: str) -> tuple[bool, str]:
+def validate_structural(merged_text: str, base_text: str) -> tuple[bool, str, str]:
     """Validate conflict markers, frontmatter delimiters and basic markdown structure."""
     normalized_merged = _normalize_merge_text(merged_text)
     normalized_base = _normalize_merge_text(base_text)
     merge_engine = MergeEngine()
 
     if merge_engine.has_conflict_markers(normalized_merged):
-        return (False, "conflict_markers_present")
+        return (False, "conflict_markers_present", "")
 
     base_frontmatter = _extract_frontmatter_block(normalized_base)
     merged_frontmatter = _extract_frontmatter_block(normalized_merged)
     if base_frontmatter is not None and merged_frontmatter is None:
-        return (False, "frontmatter_missing_or_unbalanced")
+        return (False, "frontmatter_missing_or_unbalanced", "")
     if normalized_merged.startswith("---") and merged_frontmatter is None:
-        return (False, "frontmatter_missing_or_unbalanced")
+        return (False, "frontmatter_missing_or_unbalanced", "")
 
     if _extract_markdown_headings(normalized_base) and not _extract_markdown_headings(normalized_merged):
-        return (False, "base_headings_removed")
+        return (False, "base_headings_removed", "")
 
-    return (True, "")
+    return (True, "", "")
 
 
-def validate_completeness(merged_text: str, ours_text: str) -> tuple[bool, str]:
+def validate_completeness(merged_text: str, ours_text: str) -> tuple[bool, str, str]:
     """Validate that H1/H2 headings from OURS survive in the merged content."""
     ours_headings = _extract_markdown_headings(ours_text)
     if not ours_headings:
-        return (True, "no_h1_h2_headings_in_ours")
+        return (True, "no_h1_h2_headings_in_ours", "")
 
     merged_headings = {heading.casefold() for heading in _extract_markdown_headings(merged_text)}
     missing = [heading for heading in ours_headings if heading.casefold() not in merged_headings]
     if missing:
-        return (False, f"missing_headings: {', '.join(missing)}")
-    return (True, "")
+        return (False, f"missing_headings: {', '.join(missing)}", "")
+    return (True, "", "")
 
 
 def validate_tool_coherence(merged_text: str, ours_text: str) -> tuple[bool, str, str]:
@@ -633,23 +633,23 @@ def run_post_merge_validators(
     """Run all post-merge validators and return a structured result."""
     results: list[dict[str, Any]] = []
 
-    structural_ok, structural_msg = validate_structural(merged_text, base_text)
+    structural_ok, structural_msg, structural_warning = validate_structural(merged_text, base_text)
     results.append(
         {
             "check": "structural",
             "passed": structural_ok,
             "message": structural_msg,
-            "warning": "",
+            "warning": structural_warning,
         }
     )
 
-    completeness_ok, completeness_msg = validate_completeness(merged_text, ours_text)
+    completeness_ok, completeness_msg, completeness_warning = validate_completeness(merged_text, ours_text)
     results.append(
         {
             "check": "completeness",
             "passed": completeness_ok,
             "message": completeness_msg,
-            "warning": "",
+            "warning": completeness_warning,
         }
     )
 
@@ -1012,16 +1012,26 @@ class ManifestManager:
                         updated_text = _strip_package_section(current_text, str(entry.get("package", "")).strip())
                         if updated_text != current_text:
                             if user_modified:
-                                _log.warning(
-                                    "Strip attempted on user-modified shared file (not guaranteed): %s",
-                                    file_path,
-                                )
-                            file_path.write_text(updated_text, encoding="utf-8")
-                            _log.info("Removed package section for shared file: %s", file_path)
+                                structural_ok, _, _ = validate_structural(updated_text, current_text)
+                                if not structural_ok:
+                                    _log.warning(
+                                        "[SPARK-ENGINE][WARNING] Structural validation failed for user-modified shared file after strip; preserving: %s",
+                                        file_path,
+                                    )
+                                    preserved.append(entry["file"])
+                                else:
+                                    file_path.write_text(updated_text, encoding="utf-8")
+                                    _log.info(
+                                        "[SPARK-ENGINE][INFO] Removed package section for user-modified shared file: %s",
+                                        file_path,
+                                    )
+                            else:
+                                file_path.write_text(updated_text, encoding="utf-8")
+                                _log.info("Removed package section for shared file: %s", file_path)
                         else:
                             if user_modified:
                                 _log.info(
-                                    "Strip no-op on user-modified shared file; leaving unchanged: %s",
+                                    "[SPARK-ENGINE][INFO] Strip no-op on user-modified shared file; leaving unchanged: %s",
                                     file_path,
                                 )
                             else:
@@ -3595,13 +3605,14 @@ class SparkFrameworkEngine:
         @self._mcp.tool()
         async def scf_bootstrap_workspace() -> dict[str, Any]:
             """Bootstrap the base SPARK prompts, admin agent and user guide agent into this workspace."""
+            _BOOTSTRAP_PKG = "scf-engine-bootstrap"
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
             agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
             guide_source = engine_github_root / "instructions" / "spark-assistant-guide.instructions.md"
             workspace_github_root = self._ctx.github_root
             sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
-            sentinel_exists = sentinel.is_file()
+            sentinel_rel = "agents/spark-assistant.agent.md"
 
             prompt_sources = sorted(prompts_source_dir.glob("scf-*.prompt.md"))
             bootstrap_targets: list[tuple[Path, Path]] = [
@@ -3615,44 +3626,30 @@ class SparkFrameworkEngine:
                 (guide_source, workspace_github_root / "instructions" / "spark-assistant-guide.instructions.md")
             )
 
-            if sentinel_exists and all(dest_path.is_file() for _, dest_path in bootstrap_targets):
-                present_files = [
-                    dest_path.relative_to(self._ctx.workspace_root).as_posix()
-                    for _, dest_path in bootstrap_targets
-                    if dest_path.is_file()
-                ]
-                # Re-sync manifest for files whose content still matches the source.
-                # This ensures manifest integrity even if the file was deleted externally.
-                early_identical = [
-                    dest_path
-                    for source_path, dest_path in bootstrap_targets
-                    if dest_path.is_file()
-                    and manifest._sha256(dest_path) == manifest._sha256(source_path)
-                ]
-                if early_identical:
-                    manifest.upsert_many(
-                        "spark-framework-engine",
-                        ENGINE_VERSION,
-                        [
-                            (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
-                            for dest_path in early_identical
-                        ],
-                    )
-                    _save_snapshots(
-                        "spark-framework-engine",
-                        [
-                            (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
-                            for dest_path in early_identical
-                        ],
-                    )
-                return {
-                    "success": True,
-                    "already_bootstrapped": True,
-                    "files_copied": [],
-                    "files_skipped": present_files,
-                    "workspace": str(self._ctx.workspace_root),
-                    "note": "Bootstrap assets already present in this workspace. Run /scf-list-available to inspect the package catalog.",
-                }
+            # Sentinel-based idempotency gate.
+            if sentinel.is_file():
+                user_mod = manifest.is_user_modified(sentinel_rel)
+                if user_mod is False:
+                    # Tracked with matching SHA — workspace already bootstrapped.
+                    return {
+                        "success": True,
+                        "status": "already_bootstrapped",
+                        "files_written": [],
+                        "preserved": [],
+                        "workspace": str(self._ctx.workspace_root),
+                        "note": "Bootstrap assets already present and verified. Run /scf-list-available to inspect the package catalog.",
+                    }
+                if user_mod is True:
+                    # Sentinel tracked but modified by user — do not overwrite.
+                    return {
+                        "success": True,
+                        "status": "user_modified",
+                        "files_written": [],
+                        "preserved": [sentinel_rel],
+                        "workspace": str(self._ctx.workspace_root),
+                        "note": "Sentinel file has been modified by user. No files overwritten.",
+                    }
+                # user_mod is None → sentinel exists but not tracked; fall through to copy.
 
             missing_sources = [
                 str(source_path)
@@ -3662,15 +3659,15 @@ class SparkFrameworkEngine:
             if missing_sources:
                 return {
                     "success": False,
-                    "already_bootstrapped": sentinel_exists,
-                    "files_copied": [],
-                    "files_skipped": [],
+                    "status": "error",
+                    "files_written": [],
+                    "preserved": [],
                     "workspace": str(self._ctx.workspace_root),
                     "note": f"Bootstrap sources missing from engine repository: {missing_sources}",
                 }
 
-            files_copied: list[str] = []
-            files_skipped: list[str] = []
+            files_written: list[str] = []
+            preserved: list[str] = []
             written_paths: list[Path] = []
             identical_paths: list[Path] = []
 
@@ -3683,13 +3680,13 @@ class SparkFrameworkEngine:
                             identical_paths.append(dest_path)
                         else:
                             _log.warning("Bootstrap file preserved (existing different content): %s", rel_path)
-                        files_skipped.append(rel_path)
+                            preserved.append(rel_path)
                         continue
 
                     dest_path.parent.mkdir(parents=True, exist_ok=True)
                     dest_path.write_bytes(source_path.read_bytes())
                     written_paths.append(dest_path)
-                    files_copied.append(rel_path)
+                    files_written.append(rel_path)
                     sys.stderr.write(
                         f"[SPARK-ENGINE][INFO] Bootstrapped: {dest_path.relative_to(workspace_github_root).as_posix()}\n"
                     )
@@ -3707,16 +3704,16 @@ class SparkFrameworkEngine:
                     rollback_note = f" Rollback issues: {rollback_errors}"
                 return {
                     "success": False,
-                    "already_bootstrapped": sentinel_exists,
-                    "files_copied": [],
-                    "files_skipped": files_skipped,
+                    "status": "error",
+                    "files_written": [],
+                    "preserved": preserved,
                     "workspace": str(self._ctx.workspace_root),
                     "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 }
 
             if written_paths or identical_paths:
                 manifest.upsert_many(
-                    "spark-framework-engine",
+                    _BOOTSTRAP_PKG,
                     ENGINE_VERSION,
                     [
                         (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
@@ -3724,7 +3721,7 @@ class SparkFrameworkEngine:
                     ],
                 )
                 _save_snapshots(
-                    "spark-framework-engine",
+                    _BOOTSTRAP_PKG,
                     [
                         (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
                         for dest_path in written_paths + identical_paths
@@ -3733,9 +3730,9 @@ class SparkFrameworkEngine:
 
             return {
                 "success": True,
-                "already_bootstrapped": sentinel_exists,
-                "files_copied": files_copied,
-                "files_skipped": files_skipped,
+                "status": "bootstrapped",
+                "files_written": files_written,
+                "preserved": preserved,
                 "workspace": str(self._ctx.workspace_root),
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
             }
