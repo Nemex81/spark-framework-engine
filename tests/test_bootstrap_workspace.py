@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
 
@@ -205,6 +205,52 @@ class TestBootstrapWorkspace(unittest.TestCase):
 
             second = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
             self.assertEqual(second["status"], "bootstrapped")
+            self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
+
+    def test_bootstrap_install_base_installs_spark_base_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            with (
+                patch.object(
+                    _module.RegistryClient,
+                    "list_packages",
+                    return_value=[
+                        {
+                            "id": "spark-base",
+                            "description": "SPARK Base Layer",
+                            "repo_url": "https://github.com/example/spark-base",
+                            "latest_version": "1.1.0",
+                            "status": "stable",
+                        }
+                    ],
+                ),
+                patch.object(
+                    _module.RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "spark-base",
+                        "version": "1.1.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/spark-guide.agent.md"],
+                    },
+                ),
+                patch.object(_module.RegistryClient, "fetch_raw_file", return_value="base guide"),
+            ):
+                result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True))
+
+            manifest = ManifestManager(workspace_root / ".github")
+            guide_path = workspace_root / ".github" / "agents" / "spark-guide.agent.md"
+
+            self.assertTrue(result["success"])
+            self.assertTrue(result["install_base_requested"])
+            self.assertEqual(result["status"], "bootstrapped_and_installed")
+            self.assertTrue(result["base_install"]["success"])
+            self.assertEqual(guide_path.read_text(encoding="utf-8"), "base guide")
             self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
 
 

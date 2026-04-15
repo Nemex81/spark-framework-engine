@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.1.0"
+ENGINE_VERSION: str = "2.1.1"
 
 
 # ---------------------------------------------------------------------------
@@ -3644,8 +3644,8 @@ class SparkFrameworkEngine:
             return inventory.set_orchestrator_state(patch)
 
         @self._mcp.tool()
-        async def scf_bootstrap_workspace() -> dict[str, Any]:
-            """Bootstrap the base SPARK prompts, admin agent and user guide agent into this workspace."""
+        async def scf_bootstrap_workspace(install_base: bool = False) -> dict[str, Any]:
+            """Bootstrap the base SPARK assets into this workspace and optionally install spark-base."""
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
             agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
@@ -3653,6 +3653,43 @@ class SparkFrameworkEngine:
             workspace_github_root = self._ctx.github_root
             sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
             sentinel_rel = "agents/spark-assistant.agent.md"
+
+            async def _finalize_bootstrap_result(result: dict[str, Any]) -> dict[str, Any]:
+                result["install_base_requested"] = install_base
+                if not install_base:
+                    return result
+
+                installed_versions = manifest.get_installed_versions()
+                if "spark-base" in installed_versions:
+                    result["base_install"] = {
+                        "success": True,
+                        "status": "already_installed",
+                        "package": "spark-base",
+                        "version": installed_versions["spark-base"],
+                    }
+                    result["note"] = f"{result['note']} spark-base is already installed."
+                    return result
+
+                base_install = await scf_install_package("spark-base")
+                result["base_install"] = base_install
+                if not base_install.get("success", False):
+                    result["success"] = False
+                    result["bootstrap_status"] = result["status"]
+                    result["status"] = "base_install_failed"
+                    result["note"] = (
+                        "Bootstrap completed, but spark-base installation failed. "
+                        f"Details: {base_install.get('error', 'unknown error')}"
+                    )
+                    return result
+
+                result["bootstrap_status"] = result["status"]
+                if result["status"] == "already_bootstrapped":
+                    result["status"] = "already_bootstrapped_and_installed"
+                    result["note"] = "Bootstrap assets already present and spark-base installed successfully."
+                else:
+                    result["status"] = "bootstrapped_and_installed"
+                    result["note"] = "Bootstrap completed and spark-base installed successfully."
+                return result
 
             prompt_sources = sorted(prompts_source_dir.glob("scf-*.prompt.md"))
             bootstrap_targets: list[tuple[Path, Path]] = [
@@ -3671,14 +3708,14 @@ class SparkFrameworkEngine:
                 user_mod = manifest.is_user_modified(sentinel_rel)
                 if user_mod is False:
                     # Tracked with matching SHA — workspace already bootstrapped.
-                    return {
+                    return await _finalize_bootstrap_result({
                         "success": True,
                         "status": "already_bootstrapped",
                         "files_written": [],
                         "preserved": [],
                         "workspace": str(self._ctx.workspace_root),
                         "note": "Bootstrap assets already present and verified. Run /scf-list-available to inspect the package catalog.",
-                    }
+                    })
                 if user_mod is True:
                     # Sentinel tracked but modified by user — do not overwrite.
                     return {
@@ -3687,6 +3724,7 @@ class SparkFrameworkEngine:
                         "files_written": [],
                         "preserved": [sentinel_rel],
                         "workspace": str(self._ctx.workspace_root),
+                        "install_base_requested": install_base,
                         "note": "Sentinel file has been modified by user. No files overwritten.",
                     }
                 # user_mod is None → sentinel exists but not tracked; fall through to copy.
@@ -3703,6 +3741,7 @@ class SparkFrameworkEngine:
                     "files_written": [],
                     "preserved": [],
                     "workspace": str(self._ctx.workspace_root),
+                    "install_base_requested": install_base,
                     "note": f"Bootstrap sources missing from engine repository: {missing_sources}",
                 }
 
@@ -3748,6 +3787,7 @@ class SparkFrameworkEngine:
                     "files_written": [],
                     "preserved": preserved,
                     "workspace": str(self._ctx.workspace_root),
+                    "install_base_requested": install_base,
                     "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 }
 
@@ -3773,14 +3813,14 @@ class SparkFrameworkEngine:
                         bootstrap_manifest_targets,
                     )
 
-            return {
+            return await _finalize_bootstrap_result({
                 "success": True,
                 "status": "bootstrapped",
                 "files_written": files_written,
                 "preserved": preserved,
                 "workspace": str(self._ctx.workspace_root),
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
-            }
+            })
 
         @self._mcp.tool()
         async def scf_resolve_conflict_ai(session_id: str, conflict_id: str) -> dict[str, Any]:

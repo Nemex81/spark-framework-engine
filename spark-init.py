@@ -198,6 +198,7 @@ def _bootstrap_github_files(engine_root: Path, workspace_root: Path) -> list[str
 
     - ``agents/spark-assistant.agent.md``
     - ``agents/spark-engine-maintainer.agent.md``
+    - ``agents/spark-guide.agent.md``
     - ``instructions/spark-assistant-guide.instructions.md``
     - All ``prompts/scf-*.prompt.md`` files found in the engine
 
@@ -225,6 +226,7 @@ def _bootstrap_github_files(engine_root: Path, workspace_root: Path) -> list[str
     static_files = [
         "agents/spark-assistant.agent.md",
         "agents/spark-engine-maintainer.agent.md",
+        "agents/spark-guide.agent.md",
         "instructions/spark-assistant-guide.instructions.md",
     ]
 

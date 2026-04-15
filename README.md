@@ -95,16 +95,17 @@ pip install mcp
 - Lo script configura in autonomia il progetto utente:
 
   - crea o aggiorna `<progetto>.code-workspace`
-  - crea o aggiorna `.vscode/settings.json`
+  - crea o aggiorna `.vscode/mcp.json`
   - copia il set minimo di file SPARK in `.github/`
 
 - Al termine stampa un riepilogo simile a questo:
 
     ```text
     [SPARK] .code-workspace → creato: mio-progetto.code-workspace
-    [SPARK] .vscode/settings.json → creato
+    [SPARK] .vscode/mcp.json → creato
     [SPARK] .github/agents/spark-assistant.agent.md → copiato
     [SPARK] .github/agents/spark-engine-maintainer.agent.md → copiato
+    [SPARK] .github/agents/spark-guide.agent.md → copiato
     [SPARK] .github/instructions/spark-assistant-guide.instructions.md → copiato
     [SPARK] .github/prompts/scf-install.prompt.md → copiato
     [SPARK] .github/prompts/scf-list-available.prompt.md → copiato
@@ -130,7 +131,7 @@ pip install mcp
 - Se esegui di nuovo lo script sullo stesso progetto:
 
   - il `.code-workspace` viene aggiornato, non ricreato
-  - `.vscode/settings.json` viene aggiornato, non ricreato
+  - `.vscode/mcp.json` viene aggiornato, non ricreato
   - i file `.github/` gia presenti e non modificati vengono saltati
     silenziosamente
   - i file `.github/` modificati dall'utente vengono preservati
@@ -173,8 +174,8 @@ significa che il server non sa dove si trova il progetto attivo.
 
 Da `1.8.1` il resolver del motore e piu difensivo: se `WORKSPACE_FOLDER`
 manca o punta a una cartella palesemente non valida, il motore prova prima a
-ricostruire il workspace dai marker locali (`.vscode/settings.json`,
-`.vscode/mcp.json`, `*.code-workspace`) e poi dai marker SCF in `.github/`
+ricostruire il workspace dai marker locali (`.vscode/mcp.json`, `*.code-workspace`)
+e poi dai marker SCF in `.github/`
 prima di fare fallback sul `cwd`.
 
 ## Prima Configurazione
@@ -191,6 +192,7 @@ Per usare SPARK la prima volta in un workspace utente:
   - 8 prompt `scf-*.prompt.md`
   - `spark-assistant.agent.md`
   - `spark-engine-maintainer.agent.md`
+  - `spark-guide.agent.md`
   - `spark-assistant-guide.instructions.md`
 
 - Usa `spark-assistant` come punto di ingresso operativo nel workspace bootstrap-pato.
@@ -205,6 +207,8 @@ Per usare SPARK la prima volta in un workspace utente:
 
 Il bootstrap eseguito da `spark-init.py` non registra file nel manifest runtime
 dei pacchetti: prepara solo gli asset minimi di ingresso al sistema.
+Per il bootstrap gestito dal manifest e l'onboarding in un passo, usa
+`scf_bootstrap_workspace(install_base=True)` una volta aperto il workspace in VS Code.
 
 ---
 
@@ -281,7 +285,7 @@ scf_verify_workspace()
 scf_verify_system()
 scf_get_runtime_state()
 scf_update_runtime_state(patch)
-scf_bootstrap_workspace()
+scf_bootstrap_workspace(install_base=False)
 scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()
@@ -299,11 +303,15 @@ scf_approve_conflict(session_id, conflict_id)
 scf_reject_conflict(session_id, conflict_id)
 ```
 
-`scf_bootstrap_workspace()` copia nel workspace utente il set base di bootstrap:
+`scf_bootstrap_workspace(install_base=False)` copia nel workspace utente il set base di bootstrap:
 gli 8 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
 `spark-guide.agent.md`, e l'instruction `spark-assistant-guide.instructions.md`.
 Se il workspace e gia bootstrap-pato ma manca qualche asset base, il tool copia
 solo i file mancanti.
+
+Con `scf_bootstrap_workspace(install_base=True)` il motore prova anche a
+installare `spark-base` usando il normale preflight del registry e del manifest.
+Se `spark-base` e gia installato, il passo viene saltato senza reinstallazione.
 
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,

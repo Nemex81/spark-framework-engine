@@ -251,6 +251,7 @@ def _make_engine_with_assets(base: Path) -> tuple[Path, Path]:
         "maintainer",
         encoding="utf-8",
     )
+    (gh / "agents" / "spark-guide.agent.md").write_text("guide-agent", encoding="utf-8")
     (gh / "instructions" / "spark-assistant-guide.instructions.md").write_text(
         "guide", encoding="utf-8"
     )
@@ -272,6 +273,7 @@ def test_bootstrap_github_files_copies_missing_files(
     assert (
         workspace_root / ".github" / "agents" / "spark-engine-maintainer.agent.md"
     ).exists()
+    assert (workspace_root / ".github" / "agents" / "spark-guide.agent.md").exists()
     assert (
         workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md"
     ).exists()

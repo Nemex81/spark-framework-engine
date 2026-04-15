@@ -6,6 +6,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.1.1] — 2026-04-15
+
+### Changed
+
+- `scf_bootstrap_workspace(install_base=True)` puo' ora completare il bootstrap MCP e tentare subito l'installazione gestita di `spark-base`, saltando il passo se il pacchetto e gia installato.
+- `spark-init.py` copia ora anche `spark-guide.agent.md` per allineare lo script di inizializzazione al bootstrap MCP del motore.
+- README allineato ai file reali scritti da `spark-init.py` (`.vscode/mcp.json`) e al nuovo flusso di onboarding a un passo.
+
+### Fixed
+
+- Aggiornata la cache locale del registry bundlata con il motore al formato `2.0` e all'inventario pacchetti corrente.
+- Allineato `scf-pycode-crafter` a `engine_min_version: 2.1.0` nel registry per riflettere la dipendenza effettiva dalla chain `spark-base -> scf-master-codecrafter -> scf-pycode-crafter`.
+
+### Notes
+
+- `spark-init.py` resta intenzionalmente limitato al bootstrap locale minimo: l'installazione dei pacchetti continua a passare dal motore MCP per preservare manifest, ownership e preflight.
+
+---
+
 ## [2.1.0] — 2026-04-15
 
 ### Added
