@@ -299,6 +299,7 @@ successivo quando si installa `scf-master-codecrafter`.
   - Intervento: leggere il contenuto. Se contiene riferimenti espliciti a
     `scf-master-codecrafter`, sostituire con `spark-base`. Altrimenti: zero
     modifiche (è già un template generico).
+  - **Nota conteggio**: se G12 non migra, il totale file spark-base scende da 69 a 68.
 
 ---
 
@@ -406,14 +407,22 @@ successivo quando si installa `scf-master-codecrafter`.
 
 2.3. Aggiorna changelog con voce `[2.0.0]`.
 
+2.4. SemVer bump previsto:
+
+| Pacchetto | Prima | Dopo | Bump | Motivazione |
+|-----------|-------|------|------|-------------|
+| spark-base | — | 1.0.0 | NEW | Nuovo pacchetto |
+| scf-master-codecrafter | 1.0.0 | 2.0.0 | MAJOR | Perde 50+ file, nuova dependency |
+| scf-pycode-crafter | 2.0.0 | 2.0.0 | nessuno | Nessuna modifica |
+
 ### Step 3 — Dry-run manifest spark-base
 
 3.1. Valida `package-manifest.json` di spark-base prima del deploy.
   - Se esiste `scf_preview_install`, usarlo per verificare manifest,
     dipendenze, conflitti ownership e write plan.
   - Stato reale del motore: `scf_preview_install` **non esiste** oggi.
-  - Quindi questo step è bloccato da prerequisito engine finché non viene
-    introdotto un preview tool equivalente.
+  - Questo step è raccomandato prima del deploy ma non bloccante: la migrazione
+    può procedere con `scf_verify_workspace` come precheck sufficiente.
 
 ### Step 4 — Aggiornamento registry
 
@@ -440,15 +449,7 @@ successivo quando si installa `scf-master-codecrafter`.
 
 5.5. `scf_verify_workspace` — verifica `is_clean: true`.
 
-### Step 4 — SemVer bump
-
-| Pacchetto | Prima | Dopo | Bump | Motivazione |
-|-----------|-------|------|------|-------------|
-| spark-base | — | 1.0.0 | NEW | Nuovo pacchetto |
-| scf-master-codecrafter | 1.0.0 | 2.0.0 | MAJOR | Perde 50+ file, nuova dependency |
-| scf-pycode-crafter | 2.0.0 | 2.0.0 | nessuno | Nessuna modifica |
-
-### Step 5 — Gate di verifica post-migrazione
+### Step 6 — Gate di verifica post-migrazione
 
 - V1: `scf_list_installed_packages` → 3 pacchetti con versioni corrette
 - V2: `scf_verify_workspace` → `is_clean: true`, `modified: []`
@@ -528,6 +529,9 @@ successivo quando si installa `scf-master-codecrafter`.
 | File totali in master-codecrafter v2.0.0 | 12 |
 | File invariati in pycode-crafter | 12 |
 | File che richiedono edit al contenuto | 3 (AGENTS.md, copilot-instructions.md, project-profile.md) |
+
+> **Nota**: il conteggio 69 file spark-base è valido solo se G12 (`project-profile.md`)
+> migra (con o senza edit). Se G12 non migra, il totale diventa 68.
 | Nuovi file da creare | 2 (AGENTS-master.md, changelogs/spark-base.md) |
 | Modifiche al motore engine | 1 prerequisito consigliato (`scf_preview_install` o equivalente) |
 | Tool MCP nuovi richiesti | 1 prerequisito consigliato (`scf_preview_install` o equivalente) |
