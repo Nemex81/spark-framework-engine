@@ -156,8 +156,9 @@ Agent-Design, Agent-CodeRouter, Agent-CodeUI
 
 3.3. Se `dependency_issues` non è vuoto: risolvere prima di procedere.
 
-> **Nota**: questo step è raccomandato, non bloccante. Se `scf_verify_workspace` è pulito
-> e registry non è ancora aggiornato, il dry-run può essere fatto subito dopo Step 4.
+> **Nota**: questo step è raccomandato, non bloccante. **SB-4 deve precedere SB-3**: senza
+> l'entry registry di spark-base, `scf_plan_install` non riesce a localizzare il manifest
+> remoto e restituisce errore.
 
 **File di lavoro**: [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)
 
@@ -267,13 +268,15 @@ Se `scf_verify_workspace` è `is_clean: true` al momento del remove, questo non 
 
 ```
 SB-0 (preflight)
-  └─> SB-1 (crea repo spark-base) [parallelo a SB-2]
-  └─> SB-2 (aggiorna master-codecrafter) [parallelo a SB-1]
-        └─> SB-3 (dry-run, richiede SB-1 + SB-4)
-        └─> SB-4 (aggiorna registry, richiede SB-1 + SB-2)
-              └─> SB-5 (migrazione workspace, richiede SB-3 + SB-4)
-                    └─> SB-6 (gate verifica)
+  ├─> SB-1 (crea repo spark-base)    ┐
+  └─> SB-2 (aggiorna master v2.0.0)  ├─ paralleli
+                                      ┘
+                                        └─> SB-4 (aggiorna registry, richiede SB-1 + SB-2)
+                                              └─> SB-3 (dry-run, richiede SB-4)
+                                                    └─> SB-5 (migrazione workspace)
+                                                          └─> SB-6 (gate verifica)
 ```
 
 SB-1 e SB-2 sono parallelizzabili (operazioni su repo diversi).
-SB-3 può precorrere SB-4 se registry è già aggiornato, oppure può seguirlo.
+**SB-4 deve precedere SB-3** in modo fisso: `scf_plan_install` richiede che l'entry
+registry di spark-base esista per localizzare il manifest remoto.

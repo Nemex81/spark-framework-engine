@@ -34,10 +34,11 @@ Fasi e stato (coordinator):
 
 Ordine di esecuzione:
 1. SB-0 (obbligatorio, gate pre-tutto)
-2. SB-1 e SB-2 in parallelo
-3. SB-3 e SB-4 (SB-3 dipende da SB-1, SB-4 dipende da SB-1+SB-2)
-4. SB-5 (dipende da SB-0 + SB-3 + SB-4)
-5. SB-6 (dipende da SB-5)
+2. SB-1 e SB-2 in parallelo (repo diversi)
+3. SB-4 (dipende da SB-1 + SB-2) — registry deve essere aggiornato per primo
+4. SB-3 (dipende da SB-4) — dry-run richiede entry registry spark-base presente
+5. SB-5 (dipende da SB-3 + SB-4)
+6. SB-6 (dipende da SB-5)
 
 ---
 
