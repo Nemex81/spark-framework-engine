@@ -1,6 +1,6 @@
 # Fase SB-4 — Aggiornamento registry
 
-Stato attuale: Non avviata
+Stato attuale: In corso
 
 Riferimenti:
 - Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](../PIANO-IMPLEMENTATIVO-SPARK-BASE.md) (Step 4)
@@ -11,8 +11,8 @@ Dipendenze:
 - SB-2 completata (master v2.0.0 pushato)
 
 Checklist:
-- [ ] Aprire `scf-registry/registry.json`
-- [ ] Aggiungere entry `spark-base`:
+- [x] Aprire `scf-registry/registry.json`
+- [x] Aggiungere entry `spark-base`:
   ```json
   {
     "id": "spark-base",
@@ -26,10 +26,10 @@ Checklist:
     "tags": ["base", "foundation", "agents", "skills", "prompts", "general-purpose"]
   }
   ```
-- [ ] Aggiornare entry `scf-master-codecrafter`:
-  - [ ] `latest_version: "2.0.0"`
-  - [ ] Aggiornare `description` per riflettere il nuovo perimetro CORE-CRAFT
-  - [ ] Aggiungere `"spark-base"` nei `tags` o note
+- [x] Aggiornare entry `scf-master-codecrafter`:
+  - [x] `latest_version: "2.0.0"`
+  - [x] Aggiornare `description` per riflettere il nuovo perimetro CORE-CRAFT
+  - [x] Aggiungere `"spark-base"` nei `tags` o note
 - [ ] Committare e pushare `registry.json`
 - [ ] Verificare che `scf_list_available_packages` restituisca 3 pacchetti
 
@@ -43,3 +43,5 @@ Note operative:
   nel `package-manifest.json`: in caso di mismatch, `scf_verify_system` segnalerebbe
   `engine_min_mismatch` come issue.
 - Il registry usa `schema_version: "2.0"` — non modificare questo campo.
+- Validazione locale completata: `registry.json` e parsabile e ora contiene 3 pacchetti
+  (`spark-base@1.0.0`, `scf-master-codecrafter@2.0.0`, `scf-pycode-crafter@2.0.0`).

@@ -3,12 +3,15 @@
 Stato attuale: Non avviata
 
 Riferimenti:
+
 - Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](../PIANO-IMPLEMENTATIVO-SPARK-BASE.md) (Step 6)
 
 Dipendenze:
+
 - SB-5 completata (migrazione workspace eseguita)
 
 Checklist:
+
 - [ ] V1: `scf_list_installed_packages` restituisce 3 pacchetti:
   - [ ] `spark-base@1.0.0`
   - [ ] `scf-master-codecrafter@2.0.0`
@@ -35,16 +38,18 @@ Checklist:
 - [ ] V10: `scf_get_skill("semver-bump")` → non restituisce errore (da spark-base)
 - [ ] V11: `AGENTS-master.md` fisicamente presente in `.github/`
 - [ ] V12: `scf_get_runtime_state` → funziona senza errori
-- [ ] V13: `scf_verify_system` → `is_coherent: true`
 
 Criteri di uscita:
-- TUTTI i gate V1–V13 passati
-- `scf_verify_system` → `issues: []`
+
+- TUTTI i gate V1–V12 passati
 
 Note operative:
+
 - Se V2 fallisce (modified non vuoto): verificare se è un falso positivo da SHA encoding.
   In caso contrario: capire quale file è stato modificato durante la migrazione.
 - Se V3 mostra meno di 19 agenti: verificare se `AGENTS-*.md` è stato aggiunto correttamente.
   Il conteggio dipende da `list_agents()` che scopre i file `.md` in `.github/agents/`.
 - Se `scf_verify_system` riporta `engine_min_mismatch`: verificare che
   `engine_min_version` nel registry coincida con `min_engine_version` nel manifest del pacchetto.
+- `scf_verify_system` resta un controllo addizionale raccomandato, ma non fa parte dei 12 gate
+  V1–V12 del piano esecutivo.

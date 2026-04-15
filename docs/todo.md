@@ -25,18 +25,19 @@ Analisi: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](ANALISI-RIORGANIZZAZIONE-SPARK
 Fasi e stato (coordinator):
 
 - **SB-0**: Preflight workspace — Stato: Non avviata — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
-- **SB-1**: Creazione repository spark-base — Stato: Non avviata — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
-- **SB-2**: Riduzione scf-master-codecrafter → v2.0.0 — Stato: Non avviata — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
+- **SB-1**: Creazione repository spark-base — Stato: In corso (scaffold locale pronto, publish remoto bloccato da auth GitHub) — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
+- **SB-2**: Riduzione scf-master-codecrafter → v2.0.0 — Stato: In corso (modifiche locali validate, commit/push non eseguiti) — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
 - **SB-3**: Dry-run manifest spark-base — Stato: Non avviata — [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)
-- **SB-4**: Aggiornamento registry — Stato: Non avviata — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
+- **SB-4**: Aggiornamento registry — Stato: In corso (entry locale aggiornata e validata, commit/push non eseguiti) — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
 - **SB-5**: Migrazione workspace utente — Stato: Non avviata — [todo-fase-SB-5-migrazione.md](todolist/todo-fase-SB-5-migrazione.md)
 - **SB-6**: Gate di verifica post-migrazione — Stato: Non avviata — [todo-fase-SB-6-gate.md](todolist/todo-fase-SB-6-gate.md)
 
 Ordine di esecuzione:
+
 1. SB-0 (obbligatorio, gate pre-tutto)
 2. SB-1 e SB-2 in parallelo (repo diversi)
 3. SB-4 (dipende da SB-1 + SB-2) — registry deve essere aggiornato per primo
-4. SB-3 (dipende da SB-4) — dry-run richiede entry registry spark-base presente
+4. SB-3 (dipende da SB-4) — dry-run richiede entry registry spark-base presente e repo remoto pubblicato
 5. SB-5 (dipende da SB-3 + SB-4)
 6. SB-6 (dipende da SB-5)
 

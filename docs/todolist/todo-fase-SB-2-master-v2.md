@@ -1,19 +1,19 @@
 # Fase SB-2 — Riduzione scf-master-codecrafter a v2.0.0
 
-Stato attuale: Non avviata
+Stato attuale: In corso
 
 Riferimenti:
 - Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](../PIANO-IMPLEMENTATIVO-SPARK-BASE.md) (Step 2)
 - Analisi ROSSA: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](../ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md) (Lista Rossa)
 
 Checklist:
-- [ ] Aggiornare `package-manifest.json` di scf-master-codecrafter:
-  - [ ] `version: "2.0.0"`
-  - [ ] `dependencies: ["spark-base"]`
-  - [ ] `description`: descrivere come "Plugin CORE-CRAFT per master-layer SCF"
-  - [ ] `files`: ridurre a 12 file esatti (vedi lista sotto)
-- [ ] Creare `.github/AGENTS-master.md` con lista 3 agenti CORE-CRAFT (Agent-Design, Agent-CodeRouter, Agent-CodeUI)
-- [ ] Aggiornare `.github/changelogs/scf-master-codecrafter.md` aggiungendo voce `[2.0.0]`
+- [x] Aggiornare `package-manifest.json` di scf-master-codecrafter:
+  - [x] `version: "2.0.0"`
+  - [x] `dependencies: ["spark-base"]`
+  - [x] `description`: descrivere come "Plugin CORE-CRAFT per master-layer SCF"
+  - [x] `files`: ridurre a 12 file esatti (vedi lista sotto)
+- [x] Creare `.github/AGENTS-master.md` con lista 3 agenti CORE-CRAFT (Agent-Design, Agent-CodeRouter, Agent-CodeUI)
+- [x] Aggiornare `.github/changelogs/scf-master-codecrafter.md` aggiungendo voce `[2.0.0]`
 - [ ] Verifica che i file rimasti siano esattamente:
   - [ ] `.github/AGENTS-master.md` (nuovo)
   - [ ] `.github/changelogs/scf-master-codecrafter.md`
@@ -41,3 +41,5 @@ Note operative:
   rimangono nel repository sorgente ma non vengono più installati come parte del pacchetto
 - Il bump MAJOR (1.0.0 → 2.0.0) è corretto: il pacchetto perde 48+ file dichiarati
   e acquisisce una nuova dependency (spark-base)
+- Validazione locale completata: manifest parsabile, `files.Count = 12`, dependency `spark-base` confermata,
+  changelog senza errori markdown.

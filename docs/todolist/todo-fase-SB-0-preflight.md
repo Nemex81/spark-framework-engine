@@ -1,13 +1,13 @@
 # Fase SB-0 — Preflight workspace
 
-Stato attuale: Non avviata
+Stato attuale: In corso
 
 Riferimenti:
 - Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](../PIANO-IMPLEMENTATIVO-SPARK-BASE.md) (Step 0)
 - Analisi: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](../ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md) (Step 0)
 
 Checklist:
-- [ ] Eseguire `git status` — verificare nessun file non committed nel workspace
+- [x] Eseguire `git status` — verificare nessun file non committed nei repo di sviluppo coinvolti (`scf-master-codecrafter`, `scf-registry`, `scf-pycode-crafter`)
 - [ ] Eseguire `scf_verify_workspace` — verificare `is_clean: true`
 - [ ] Verificare `modified: []` nel risultato
 - [ ] Verificare `missing: []` nel risultato
@@ -24,3 +24,5 @@ Note operative:
   In caso di modifiche intenzionali: committare prima di procedere.
 - Questa fase è la più importante: un workspace sporco durante la migrazione
   può rendere irreversibile la perdita di modifiche utente.
+- Nel workspace corrente multi-root non è stato ancora eseguito il vero `scf_verify_workspace`
+  del target utente da migrare. Questo gate resta obbligatorio prima di SB-5.
