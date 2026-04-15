@@ -13,6 +13,34 @@ Fasi e stato (coordinatore):
 - **Fase 6**: Policy multi-owner — Stato: Completata — [todo-fase-6-policy-multi-owner.md](todolist/todo-fase-6-policy-multi-owner.md)
 - **Fase 7**: Release e documentazione — Stato: Completata — [todo-fase-7-release-docs.md](todolist/todo-fase-7-release-docs.md)
 
+---
+
+## Progetto spark-base — Riorganizzazione componenti
+
+Coordinator per la migrazione da `scf-master-codecrafter` a `spark-base + master-codecrafter v2.0.0`.
+
+Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
+Analisi: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md)
+
+Fasi e stato (coordinator):
+
+- **SB-0**: Preflight workspace — Stato: Non avviata — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
+- **SB-1**: Creazione repository spark-base — Stato: Non avviata — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
+- **SB-2**: Riduzione scf-master-codecrafter → v2.0.0 — Stato: Non avviata — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
+- **SB-3**: Dry-run manifest spark-base — Stato: Non avviata — [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)
+- **SB-4**: Aggiornamento registry — Stato: Non avviata — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
+- **SB-5**: Migrazione workspace utente — Stato: Non avviata — [todo-fase-SB-5-migrazione.md](todolist/todo-fase-SB-5-migrazione.md)
+- **SB-6**: Gate di verifica post-migrazione — Stato: Non avviata — [todo-fase-SB-6-gate.md](todolist/todo-fase-SB-6-gate.md)
+
+Ordine di esecuzione:
+1. SB-0 (obbligatorio, gate pre-tutto)
+2. SB-1 e SB-2 in parallelo
+3. SB-3 e SB-4 (SB-3 dipende da SB-1, SB-4 dipende da SB-1+SB-2)
+4. SB-5 (dipende da SB-0 + SB-3 + SB-4)
+5. SB-6 (dipende da SB-5)
+
+---
+
 Regole di avanzamento:
 
 - Ogni fase deve avere tutti i test locali associati passati (`pytest -q <testfile>`).
