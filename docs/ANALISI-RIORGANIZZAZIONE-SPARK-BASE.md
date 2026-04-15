@@ -10,14 +10,16 @@
 
 ## EXECUTIVE SUMMARY
 
-La migrazione è **tecnicamente fattibile** con gli strumenti esistenti (nessun
-nuovo tool engine richiesto). Il nodo principale è l'assenza di un meccanismo
+La migrazione è **tecnicamente fattibile** ma con un prerequisito operativo
+aggiuntivo: prima dell'implementazione va introdotto un dry-run di installazione
+(`scf_preview_install` o equivalente), oggi assente nel motore. Il nodo principale è l'assenza di un meccanismo
 `scf_transfer_ownership`: la strategia obbliga a una sequenza
 remove → install spark-base → reinstall master (ridotto). Il rischio globale è
 **BASSO** dato l'utente unico e l'assenza di backward compat da preservare.
 
-**Raccomandazione: GO** — con esecuzione in sessione singola e gate di verifica
-post-migrazione.
+**Raccomandazione: GO CON PRECHECK** — con `scf_verify_workspace` pulito,
+dry-run del manifest spark-base, esecuzione in sessione singola e gate di
+verifica post-migrazione.
 
 ---
 
@@ -103,6 +105,10 @@ I 18 prompt + README.md migrano integralmente a spark-base.
 - `.github/copilot-instructions.md` — **BASE** (con edit: rimuovere riferimenti plugin-specific)
 - `.github/project-profile.md` — **BASE** (verifica contenuto prima di migrare)
 - `.github/changelogs/scf-master-codecrafter.md` — **CORE-CRAFT** (resta nel pacchetto originale)
+- `.github/runtime/` — **non tracciata nel manifest attuale**
+  - Verifica eseguita su `package-manifest.json`: nessun path sotto `.github/runtime/`
+    compare nella lista `files`. Non entra quindi né in VERDE né in ROSSA e
+    non partecipa alla migrazione di ownership.
 
 ---
 
@@ -183,11 +189,14 @@ installabile separatamente, non parte del bootstrap engine.
 - pycode-crafter **non va modificato**: la sua dipendenza diretta resta
   `scf-master-codecrafter`, che a sua volta richiede `spark-base`.
 
-**[ASSUNZIONE]**: la dependency check dell'engine è flat (un livello), non
-transitiva. Se un utente installa solo `scf-pycode-crafter` senza spark-base,
-riceve errore `missing: scf-master-codecrafter` ma NON errore
-`missing: spark-base`. L'installazione di master-codecrafter verificherà poi
-spark-base. La catena funziona correttamente se seguita nell'ordine.
+**Dato verificato dal codice**: la dependency check dell'engine è **flat,
+non transitiva**. In `scf_install_package`, `missing_dependencies` è calcolato
+come differenza diretta tra `pkg_manifest["dependencies"]` e
+`manifest.get_installed_versions()`, senza ricorsione sulle dipendenze delle
+dipendenze. Lo stesso schema è riusato nel planner update. Se un utente
+installa solo `scf-pycode-crafter` senza spark-base, riceve prima errore
+`missing: scf-master-codecrafter`; il requisito `spark-base` emerge al passo
+successivo quando si installa `scf-master-codecrafter`.
 
 ---
 
@@ -295,7 +304,7 @@ spark-base. La catena funziona correttamente se seguita nell'ordine.
 
 ## LISTA ROSSA — NON spostare
 
-12 file. Restano in scf-master-codecrafter v2.0.0 (ridotto).
+11 file. Restano in scf-master-codecrafter v2.0.0 (ridotto).
 
 - **R1** `.github/agents/Agent-Design.md` — CORE-CRAFT.
   Dispatcher architetturale che delega a capabilities `[design]` di plugin
@@ -333,23 +342,37 @@ spark-base. La catena funziona correttamente se seguita nell'ordine.
 
 ### Prerequisiti engine
 
-**Nessuna modifica al motore richiesta.**
+**Un prerequisito engine aggiuntivo è raccomandato prima dell'implementazione.**
 
 - Non serve `scf_transfer_ownership` (migrazione one-shot, utente unico).
 - Il sistema `AGENTS*.md` multi-file è già operativo.
 - `min_engine_version: 1.9.0` è già soddisfatto.
+- `scf_preview_install` **non esiste** nel motore attuale.
+  Prima di procedere all'implementazione è consigliato aggiungere un tool di
+  dry-run del manifest (`scf_preview_install` o equivalente) che validi:
+  manifest raggiungibile, dipendenze dichiarate, conflitti ownership attesi e
+  write plan senza scrivere nel workspace.
 
-### Step 0 — Creazione repository spark-base
+### Step 0 — Preflight obbligatorio workspace
 
-0.1. Crea repo GitHub `Nemex81/spark-base` (pubblico, branch `main`).
+0.0. Esegui `scf_verify_workspace`.
+  - Esito richiesto: `is_clean: true`
+  - Esito richiesto: `modified: []`
+  - Se il workspace non è pulito, **il piano si blocca qui**. Nessuna rimozione,
+    installazione o migrazione deve partire finché gli hash del manifest non
+    tornano allineati.
 
-0.2. Crea `package-manifest.json` con:
+### Step 1 — Creazione repository spark-base
+
+1.1. Crea repo GitHub `Nemex81/spark-base` (pubblico, branch `main`).
+
+1.2. Crea `package-manifest.json` con:
   - `package: "spark-base"`, `version: "1.0.0"`
   - `dependencies: []`, `min_engine_version: "1.9.0"`
   - `files`: 69 file (55 VERDE + 14 GIALLA)
   - `changelog_path: ".github/changelogs/spark-base.md"`
 
-0.3. Popola i file:
+1.3. Popola i file:
   - Copia da master-codecrafter i 55 file VERDE (zero modifiche).
   - Copia i file GIALLA G1–G9 (zero modifiche al contenuto).
   - Crea `.github/AGENTS.md` versione spark-base (G10): lista 11 agenti base.
@@ -358,44 +381,64 @@ spark-base. La catena funziona correttamente se seguita nell'ordine.
   - Verifica `.github/project-profile.md` (G12): modifica solo se necessario.
   - Crea `.github/changelogs/spark-base.md` con voce `[1.0.0]`.
 
-### Step 1 — Aggiornamento scf-master-codecrafter → v2.0.0
+### Step 2 — Aggiornamento scf-master-codecrafter → v2.0.0
 
-1.1. Aggiorna `package-manifest.json`:
+2.1. Aggiorna `package-manifest.json`:
   - `version: "2.0.0"`
   - `dependencies: ["spark-base"]`
   - `description`: "Plugin CORE-CRAFT per master-layer SCF..."
-  - `files`: ridotto a 12 file (3 agenti + 1 instruction + 5 skill file +
-    AGENTS-master.md + changelog + eventuali template)
+  - `files`: ridotto a **12 file esatti**:
+    - `.github/AGENTS-master.md`
+    - `.github/changelogs/scf-master-codecrafter.md`
+    - `.github/agents/Agent-Design.md`
+    - `.github/agents/Agent-CodeRouter.md`
+    - `.github/agents/Agent-CodeUI.md`
+    - `.github/instructions/mcp-context.instructions.md`
+    - `.github/skills/clean-architecture/SKILL.md`
+    - `.github/skills/clean-architecture/templates/project-structure.md`
+    - `.github/skills/code-routing.skill.md`
+    - `.github/skills/docs-manager/SKILL.md`
+    - `.github/skills/docs-manager/templates/readme-template.md`
+    - `.github/skills/docs-manager/templates/adr-template.md`
   - Rimuovi tutti i 57 file migrati a spark-base
 
-1.2. Crea `.github/AGENTS-master.md` — lista 3 agenti CORE-CRAFT.
+2.2. Crea `.github/AGENTS-master.md` — lista 3 agenti CORE-CRAFT.
 
-1.3. Aggiorna changelog con voce `[2.0.0]`.
+2.3. Aggiorna changelog con voce `[2.0.0]`.
 
-### Step 2 — Aggiornamento registry
+### Step 3 — Dry-run manifest spark-base
 
-2.1. Aggiungi entry `spark-base` a `registry.json`:
+3.1. Valida `package-manifest.json` di spark-base prima del deploy.
+  - Se esiste `scf_preview_install`, usarlo per verificare manifest,
+    dipendenze, conflitti ownership e write plan.
+  - Stato reale del motore: `scf_preview_install` **non esiste** oggi.
+  - Quindi questo step è bloccato da prerequisito engine finché non viene
+    introdotto un preview tool equivalente.
+
+### Step 4 — Aggiornamento registry
+
+4.1. Aggiungi entry `spark-base` a `registry.json`:
   - `id: "spark-base"`, `latest_version: "1.0.0"`, `status: "stable"`
   - `repo_url: "https://github.com/Nemex81/spark-base"`
 
-2.2. Aggiorna entry `scf-master-codecrafter`:
+4.2. Aggiorna entry `scf-master-codecrafter`:
   - `latest_version: "2.0.0"`
   - descrizione e tag aggiornati
 
-### Step 3 — Migrazione workspace utente
+### Step 5 — Migrazione workspace utente
 
 > ⚠ Operazione con side-effect. Eseguire in sessione singola.
 
-3.1. Backup: `git status` + `scf_verify_workspace`. Salva file `modified`.
+5.1. Backup: `git status` + `scf_verify_workspace`. Salva file `modified`.
 
-3.2. `scf_remove_package("scf-master-codecrafter")` — rimuove 62+ file tracciati.
+5.2. `scf_remove_package("scf-master-codecrafter")` — rimuove 62+ file tracciati.
 
-3.3. `scf_install_package("spark-base")` — installa 69 file base.
+5.3. `scf_install_package("spark-base")` — installa 69 file base.
 
-3.4. `scf_install_package("scf-master-codecrafter")` — installa 12 file CORE-CRAFT.
+5.4. `scf_install_package("scf-master-codecrafter")` — installa 12 file CORE-CRAFT.
      Il motore verifica la dipendenza `spark-base` → già presente ✅
 
-3.5. `scf_verify_workspace` — verifica `is_clean: true`.
+5.5. `scf_verify_workspace` — verifica `is_clean: true`.
 
 ### Step 4 — SemVer bump
 
@@ -427,9 +470,12 @@ spark-base. La catena funziona correttamente se seguita nell'ordine.
 - **Cosa**: tra `scf_remove_package` e `scf_install_package("spark-base")` il
   workspace è senza AGENTS.md, copilot-instructions.md e tutti gli agenti.
 - **Probabilità**: certa (è la meccanica del remove+install)
-- **Durata**: secondi (operazione automatica in sessione)
-- **Mitigazione**: eseguire la sequenza step 3.2–3.4 in sessione singola senza
-  interruzioni. Non aprire Copilot agent mode durante la transizione.
+- **Durata**: realistica **10-30 secondi** su rete lenta, perché include fetch
+  remoto del manifest e dei file durante `scf_install_package`, non solo le
+  scritture locali.
+- **Mitigazione**: eseguire la sequenza step 5.2–5.4 in sessione singola senza
+  interruzioni. **Non eseguire la migrazione con Copilot agent mode aperto**
+  durante la transizione.
 
 ### R-MEDIUM — Dependency check flat (non transitiva)
 
@@ -439,7 +485,8 @@ spark-base. La catena funziona correttamente se seguita nell'ordine.
   Quando poi installa master-codecrafter, riceve `missing: spark-base`.
 - **Probabilità**: bassa (utente unico che conosce la catena)
 - **Mitigazione**: documentare l'ordine di installazione nel README di ogni
-  pacchetto. [ASSUNZIONE] Il motore non richiede modifica per questo caso.
+  pacchetto. Il motore non richiede modifica per questo caso perché il
+  comportamento flat è coerente e verificato nel codice attuale.
 
 ### R-LOW — File user-modified durante il remove
 
@@ -477,10 +524,11 @@ spark-base. La catena funziona correttamente se seguita nell'ordine.
 | Metrica | Valore |
 |---------|--------|
 | File totali in spark-base | 69 |
+| File ROSSA che restano in master-codecrafter | 11 |
 | File totali in master-codecrafter v2.0.0 | 12 |
 | File invariati in pycode-crafter | 12 |
 | File che richiedono edit al contenuto | 3 (AGENTS.md, copilot-instructions.md, project-profile.md) |
 | Nuovi file da creare | 2 (AGENTS-master.md, changelogs/spark-base.md) |
-| Modifiche al motore engine | 0 |
-| Tool MCP nuovi richiesti | 0 |
+| Modifiche al motore engine | 1 prerequisito consigliato (`scf_preview_install` o equivalente) |
+| Tool MCP nuovi richiesti | 1 prerequisito consigliato (`scf_preview_install` o equivalente) |
 | Gate di verifica post-migrazione | 10 |
