@@ -20,6 +20,7 @@ sys.modules["spark_framework_engine"] = _module
 _spec.loader.exec_module(_module)  # type: ignore[union-attr]
 
 FrameworkInventory: Any = _module.FrameworkInventory
+ManifestManager: Any = _module.ManifestManager
 SnapshotManager: Any = _module.SnapshotManager
 SparkFrameworkEngine: Any = _module.SparkFrameworkEngine
 WorkspaceContext: Any = _module.WorkspaceContext
@@ -184,6 +185,27 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertEqual(result2["files_written"], [])
             # User modification preserved.
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "# user modified content")
+
+    def test_bootstrap_does_not_retrack_spark_guide_when_owned_by_spark_base(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+            manifest = ManifestManager(workspace_root / ".github")
+
+            first = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertEqual(first["status"], "bootstrapped")
+
+            guide_path = workspace_root / ".github" / "agents" / "spark-guide.agent.md"
+            manifest.remove_owner_entries("scf-engine-bootstrap", ["agents/spark-guide.agent.md"])
+            manifest.upsert_many("spark-base", "1.1.0", [("agents/spark-guide.agent.md", guide_path)])
+            guide_path.unlink()
+
+            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel.unlink()
+
+            second = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertEqual(second["status"], "bootstrapped")
+            self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
 
 
 if __name__ == "__main__":

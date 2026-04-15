@@ -6,6 +6,23 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.1.0] — 2026-04-15
+
+### Added
+
+- Adozione dei file bootstrap da parte dei pacchetti installabili: `spark-base` puo' ora rilevare e assorbire in modo sicuro `spark-guide.agent.md` gia' tracciato da `scf-engine-bootstrap`.
+
+### Changed
+
+- `scf_install_package(package_id, conflict_mode)` rimuove l'ownership bootstrap superata quando `spark-base` installa file gia' bootstrap-pati e puliti.
+- `scf_bootstrap_workspace()` evita di ri-registrare nel manifest bootstrap file gia' posseduti da un pacchetto SCF non-bootstrap.
+
+### Notes
+
+- Versione minor per supportare la promozione di `spark-guide` dentro `spark-base` senza conflitti di ownership nei workspace gia' inizializzati.
+
+---
+
 ## [2.0.0] — 2026-04-14
 
 ### Added

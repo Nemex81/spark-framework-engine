@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.0.0"
+ENGINE_VERSION: str = "2.1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -924,6 +924,7 @@ def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventor
 
 _MANIFEST_SCHEMA_VERSION: str = "1.0"
 _MANIFEST_FILENAME: str = ".scf-manifest.json"
+_BOOTSTRAP_PACKAGE_ID: str = "scf-engine-bootstrap"
 
 
 class ManifestManager:
@@ -1107,6 +1108,21 @@ class ManifestManager:
                     "sha256": self._sha256(file_abs),
                 }
             )
+        self.save(entries)
+
+    def remove_owner_entries(self, package: str, files: list[str]) -> None:
+        """Remove manifest ownership entries for one package on selected files."""
+        targets = {file_rel for file_rel in files if file_rel}
+        if not targets:
+            return
+        entries = [
+            entry
+            for entry in self.load()
+            if not (
+                str(entry.get("package", "")).strip() == package
+                and str(entry.get("file", "")).strip() in targets
+            )
+        ]
         self.save(entries)
 
     def verify_integrity(self) -> dict[str, Any]:
@@ -2455,8 +2471,9 @@ class SparkFrameworkEngine:
                 rel = file_path.removeprefix(".github/")
                 dest = self._ctx.workspace_root / file_path
                 owners = [owner for owner in manifest.get_file_owners(rel) if owner != package_id]
+                bootstrap_adoption = package_id == "spark-base" and owners == [_BOOTSTRAP_PACKAGE_ID]
                 per_file_policy = normalized_file_policies.get(file_path, "error")
-                if owners:
+                if owners and not bootstrap_adoption:
                     if per_file_policy == "extend":
                         _validate_extend_policy_target(file_path)
                         item = {
@@ -2517,6 +2534,8 @@ class SparkFrameworkEngine:
                         "file": file_path,
                         "classification": "update_tracked_clean",
                     }
+                    if bootstrap_adoption:
+                        item["adopt_bootstrap_owner"] = True
                     records.append(item)
                     write_plan.append(item)
                     continue
@@ -2684,9 +2703,11 @@ class SparkFrameworkEngine:
 
             preserved = [item["file"] for item in classification_report["preserve_plan"]]
             fetch_errors: list[str] = []
-            staged_files: list[tuple[str, str, str, str]] = []
+            staged_files: list[tuple[str, str, str, str, bool]] = []
             replaced_files: list[str] = []
             extended_files: list[str] = []
+            adopted_bootstrap_files: list[str] = []
+            adopted_bootstrap_rels: list[str] = []
             delegated_files = [
                 str(item["file"])
                 for item in classification_report["delegate_plan"]
@@ -2733,7 +2754,15 @@ class SparkFrameworkEngine:
                 except (urllib.error.URLError, OSError) as exc:
                     fetch_errors.append(f"{file_path}: {exc}")
                     continue
-                staged_files.append((file_path, rel, content, item_classification))
+                staged_files.append(
+                    (
+                        file_path,
+                        rel,
+                        content,
+                        item_classification,
+                        bool(item.get("adopt_bootstrap_owner", False)),
+                    )
+                )
             if fetch_errors:
                 return _build_install_result(
                     False,
@@ -2777,7 +2806,7 @@ class SparkFrameworkEngine:
             session_payload: dict[str, Any] | None = None
             auto_validator_results: dict[str, Any] = {}
             try:
-                for file_path, rel, content, staged_classification in staged_files:
+                for file_path, rel, content, staged_classification, adopt_bootstrap_owner in staged_files:
                     dest = self._ctx.workspace_root / file_path
                     previous_content = _read_text_if_possible(dest) if dest.is_file() else None
                     backups[dest] = previous_content
@@ -2795,6 +2824,9 @@ class SparkFrameworkEngine:
                         written_paths.append((file_path, rel, dest))
                         manifest_targets.append((rel, dest))
                         installed.append(file_path)
+                        if adopt_bootstrap_owner:
+                            adopted_bootstrap_files.append(file_path)
+                            adopted_bootstrap_rels.append(rel)
                         extended_files.append(file_path)
                         continue
 
@@ -2822,6 +2854,9 @@ class SparkFrameworkEngine:
                             )
                             manifest_targets.append((rel, dest))
                             installed.append(file_path)
+                            if adopt_bootstrap_owner:
+                                adopted_bootstrap_files.append(file_path)
+                                adopted_bootstrap_rels.append(rel)
                             continue
 
                         merged_text = merge_engine.render_with_markers(merge_result)
@@ -2853,6 +2888,9 @@ class SparkFrameworkEngine:
                     written_paths.append((file_path, rel, dest))
                     manifest_targets.append((rel, dest))
                     installed.append(file_path)
+                    if adopt_bootstrap_owner:
+                        adopted_bootstrap_files.append(file_path)
+                        adopted_bootstrap_rels.append(rel)
 
                 if session_entries:
                     session_payload = sessions.create_session(
@@ -2937,6 +2975,8 @@ class SparkFrameworkEngine:
                         pkg_version,
                         manifest_targets,
                     )
+                    if adopted_bootstrap_rels:
+                        manifest.remove_owner_entries(_BOOTSTRAP_PACKAGE_ID, adopted_bootstrap_rels)
                     snapshot_report = _save_snapshots(package_id, manifest_targets)
                     snapshot_written.extend(snapshot_report["written"])
                     snapshot_skipped.extend(snapshot_report["skipped"])
@@ -2977,6 +3017,7 @@ class SparkFrameworkEngine:
                 removed_obsolete_files=removed_files,
                 preserved_obsolete_files=preserved_obsolete,
                 replaced_files=replaced_files,
+                adopted_bootstrap_files=adopted_bootstrap_files,
                 merged_files=[item["file"] for item in merge_clean + merge_conflict],
                 merge_clean=merge_clean,
                 merge_conflict=merge_conflict,
@@ -3605,7 +3646,6 @@ class SparkFrameworkEngine:
         @self._mcp.tool()
         async def scf_bootstrap_workspace() -> dict[str, Any]:
             """Bootstrap the base SPARK prompts, admin agent and user guide agent into this workspace."""
-            _BOOTSTRAP_PKG = "scf-engine-bootstrap"
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
             agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
@@ -3712,21 +3752,26 @@ class SparkFrameworkEngine:
                 }
 
             if written_paths or identical_paths:
-                manifest.upsert_many(
-                    _BOOTSTRAP_PKG,
-                    ENGINE_VERSION,
-                    [
-                        (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
-                        for dest_path in written_paths + identical_paths
-                    ],
-                )
-                _save_snapshots(
-                    _BOOTSTRAP_PKG,
-                    [
-                        (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
-                        for dest_path in written_paths + identical_paths
-                    ],
-                )
+                bootstrap_manifest_targets = [
+                    (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
+                    for dest_path in written_paths + identical_paths
+                    if not any(
+                        owner != _BOOTSTRAP_PACKAGE_ID
+                        for owner in manifest.get_file_owners(
+                            dest_path.relative_to(workspace_github_root).as_posix()
+                        )
+                    )
+                ]
+                if bootstrap_manifest_targets:
+                    manifest.upsert_many(
+                        _BOOTSTRAP_PACKAGE_ID,
+                        ENGINE_VERSION,
+                        bootstrap_manifest_targets,
+                    )
+                    _save_snapshots(
+                        _BOOTSTRAP_PACKAGE_ID,
+                        bootstrap_manifest_targets,
+                    )
 
             return {
                 "success": True,
