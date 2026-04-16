@@ -285,15 +285,17 @@ scf_approve_conflict(session_id, conflict_id)
 scf_reject_conflict(session_id, conflict_id)
 ```
 
-`scf_bootstrap_workspace(install_base=False)` copia nel workspace utente il set base di bootstrap:
+`scf_bootstrap_workspace(install_base=False, conflict_mode="abort")` copia nel workspace utente il set base di bootstrap:
 gli 8 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
 `spark-guide.agent.md`, e l'instruction `spark-assistant-guide.instructions.md`.
 Se il workspace e gia bootstrap-pato ma manca qualche asset base, il tool copia
 solo i file mancanti.
 
-Con `scf_bootstrap_workspace(install_base=True)` il motore prova anche a
+Con `scf_bootstrap_workspace(install_base=True, conflict_mode=...)` il motore prova anche a
 installare `spark-base` usando il normale preflight del registry e del manifest.
 Se `spark-base` e gia installato, il passo viene saltato senza reinstallazione.
+Quando `install_base=True`, il `conflict_mode` viene inoltrato a `scf_install_package`
+cosi il bootstrap puo scegliere se preservare, sostituire o fondere i file gia presenti.
 
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,
@@ -331,10 +333,12 @@ installato, preservando i file modificati dall'utente. Supporta gli stessi
 anche una preview ordinata del piano di update, includendo dipendenze tra package,
 blocchi operativi e ordine di applicazione previsto.
 
-`scf_apply_updates(package_id | None)` usa lo stesso piano dependency-aware per
+`scf_apply_updates(package_id | None, conflict_mode="abort")` usa lo stesso piano dependency-aware per
 aggiornare i package in ordine topologico. Prima di scrivere, esegue un preflight
 su tutti i target del batch e si ferma se rileva conflitti irrisolti, restituendo
-il dettaglio dei package bloccati.
+il dettaglio dei package bloccati. Il `conflict_mode` viene poi inoltrato a ogni
+installazione del batch, cosi gli update possono usare `replace` per sovrascrivere
+o `manual` / `auto` / `assisted` per fondere i file utente modificati.
 
 `scf_finalize_update(session_id)` finalizza una sessione di merge aperta in modo
 `manual` o `assisted`, applicando le decisioni confermate ai file del workspace e
@@ -366,7 +370,7 @@ pacchetto** (contenuto aggiornato nel registry).
 | conflict_mode | Comportamento |
 |---|---|
 | `abort` | Blocca se esistono conflitti irrisolti (default) |
-| `replace` | Sovrascrive sempre con la versione pacchetto |
+| `replace` | Sovrascrive sempre con la versione pacchetto, anche sui file tracciati e modificati |
 | `manual` | Apre sessione interattiva, decisione per ogni conflitto |
 | `auto` | Il motore risolve in autonomia via euristiche AI |
 | `assisted` | Proposta automatica, conferma utente per conflitti a bassa confidenza |
@@ -387,6 +391,11 @@ scf_finalize_update(session_id)  ← applica le decisioni e chiude la sessione
 Per i merge `auto`, il motore chiude automaticamente solo i casi che passano le
 euristiche conservative e i validator; i casi ambigui vengono degradati a una
 sessione manuale attiva.
+
+Lo script standalone `spark-init.py` usa il `package-manifest.json` di `spark-base`
+come source of truth per la prima inizializzazione. Se trova file gia presenti ma
+non tracciati, chiede all'utente se vuole `replace`, `preserve` oppure un'integrazione
+best-effort `integrate` prima di toccare il workspace.
 
 ---
 

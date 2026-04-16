@@ -6,6 +6,21 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.1.2] — 2026-04-17
+
+### Changed
+
+- `scf_apply_updates(package_id | None, conflict_mode)` inoltra ora davvero il `conflict_mode` al batch update invece di forzare sempre `replace`.
+- `scf_bootstrap_workspace(install_base=True, conflict_mode)` inoltra il mode scelto all'installazione di `spark-base` durante il bootstrap MCP.
+- `spark-init.py` chiede ora una scelta esplicita `replace` / `preserve` / `integrate` quando trova file gia presenti nel primo bootstrap standalone di `spark-base`.
+
+### Fixed
+
+- `conflict_mode="replace"` sovrascrive ora anche i file tracciati e modificati che prima cadevano sempre sul ramo di preservazione implicita.
+- Allineata la documentazione runtime e i prompt operativi al nuovo comportamento di bootstrap e update batch.
+
+---
+
 ## [2.1.1] — 2026-04-15
 
 ### Changed

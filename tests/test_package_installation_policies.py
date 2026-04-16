@@ -355,7 +355,7 @@ class TestPackageInstallationPolicies(unittest.TestCase):
                     "fetch_package_manifest",
                     return_value={
                         "package": "spark-base",
-                        "version": "1.1.0",
+                        "version": "1.2.0",
                         "min_engine_version": "1.0.0",
                         "dependencies": [],
                         "conflicts": [],

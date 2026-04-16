@@ -17,7 +17,7 @@ Obiettivo: gestire il ciclo di vita dei pacchetti SCF nel workspace in modo prev
 
 - Usare `scf_check_updates` per il delta rapido.
 - Usare `scf_update_packages` per il piano ordinato e dependency-aware.
-- Usare `scf_apply_updates(package_id | None)` solo quando l'utente vuole applicare davvero gli update.
+- Usare `scf_apply_updates(package_id | None, conflict_mode)` solo quando l'utente vuole applicare davvero gli update e ha scelto la strategia di conflitto appropriata.
 
 ## Rimozione
 

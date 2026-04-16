@@ -197,7 +197,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
 
             guide_path = workspace_root / ".github" / "agents" / "spark-guide.agent.md"
             manifest.remove_owner_entries("scf-engine-bootstrap", ["agents/spark-guide.agent.md"])
-            manifest.upsert_many("spark-base", "1.1.0", [("agents/spark-guide.agent.md", guide_path)])
+            manifest.upsert_many("spark-base", "1.2.0", [("agents/spark-guide.agent.md", guide_path)])
             guide_path.unlink()
 
             sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
@@ -221,7 +221,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
                             "id": "spark-base",
                             "description": "SPARK Base Layer",
                             "repo_url": "https://github.com/example/spark-base",
-                            "latest_version": "1.1.0",
+                            "latest_version": "1.2.0",
                             "status": "stable",
                         }
                     ],
@@ -231,7 +231,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
                     "fetch_package_manifest",
                     return_value={
                         "package": "spark-base",
-                        "version": "1.1.0",
+                        "version": "1.2.0",
                         "min_engine_version": "1.0.0",
                         "dependencies": [],
                         "conflicts": [],
@@ -241,13 +241,14 @@ class TestBootstrapWorkspace(unittest.TestCase):
                 ),
                 patch.object(_module.RegistryClient, "fetch_raw_file", return_value="base guide"),
             ):
-                result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True))
+                result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True, conflict_mode="manual"))
 
             manifest = ManifestManager(workspace_root / ".github")
             guide_path = workspace_root / ".github" / "agents" / "spark-guide.agent.md"
 
             self.assertTrue(result["success"])
             self.assertTrue(result["install_base_requested"])
+            self.assertEqual(result["conflict_mode"], "manual")
             self.assertEqual(result["status"], "bootstrapped_and_installed")
             self.assertTrue(result["base_install"]["success"])
             self.assertEqual(guide_path.read_text(encoding="utf-8"), "base guide")

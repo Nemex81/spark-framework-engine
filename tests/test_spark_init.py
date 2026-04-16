@@ -20,7 +20,7 @@ _SPEC.loader.exec_module(_MODULE)
 def _mock_bootstrap_remote(
     monkeypatch: pytest.MonkeyPatch,
     files: dict[str, str] | None = None,
-    registry_version: str = "1.1.0",
+    registry_version: str = "1.2.0",
     manifest_version: str = "1.0.0",
 ) -> dict[str, str]:
     if files is None:
@@ -296,7 +296,7 @@ def test_bootstrap_installer_uses_cache_when_registry_fetch_fails(
             {
                 "id": _MODULE.SPARK_BASE_ID,
                 "repo_url": "https://github.com/Nemex81/spark-base",
-                "latest_version": "1.1.0",
+                "latest_version": "1.2.0",
             }
         ]
     }
@@ -404,6 +404,74 @@ def test_bootstrap_installer_blocks_untracked_conflicts(
     assert conflicting_path.read_text(encoding="utf-8") != files[".github/AGENTS.md"]
 
 
+def test_bootstrap_installer_replace_mode_overwrites_untracked_conflicts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+    files = _mock_bootstrap_remote(monkeypatch)
+    conflicting_path = project_root / ".github" / "AGENTS.md"
+    conflicting_path.parent.mkdir(parents=True)
+    conflicting_path.write_text("user version\n", encoding="utf-8")
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    action = installer.ensure_spark_base(conflict_mode="replace")
+
+    assert action == "installato"
+    assert conflicting_path.read_text(encoding="utf-8") == files[".github/AGENTS.md"]
+
+
+def test_bootstrap_installer_preserve_mode_tracks_existing_conflicts_as_local_baseline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+    _mock_bootstrap_remote(monkeypatch)
+    conflicting_path = project_root / ".github" / "AGENTS.md"
+    conflicting_path.parent.mkdir(parents=True)
+    conflicting_path.write_text("user version\n", encoding="utf-8")
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    action = installer.ensure_spark_base(conflict_mode="preserve")
+
+    assert action == "installato"
+    assert conflicting_path.read_text(encoding="utf-8") == "user version\n"
+    manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
+    assert any(entry["file"] == "AGENTS.md" for entry in manifest["entries"])
+
+
+def test_bootstrap_installer_integrate_mode_merges_existing_and_remote_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+    files = _mock_bootstrap_remote(monkeypatch)
+    conflicting_path = project_root / ".github" / "AGENTS.md"
+    conflicting_path.parent.mkdir(parents=True)
+    conflicting_path.write_text("agents-index\nlocal-note\n", encoding="utf-8")
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    action = installer.ensure_spark_base(conflict_mode="integrate")
+
+    assert action == "installato"
+    merged_text = conflicting_path.read_text(encoding="utf-8")
+    assert "agents-index" in merged_text
+    assert "local-note" in merged_text
+    assert files[".github/AGENTS.md"].strip() in merged_text
+
+
 def test_bootstrap_installer_adopts_identical_untracked_files_without_rewriting(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -426,6 +494,61 @@ def test_bootstrap_installer_adopts_identical_untracked_files_without_rewriting(
     assert "Adottato nel manifest senza riscrittura: .github/AGENTS.md" in capsys.readouterr().err
     manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
     assert any(entry["file"] == "AGENTS.md" for entry in manifest["entries"])
+
+
+def test_main_prompts_for_conflict_mode_and_retries_bootstrap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    workspace_file = project_root / f"{project_root.name}.code-workspace"
+
+    monkeypatch.chdir(project_root)
+    monkeypatch.setattr(_MODULE, "_configure_stdio", lambda: None)
+    monkeypatch.setattr(_MODULE, "_log", lambda _level, _message: None)
+    monkeypatch.setattr(_MODULE, "_workspace_candidates", lambda _project_root: [])
+    monkeypatch.setattr(
+        _MODULE,
+        "_create_workspace_file",
+        lambda _workspace_path, _project_root, _engine_script: "File salvato",
+    )
+    monkeypatch.setattr(
+        _MODULE,
+        "_write_vscode_mcp_json",
+        lambda _project_root, _engine_script: (True, "creato"),
+    )
+    monkeypatch.setattr("builtins.input", lambda: "p")
+
+    class _FakeBootstrapInstaller:
+        calls: list[str] = []
+
+        def __init__(self, project_root: Path, engine_root: Path) -> None:
+            self.project_root = project_root
+            self.engine_root = engine_root
+
+        def ensure_spark_base(self, conflict_mode: str = "abort") -> str:
+            self.calls.append(conflict_mode)
+            if len(self.calls) == 1:
+                raise _MODULE._BootstrapConflictError(
+                    "conflict",
+                    [_MODULE._BootstrapConflict(".github/AGENTS.md", "exists")],
+                )
+            return "installato"
+
+    monkeypatch.setattr(_MODULE, "_BootstrapInstaller", _FakeBootstrapInstaller)
+
+    exit_code = _MODULE.main()
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert _FakeBootstrapInstaller.calls == ["abort", "preserve"]
+    assert captured.out.splitlines() == [
+        f"[SPARK] .code-workspace → creato: {workspace_file.name}",
+        "[SPARK] .vscode/mcp.json → creato",
+        "[SPARK] spark-base → installato",
+    ]
 
 
 def test_main_prints_ordered_summary(

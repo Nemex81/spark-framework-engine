@@ -192,6 +192,49 @@ class TestUpdatePlanner(unittest.TestCase):
                 "scf-pycode-crafter": "2.1.0",
             })
 
+    def test_apply_updates_forwards_manual_conflict_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "Agent-Orchestrator.md"
+            target_file.parent.mkdir(parents=True)
+            base_text = "alpha\nbase\nomega\n"
+            ours_text = "alpha\nours\nomega\n"
+            theirs_text = "alpha\ntheirs\nomega\n"
+            target_file.write_text(ours_text, encoding="utf-8")
+
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry("agents/Agent-Orchestrator.md", "scf-master-codecrafter", base_text, "1.0.0"),
+                ]
+            )
+
+            snapshots = _module.SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshot_source = workspace_root / "snapshot-base.md"
+            snapshot_source.write_text(base_text, encoding="utf-8")
+            self.assertTrue(
+                snapshots.save_snapshot("scf-master-codecrafter", "agents/Agent-Orchestrator.md", snapshot_source)
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            apply_updates = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_apply_updates"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_packages()[0]]),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=self._manifest_for),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=theirs_text),
+            ):
+                result = asyncio.run(apply_updates("scf-master-codecrafter", conflict_mode="manual"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["conflict_mode"], "manual")
+            self.assertEqual(result["applied"][0]["session_status"], "active")
+            self.assertTrue(result["applied"][0]["requires_user_resolution"])
+
     def test_update_packages_blocks_missing_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)

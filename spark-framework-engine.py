@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.1.1"
+ENGINE_VERSION: str = "2.1.2"
 
 
 # ---------------------------------------------------------------------------
@@ -2732,9 +2732,12 @@ class SparkFrameworkEngine:
                     continue
                 if item_classification == "delegate_skip":
                     continue
-                if item_classification == "merge_candidate" and not _supports_stateful_merge(conflict_mode):
-                    preserved.append(file_path)
-                    continue
+                if item_classification == "merge_candidate":
+                    if conflict_mode == "replace":
+                        replaced_files.append(file_path)
+                    elif not _supports_stateful_merge(conflict_mode):
+                        preserved.append(file_path)
+                        continue
                 if item_classification == "conflict_cross_owner":
                     continue
                 if item_classification == "conflict_untracked_existing" and conflict_mode != "replace":
@@ -3356,12 +3359,25 @@ class SparkFrameworkEngine:
             return _plan_package_updates()
 
         @self._mcp.tool()
-        async def scf_apply_updates(package_id: str | None = None) -> dict[str, Any]:
+        async def scf_apply_updates(
+            package_id: str | None = None,
+            conflict_mode: str = "abort",
+        ) -> dict[str, Any]:
             """Apply package updates by reinstalling latest versions from the registry.
 
             If package_id is provided, applies the update only for that package.
             Otherwise applies all available updates.
             """
+            if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unsupported conflict_mode '{conflict_mode}'. "
+                        "Supported modes: abort, replace, manual, auto, assisted."
+                    ),
+                    "package": package_id,
+                    "conflict_mode": conflict_mode,
+                }
             report = _plan_package_updates(package_id)
             if report.get("success") is False:
                 return report
@@ -3405,11 +3421,12 @@ class SparkFrameworkEngine:
                         "plan": plan,
                         "preflight": preflight_reports,
                     }
-                if preview.get("conflict_plan"):
+                preview_conflicts = list(preview.get("conflict_plan", []))
+                if preview_conflicts and conflict_mode != "replace":
                     batch_conflicts.append(
                         {
                             "package": pkg_id,
-                            "conflicts": list(preview.get("conflict_plan", [])),
+                            "conflicts": preview_conflicts,
                         }
                     )
             if batch_conflicts:
@@ -3425,7 +3442,7 @@ class SparkFrameworkEngine:
             applied: list[dict[str, Any]] = []
             failed: list[dict[str, Any]] = []
             for pkg_id in target_ids:
-                result = await scf_install_package(pkg_id, conflict_mode="replace")
+                result = await scf_install_package(pkg_id, conflict_mode=conflict_mode)
                 if result.get("success") is True:
                     applied.append(result)
                 else:
@@ -3436,6 +3453,7 @@ class SparkFrameworkEngine:
                 "failed": failed,
                 "total_targets": len(target_ids),
                 "plan": plan,
+                "conflict_mode": conflict_mode,
             }
 
         @self._mcp.tool()
@@ -3644,8 +3662,25 @@ class SparkFrameworkEngine:
             return inventory.set_orchestrator_state(patch)
 
         @self._mcp.tool()
-        async def scf_bootstrap_workspace(install_base: bool = False) -> dict[str, Any]:
+        async def scf_bootstrap_workspace(
+            install_base: bool = False,
+            conflict_mode: str = "abort",
+        ) -> dict[str, Any]:
             """Bootstrap the base SPARK assets into this workspace and optionally install spark-base."""
+            if install_base and conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+                return {
+                    "success": False,
+                    "status": "error",
+                    "files_written": [],
+                    "preserved": [],
+                    "workspace": str(self._ctx.workspace_root),
+                    "install_base_requested": install_base,
+                    "conflict_mode": conflict_mode,
+                    "note": (
+                        f"Unsupported conflict_mode '{conflict_mode}'. "
+                        "Supported modes: abort, replace, manual, auto, assisted."
+                    ),
+                }
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
             agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
@@ -3656,6 +3691,7 @@ class SparkFrameworkEngine:
 
             async def _finalize_bootstrap_result(result: dict[str, Any]) -> dict[str, Any]:
                 result["install_base_requested"] = install_base
+                result["conflict_mode"] = conflict_mode
                 if not install_base:
                     return result
 
@@ -3670,7 +3706,7 @@ class SparkFrameworkEngine:
                     result["note"] = f"{result['note']} spark-base is already installed."
                     return result
 
-                base_install = await scf_install_package("spark-base")
+                base_install = await scf_install_package("spark-base", conflict_mode=conflict_mode)
                 result["base_install"] = base_install
                 if not base_install.get("success", False):
                     result["success"] = False

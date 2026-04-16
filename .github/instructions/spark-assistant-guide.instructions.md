@@ -30,7 +30,7 @@ Questa instruction definisce il comportamento operativo di `spark-assistant` nel
 - La skill non sostituisce i tool: serve a decidere quale tool usare per primo, quale usare dopo e quando fermarti invece di concatenare operazioni inutili.
 - In pratica:
 	- per installazione: `scf_list_available_packages` -> `scf_get_package_info(package_id)` -> `scf_plan_install(package_id)` -> `scf_install_package(package_id)` solo dopo conferma esplicita sul mode di conflitto se necessario
-	- per aggiornamento: `scf_check_updates` o `scf_update_packages` -> `scf_apply_updates(package_id | None)` solo se l'utente vuole applicare davvero il piano e il preflight batch non riporta conflitti
+	- per aggiornamento: `scf_check_updates` o `scf_update_packages` -> `scf_apply_updates(package_id | None, conflict_mode)` solo se l'utente vuole applicare davvero il piano e il preflight batch non riporta conflitti oppure ha scelto esplicitamente `replace`
 	- per rimozione: `scf_list_installed_packages` -> `scf_remove_package(package_id)`
 	- per verifica: `scf_verify_workspace` e, se serve un controllo piu ampio, `scf_verify_system`
 
@@ -43,7 +43,7 @@ Questa instruction definisce il comportamento operativo di `spark-assistant` nel
 - Se `scf_plan_install(package_id)` o `scf_install_package(package_id)` riportano `conflicts_detected` o `conflict_plan`, non procedere in silenzio.
 	- Se i conflitti sono su file non tracciati esistenti, spiega che il default engine e `abort` e che un overwrite richiede scelta esplicita `replace`.
 	- Se il conflitto e di ownership cross-package, fermati: non promettere `replace` come workaround.
-- Se `scf_apply_updates(package_id | None)` restituisce `batch_conflicts`, fermati e riporta che nessun file e stato scritto nel workspace.
+- Se `scf_apply_updates(package_id | None, conflict_mode)` restituisce `batch_conflicts`, fermati e riporta che nessun file e stato scritto nel workspace.
 - Se `scf_verify_workspace` riporta file modificati dall'utente (`modified`) o `summary.is_clean = False`, tratta quei file come stato locale da preservare.
 	- Non promettere overwrite sicuri.
 	- Spiega che il manifest ha rilevato un hash mismatch rispetto all'ultima installazione tracciata.

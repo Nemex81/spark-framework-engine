@@ -246,7 +246,7 @@ class TestMergeIntegration(unittest.TestCase):
             self.assertEqual(target_file.read_text(encoding="utf-8"), ours_text)
             self.assertEqual(manifest.get_installed_versions(), {"pkg-a": "1.0.0"})
 
-    def test_install_package_abort_and_replace_do_not_regress_for_merge_candidate(self) -> None:
+    def test_install_package_abort_preserves_but_replace_overwrites_merge_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             github_root = workspace_root / ".github"
@@ -269,33 +269,59 @@ class TestMergeIntegration(unittest.TestCase):
                 fake_mcp.tools["scf_install_package"],
             )
 
-            for mode in ("abort", "replace"):
-                target_file.write_text(ours_text, encoding="utf-8")
-                manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-                with (
-                    patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-a")]),
-                    patch.object(
-                        RegistryClient,
-                        "fetch_package_manifest",
-                        return_value={
-                            "package": "pkg-a",
-                            "version": "2.0.0",
-                            "min_engine_version": "1.0.0",
-                            "dependencies": [],
-                            "conflicts": [],
-                            "file_ownership_policy": "error",
-                            "files": [".github/agents/shared.md"],
-                        },
-                    ),
-                    patch.object(RegistryClient, "fetch_raw_file", return_value="alpha\ntheirs\n"),
-                ):
-                    result = asyncio.run(install_package("pkg-a", conflict_mode=mode))
+            target_file.write_text(ours_text, encoding="utf-8")
+            manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-a")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-a",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="alpha\ntheirs\n"),
+            ):
+                abort_result = asyncio.run(install_package("pkg-a", conflict_mode="abort"))
 
-                self.assertTrue(result["success"])
-                self.assertEqual(result["preserved"], [".github/agents/shared.md"])
-                self.assertEqual(result["session_id"], None)
-                self.assertEqual(result["resolution_applied"], "none")
-                self.assertEqual(target_file.read_text(encoding="utf-8"), ours_text)
+            self.assertTrue(abort_result["success"])
+            self.assertEqual(abort_result["preserved"], [".github/agents/shared.md"])
+            self.assertEqual(abort_result["session_id"], None)
+            self.assertEqual(abort_result["resolution_applied"], "none")
+            self.assertEqual(target_file.read_text(encoding="utf-8"), ours_text)
+
+            target_file.write_text(ours_text, encoding="utf-8")
+            manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-a")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-a",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="alpha\ntheirs\n"),
+            ):
+                replace_result = asyncio.run(install_package("pkg-a", conflict_mode="replace"))
+
+            self.assertTrue(replace_result["success"])
+            self.assertEqual(replace_result["preserved"], [])
+            self.assertEqual(replace_result["replaced_files"], [".github/agents/shared.md"])
+            self.assertEqual(replace_result["resolution_applied"], "replace")
+            self.assertEqual(target_file.read_text(encoding="utf-8"), "alpha\ntheirs\n")
 
     def test_update_package_auto_when_safe_conflict_resolves_without_active_session(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

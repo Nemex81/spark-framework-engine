@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import difflib
 import json
 import sys
 import urllib.error
@@ -19,6 +20,7 @@ REGISTRY_CACHE_REL = Path(".github/.scf-registry-cache.json")
 MANIFEST_REL = Path(".github/.scf-manifest.json")
 MANIFEST_SCHEMA_VERSION = "1.0"
 SPARK_BASE_ID = "spark-base"
+_BOOTSTRAP_SUPPORTED_CONFLICT_MODES = {"abort", "replace", "preserve", "integrate"}
 
 
 def _configure_stdio() -> None:
@@ -205,8 +207,106 @@ class _InstallPlanItem:
     action: str
 
 
+@dataclass(frozen=True)
+class _BootstrapConflict:
+    """Describe one conflicting file encountered during standalone bootstrap."""
+
+    file_path: str
+    reason: str
+
+
 class _BootstrapError(RuntimeError):
     """Raised when spark-base bootstrap cannot complete safely."""
+
+
+class _BootstrapConflictError(_BootstrapError):
+    """Raised when bootstrap needs an explicit user decision for conflicting files."""
+
+    def __init__(self, message: str, conflicts: list[_BootstrapConflict]) -> None:
+        super().__init__(message)
+        self.conflicts = conflicts
+
+
+def _read_text_if_possible(path: Path) -> str | None:
+    """Read one UTF-8 text file, returning None for binary or invalid payloads."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _normalize_newlines(text: str) -> str:
+    """Normalize line endings before comparing text payloads."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _split_frontmatter(text: str) -> tuple[str, str]:
+    """Split YAML frontmatter from markdown body when present."""
+    normalized = _normalize_newlines(text)
+    if not normalized.startswith("---\n"):
+        return "", normalized
+    end = normalized.find("\n---\n", 4)
+    if end == -1:
+        return "", normalized
+    return normalized[: end + 5], normalized[end + 5 :]
+
+
+def _merge_bootstrap_text(existing_text: str, incoming_text: str) -> str | None:
+    """Create a conservative integrated text for first-time bootstrap conflicts."""
+    normalized_existing = _normalize_newlines(existing_text)
+    normalized_incoming = _normalize_newlines(incoming_text)
+
+    if normalized_existing == normalized_incoming:
+        return normalized_existing
+    if normalized_existing in normalized_incoming:
+        return normalized_incoming
+    if normalized_incoming in normalized_existing:
+        return normalized_existing
+
+    existing_frontmatter, existing_body = _split_frontmatter(normalized_existing)
+    incoming_frontmatter, incoming_body = _split_frontmatter(normalized_incoming)
+    frontmatter = incoming_frontmatter or existing_frontmatter
+
+    merged_body_lines = list(existing_body.splitlines())
+    existing_keys = {line.strip() for line in merged_body_lines if line.strip()}
+    remote_lines = incoming_body.splitlines()
+    sequence = difflib.SequenceMatcher(a=merged_body_lines, b=remote_lines)
+    for opcode, _a0, _a1, b0, b1 in sequence.get_opcodes():
+        if opcode == "equal":
+            continue
+        for line in remote_lines[b0:b1]:
+            key = line.strip()
+            if key and key in existing_keys:
+                continue
+            merged_body_lines.append(line)
+            if key:
+                existing_keys.add(key)
+
+    merged_body = "\n".join(merged_body_lines).strip("\n")
+    if not merged_body and not frontmatter:
+        return None
+    if frontmatter:
+        return f"{frontmatter}\n{merged_body}\n"
+    return f"{merged_body}\n"
+
+
+def _prompt_bootstrap_conflict_mode(conflicts: list[_BootstrapConflict]) -> str:
+    """Ask the user how standalone bootstrap should handle conflicting files."""
+    print("[SPARK-INIT] Trovati file gia presenti in conflitto con spark-base:", file=sys.stderr)
+    for conflict in conflicts:
+        print(f"[SPARK-INIT] - {conflict.file_path}: {conflict.reason}", file=sys.stderr)
+    print(
+        "[SPARK-INIT] Scegli: [r] replace, [p] preserve, [i] integrate, [a] annulla",
+        file=sys.stderr,
+    )
+    response = input().strip().lower()
+    if response in {"r", "replace"}:
+        return "replace"
+    if response in {"p", "preserve", "keep", "mantieni"}:
+        return "preserve"
+    if response in {"i", "integrate", "merge", "integra"}:
+        return "integrate"
+    return "abort"
 
 
 class _BootstrapInstaller:
@@ -218,8 +318,13 @@ class _BootstrapInstaller:
         self._manifest_path = project_root / MANIFEST_REL
         self._registry_cache_path = engine_root / REGISTRY_CACHE_REL
 
-    def ensure_spark_base(self) -> str:
+    def ensure_spark_base(self, conflict_mode: str = "abort") -> str:
         """Install spark-base once, or return that it is already present."""
+        if conflict_mode not in _BOOTSTRAP_SUPPORTED_CONFLICT_MODES:
+            raise _BootstrapError(
+                f"Unsupported bootstrap conflict_mode '{conflict_mode}'. "
+                "Supported modes: abort, replace, preserve, integrate."
+            )
         entries = self._load_manifest_entries()
         if self._has_existing_install(entries):
             _log(
@@ -246,7 +351,12 @@ class _BootstrapInstaller:
         if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
             raise _BootstrapError("Il package-manifest di spark-base non contiene una lista 'files' valida.")
 
-        plan = self._build_install_plan(files, package_info.repo_url, entries)
+        plan = self._build_install_plan(
+            files,
+            package_info.repo_url,
+            entries,
+            conflict_mode=conflict_mode,
+        )
         self._apply_install_plan(plan, package_version)
         _log("INFO", "spark-base installato correttamente nel workspace.")
         return "installato"
@@ -256,6 +366,7 @@ class _BootstrapInstaller:
         files: list[str],
         repo_url: str,
         entries: list[dict[str, Any]],
+        conflict_mode: str = "abort",
     ) -> list[_InstallPlanItem]:
         """Prepare a safe write/adopt plan before touching the workspace."""
         tracked_entries = {
@@ -264,12 +375,12 @@ class _BootstrapInstaller:
             if str(entry.get("file", "")).strip()
         }
         plan: list[_InstallPlanItem] = []
-        blocking_conflicts: list[str] = []
+        blocking_conflicts: list[_BootstrapConflict] = []
 
         for file_path in files:
             if not file_path.startswith(".github/"):
                 blocking_conflicts.append(
-                    f"Percorso non supportato fuori da .github/: {file_path}"
+                    _BootstrapConflict(file_path, "Percorso non supportato fuori da .github/")
                 )
                 continue
 
@@ -283,11 +394,16 @@ class _BootstrapInstaller:
                 tracked_package = str(tracked_entry.get("package", "")).strip()
                 if tracked_package != SPARK_BASE_ID:
                     blocking_conflicts.append(
-                        f"{file_path} e gia tracciato dal pacchetto {tracked_package}."
+                        _BootstrapConflict(file_path, f"gia tracciato dal pacchetto {tracked_package}")
                     )
                     continue
                 if dest_path.exists() and _sha256_file(dest_path) != str(tracked_entry.get("sha256", "")):
-                    _log("INFO", f"Preservato file modificato dall'utente: {file_path}")
+                    if conflict_mode == "replace":
+                        plan.append(
+                            _InstallPlanItem(file_path, rel_path, content, content_sha256, "write")
+                        )
+                    else:
+                        _log("INFO", f"Preservato file modificato dall'utente: {file_path}")
                     continue
                 action = "write"
                 if dest_path.exists() and _sha256_file(dest_path) == content_sha256:
@@ -303,9 +419,44 @@ class _BootstrapInstaller:
                     plan.append(
                         _InstallPlanItem(file_path, rel_path, content, content_sha256, "adopt")
                     )
+                elif conflict_mode == "replace":
+                    _log("WARNING", f"Sostituisco file esistente non tracciato: {file_path}")
+                    plan.append(
+                        _InstallPlanItem(file_path, rel_path, content, content_sha256, "write")
+                    )
+                elif conflict_mode == "preserve":
+                    existing_text = _read_text_if_possible(dest_path)
+                    if existing_text is None:
+                        blocking_conflicts.append(
+                            _BootstrapConflict(file_path, "file esistente non testuale: preserve non supportato")
+                        )
+                    else:
+                        _log("INFO", f"Mantengo file esistente come baseline locale: {file_path}")
+                        plan.append(
+                            _InstallPlanItem(file_path, rel_path, existing_text, current_sha256, "preserve")
+                        )
+                elif conflict_mode == "integrate":
+                    existing_text = _read_text_if_possible(dest_path)
+                    if existing_text is None:
+                        blocking_conflicts.append(
+                            _BootstrapConflict(file_path, "file esistente non testuale: integrazione non disponibile")
+                        )
+                    else:
+                        merged_text = _merge_bootstrap_text(existing_text, content)
+                        if merged_text is None:
+                            blocking_conflicts.append(
+                                _BootstrapConflict(file_path, "integrazione non sicura")
+                            )
+                        else:
+                            merged_sha256 = _sha256_text(merged_text)
+                            action = "adopt" if current_sha256 == merged_sha256 else "write"
+                            _log("INFO", f"Integrazione best-effort pianificata: {file_path}")
+                            plan.append(
+                                _InstallPlanItem(file_path, rel_path, merged_text, merged_sha256, action)
+                            )
                 else:
                     blocking_conflicts.append(
-                        f"{file_path} esiste gia ma non e tracciato nel manifest."
+                        _BootstrapConflict(file_path, "esiste gia ma non e tracciato nel manifest")
                     )
                 continue
 
@@ -313,9 +464,10 @@ class _BootstrapInstaller:
 
         if blocking_conflicts:
             for conflict in blocking_conflicts:
-                _log("ERROR", conflict)
-            raise _BootstrapError(
-                "Bootstrap spark-base annullato per evitare overwrite su file esistenti."
+                _log("ERROR", f"{conflict.file_path}: {conflict.reason}")
+            raise _BootstrapConflictError(
+                "Bootstrap spark-base annullato per evitare overwrite su file esistenti.",
+                blocking_conflicts,
             )
 
         return plan
@@ -331,6 +483,8 @@ class _BootstrapInstaller:
 
         for item in plan:
             if item.action != "write":
+                if item.action == "preserve":
+                    _log("INFO", f"Preservato e tracciato come baseline locale: {item.file_path}")
                 continue
             dest_path = self._project_root / item.file_path
             dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -518,6 +672,18 @@ def main() -> int:
 
     try:
         bootstrap_action = _BootstrapInstaller(project_root, engine_root).ensure_spark_base()
+    except _BootstrapConflictError as exc:
+        selected_mode = _prompt_bootstrap_conflict_mode(exc.conflicts)
+        if selected_mode == "abort":
+            _log("ERROR", "Bootstrap annullato dall'utente dopo il rilevamento dei conflitti.")
+            return 1
+        try:
+            bootstrap_action = _BootstrapInstaller(project_root, engine_root).ensure_spark_base(
+                conflict_mode=selected_mode
+            )
+        except _BootstrapError as retry_exc:
+            _log("ERROR", str(retry_exc))
+            return 1
     except _BootstrapError as exc:
         _log("ERROR", str(exc))
         return 1

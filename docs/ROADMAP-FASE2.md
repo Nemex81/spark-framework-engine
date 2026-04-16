@@ -29,5 +29,5 @@
 - Engine version: 2.0.0
 - Tool registrati: 33
 - conflict_mode supportati in produzione: "abort", "replace", "manual", "auto", "assisted"
-- Note operative: `auto` usa una risoluzione best-effort conservativa e degrada a `manual` nei casi ambigui; `scf_apply_updates()` batch resta sul percorso replace.
+- Note operative: `auto` usa una risoluzione best-effort conservativa e degrada a `manual` nei casi ambigui; `scf_apply_updates(conflict_mode=...)` inoltra il mode scelto a tutto il batch.
 - conflict_mode pianificati Fase 2: tutti implementati e rilasciati in v2.0.0
