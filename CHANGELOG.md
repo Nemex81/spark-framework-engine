@@ -11,8 +11,8 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ### Changed
 
 - `scf_bootstrap_workspace(install_base=True)` puo' ora completare il bootstrap MCP e tentare subito l'installazione gestita di `spark-base`, saltando il passo se il pacchetto e gia installato.
-- `spark-init.py` copia ora anche `spark-guide.agent.md` per allineare lo script di inizializzazione al bootstrap MCP del motore.
-- README allineato ai file reali scritti da `spark-init.py` (`.vscode/mcp.json`) e al nuovo flusso di onboarding a un passo.
+- `spark-init.py` sostituisce il bootstrap hard-coded con un installer embedded di `spark-base`, aggiornando `.github/.scf-manifest.json` e riducendo lo stdout al solo riepilogo finale.
+- README allineato al bootstrap embedded di `spark-init.py`, al manifest runtime e al nuovo riepilogo in 3 righe.
 
 ### Fixed
 
@@ -21,7 +21,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Notes
 
-- `spark-init.py` resta intenzionalmente limitato al bootstrap locale minimo: l'installazione dei pacchetti continua a passare dal motore MCP per preservare manifest, ownership e preflight.
+- Il registry pubblico e il manifest remoto di `spark-base` risultano ancora disallineati sulla versione pubblicata; `spark-init.py` usa il manifest remoto reale e segnala la discrepanza su `stderr`.
 
 ---
 

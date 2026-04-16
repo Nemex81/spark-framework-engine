@@ -96,29 +96,14 @@ pip install mcp
 
   - crea o aggiorna `<progetto>.code-workspace`
   - crea o aggiorna `.vscode/mcp.json`
-  - copia il set minimo di file SPARK in `.github/`
+  - installa `spark-base` dal registry pubblico SCF e aggiorna `.github/.scf-manifest.json`
 
 - Al termine stampa un riepilogo simile a questo:
 
     ```text
     [SPARK] .code-workspace → creato: mio-progetto.code-workspace
     [SPARK] .vscode/mcp.json → creato
-    [SPARK] .github/agents/spark-assistant.agent.md → copiato
-    [SPARK] .github/agents/spark-engine-maintainer.agent.md → copiato
-    [SPARK] .github/agents/spark-guide.agent.md → copiato
-    [SPARK] .github/instructions/spark-assistant-guide.instructions.md → copiato
-    [SPARK] .github/prompts/scf-install.prompt.md → copiato
-    [SPARK] .github/prompts/scf-list-available.prompt.md → copiato
-    [SPARK] .github/prompts/scf-list-installed.prompt.md → copiato
-    [SPARK] .github/prompts/scf-package-info.prompt.md → copiato
-    [SPARK] .github/prompts/scf-remove.prompt.md → copiato
-    [SPARK] .github/prompts/scf-status.prompt.md → copiato
-    [SPARK] .github/prompts/scf-update.prompt.md → copiato
-    [SPARK] .github/prompts/scf-check-updates.prompt.md → copiato
-
-    Setup completato. Il server SPARK è configurato in due modi:
-      - Workspace : apri mio-progetto.code-workspace in VS Code
-      - Cartella  : apri direttamente la cartella, funziona lo stesso
+    [SPARK] spark-base → installato
     ```
 
 - Apri il progetto in VS Code in uno dei due modi supportati:
@@ -132,9 +117,8 @@ pip install mcp
 
   - il `.code-workspace` viene aggiornato, non ricreato
   - `.vscode/mcp.json` viene aggiornato, non ricreato
-  - i file `.github/` gia presenti e non modificati vengono saltati
-    silenziosamente
-  - i file `.github/` modificati dall'utente vengono preservati
+  - `spark-base` viene rilevato dal manifest e non viene reinstallato
+  - i warning e i dettagli operativi vengono inviati su `stderr`
 
 ### Configurazione manuale alternativa
 
@@ -189,11 +173,9 @@ Per usare SPARK la prima volta in un workspace utente:
 
   Lo script prepara gia il set base sotto `.github/`:
 
-  - 8 prompt `scf-*.prompt.md`
-  - `spark-assistant.agent.md`
-  - `spark-engine-maintainer.agent.md`
-  - `spark-guide.agent.md`
-  - `spark-assistant-guide.instructions.md`
+  - installa il pacchetto `spark-base` dal registry pubblico
+  - registra i file installati nel manifest runtime `.github/.scf-manifest.json`
+  - lascia al motore MCP il caricamento dinamico di agenti, skill, instruction e prompt
 
 - Usa `spark-assistant` come punto di ingresso operativo nel workspace bootstrap-pato.
 - Usa `spark-guide` nel repo engine quando ti serve orientamento sul sistema e routing verso l'agente corretto.
@@ -205,10 +187,10 @@ Per usare SPARK la prima volta in un workspace utente:
 
 - Dopo l'installazione, verifica lo stato locale con `scf_verify_workspace()`.
 
-Il bootstrap eseguito da `spark-init.py` non registra file nel manifest runtime
-dei pacchetti: prepara solo gli asset minimi di ingresso al sistema.
-Per il bootstrap gestito dal manifest e l'onboarding in un passo, usa
-`scf_bootstrap_workspace(install_base=True)` una volta aperto il workspace in VS Code.
+Il bootstrap eseguito da `spark-init.py` installa `spark-base` e registra i file
+nel manifest runtime dei pacchetti. Per il bootstrap orchestrato dal motore MCP
+e l'onboarding in un passo dall'interno di VS Code, usa
+`scf_bootstrap_workspace(install_base=True)` una volta aperto il workspace.
 
 ---
 

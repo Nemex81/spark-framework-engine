@@ -110,6 +110,10 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
     master_manifest = _remote_manifest(tmp_workspace, "scf-master-codecrafter")
     expected_files = {path.removeprefix(".github/") for path in master_manifest["files"]}
 
+    base_result = asyncio.run(install_package("spark-base"))
+
+    assert base_result["success"] is True, base_result
+
     result = asyncio.run(install_package("scf-master-codecrafter"))
 
     assert result["success"] is True, result
@@ -119,8 +123,9 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
     manifest_path = tmp_workspace.github_root / ".scf-manifest.json"
     assert manifest_path.is_file()
     entries = _manifest_entries(tmp_workspace.github_root)
-    assert {entry["file"] for entry in entries} == expected_files
-    for entry in entries:
+    master_entries = [entry for entry in entries if entry["package"] == "scf-master-codecrafter"]
+    assert {entry["file"] for entry in master_entries} == expected_files
+    for entry in master_entries:
         assert set(entry) >= {"file", "package", "package_version", "installed_at", "sha256"}
         file_on_disk = tmp_workspace.github_root / entry["file"]
         assert _sha256(file_on_disk) == entry["sha256"]
@@ -137,13 +142,41 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
 
 
 @pytest.mark.integration
+def test_plan_and_install_master_package_require_spark_base_first(
+    tmp_workspace: LiveWorkspace,
+) -> None:
+    plan_install = _tool(tmp_workspace, "scf_plan_install")
+    install_package = _tool(tmp_workspace, "scf_install_package")
+
+    plan = asyncio.run(plan_install("scf-master-codecrafter"))
+
+    assert plan["success"] is True
+    assert plan["can_install"] is False
+    assert any(
+        "spark-base" in issue.get("missing_dependencies", [])
+        for issue in plan["dependency_issues"]
+    )
+
+    result = asyncio.run(install_package("scf-master-codecrafter"))
+
+    assert result["success"] is False
+    assert "spark-base" in result["missing_dependencies"]
+    assert not (tmp_workspace.github_root / ".scf-manifest.json").exists()
+
+
+@pytest.mark.integration
 def test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace(
     tmp_workspace: LiveWorkspace,
 ) -> None:
     plan_install = _tool(tmp_workspace, "scf_plan_install")
     install_package = _tool(tmp_workspace, "scf_install_package")
     master_manifest = _remote_manifest(tmp_workspace, "scf-master-codecrafter")
-    conflict_path = tmp_workspace.workspace_root / ".github" / "agents" / "Agent-Orchestrator.md"
+    base_result = asyncio.run(install_package("spark-base"))
+
+    assert base_result["success"] is True, base_result
+
+    conflict_rel = ".github/agents/Agent-Code.md"
+    conflict_path = tmp_workspace.workspace_root / conflict_rel
     conflict_path.parent.mkdir(parents=True, exist_ok=True)
     conflict_path.write_text("file utente non tracciato", encoding="utf-8")
 
@@ -153,7 +186,7 @@ def test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace(
     assert plan["can_install"] is False
     assert plan["can_install_with_replace"] is True
     assert any(
-        item["file"] == ".github/agents/Agent-Orchestrator.md"
+        item["file"] == conflict_rel
         and item["classification"] == "conflict_untracked_existing"
         for item in plan["conflict_plan"]
     )
@@ -162,7 +195,10 @@ def test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace(
 
     assert result["success"] is False
     assert conflict_path.read_text(encoding="utf-8") == "file utente non tracciato"
-    assert not (tmp_workspace.github_root / ".scf-manifest.json").exists()
+    manifest_path = tmp_workspace.github_root / ".scf-manifest.json"
+    assert manifest_path.exists()
+    entries = _manifest_entries(tmp_workspace.github_root)
+    assert not any(entry["package"] == "scf-master-codecrafter" for entry in entries)
     for file_rel in master_manifest["files"]:
         target_path = tmp_workspace.workspace_root / file_rel
         if target_path == conflict_path:

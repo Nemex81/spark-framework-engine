@@ -31,6 +31,7 @@ Fasi e stato (coordinator):
 - **SB-4**: Aggiornamento registry — Stato: In corso (entry locale aggiornata e validata, commit/push non eseguiti) — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
 - **SB-5**: Migrazione workspace utente — Stato: Non avviata — [todo-fase-SB-5-migrazione.md](todolist/todo-fase-SB-5-migrazione.md)
 - **SB-6**: Gate di verifica post-migrazione — Stato: Non avviata — [todo-fase-SB-6-gate.md](todolist/todo-fase-SB-6-gate.md)
+- **SB-7**: Migrazione `spark-init.py` a bootstrap embedded `spark-base` — Stato: Completata (script, test e README allineati localmente) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
 - **SB-2b**: Correzione asset split (`Agent-Code` + `spark-guide`) — Stato: In corso (fix coordinato engine/base/master avviato) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
 
 Ordine di esecuzione:
