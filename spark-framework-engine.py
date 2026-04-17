@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.2.0"
+ENGINE_VERSION: str = "2.2.1"
 
 
 # ---------------------------------------------------------------------------
@@ -3326,7 +3326,6 @@ class SparkFrameworkEngine:
                         update_entry["dependencies"] = dependencies
                         update_entry["missing_dependencies"] = missing_dependencies
                         update_entry["min_engine_version"] = min_engine_version
-                        update_entry["engine_min_version"] = min_engine_version
                         update_entry["engine_compatible"] = engine_compatible
 
                         if missing_dependencies:

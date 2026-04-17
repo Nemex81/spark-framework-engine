@@ -6,6 +6,15 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.2.1] - 2026-04-17
+
+### Fixed
+- Rimossa chiave legacy `engine_min_version` dall'output di `_plan_package_updates`.
+  La chiave canonica `min_engine_version` è l'unico output corretto per i tool
+  `scf_check_updates` e `scf_update_packages`.
+
+---
+
 ## [2.2.0] - 2026-04-17
 
 ### Removed
