@@ -2,10 +2,10 @@
 
 ## SCF File Ownership & Workspace Merge System
 
-**Versione:** 1.0.0-draft
+**Versione:** 1.1.0-draft
 **Data:** 17 Aprile 2026
 **Autore:** Nemex81 / SPARK Architecture Team
-**Stato:** Proposta approvata — In attesa di implementazione
+**Stato:** Proposta corretta — Validazione superata con correzioni
 **Repository di riferimento:** `spark-framework-engine`, `spark-base`, `scf-master-codecrafter`, `scf-pycode-crafter`, `scf-registry`
 
 ---
@@ -20,6 +20,8 @@
 - Parte 5 — Modalità di Aggiornamento
 - Parte 6 — Architettura dei Tool nell'Engine
 - Parte 7 — Fasi di Implementazione
+- Appendice A — Note di Compatibilità con Engine Esistente
+- Appendice B — Log di Validazione
 
 ---
 
@@ -47,6 +49,7 @@ Ogni file `.md` deployato nel workspace da un pacchetto SCF porta questo front m
 
 ```yaml
 ---
+spark: true                       # OBBLIGATORIO — campo di riconoscimento per verify_integrity()
 scf_owner: "scf-master-codecrafter"
 scf_version: "1.0.0"
 scf_file_role: "agent"          # agent | instruction | skill | prompt | config
@@ -55,6 +58,8 @@ scf_merge_priority: 20          # ordine composizione nei file aggregati
 scf_protected: false            # true = mai sovrascrivibile senza conferma esplicita
 ---
 ```
+
+> **Nota:** Il campo `spark: true` è obbligatorio per tutti i file `.md` gestiti dal framework. L'engine lo usa in `verify_integrity()` per distinguere file SCF orfani (`untagged_spark_files`) da file utente (`user_files`). I nuovi campi `scf_*` si aggiungono a `spark: true`, non lo sostituiscono.
 
 Il campo `scf_merge_strategy` governa il comportamento del sistema ad ogni aggiornamento:
 
@@ -89,10 +94,11 @@ Per i file non-Markdown (JSON di configurazione, file `.agent.md` senza front ma
 
 Questa normalizzazione va eseguita sui seguenti repo prima di qualsiasi modifica all'engine:
 
-- `spark-base` — tutti i file `.md` in `.github/`
-- `scf-master-codecrafter` — tutti i file `.md` in `.github/` inclusi i 14 agent file in `.github/agents/`
-- `scf-pycode-crafter` — tutti i file `.md` esistenti; creazione ex novo di `copilot-instructions.md`
-- `scf-registry` — tutti i file `.md` esistenti; creazione ex novo di `copilot-instructions.md`
+- `spark-base` — tutti i file `.md` in `.github/` (76 file, già hanno `spark: true`)
+- `scf-master-codecrafter` — tutti i file `.md` in `.github/` inclusi i 4 agent file in `.github/agents/` (13 file, già hanno `spark: true`)
+- `scf-pycode-crafter` — tutti i file `.md` esistenti (12 file); creazione ex novo di `copilot-instructions.md` con sezione contribuita
+
+> **Nota:** `scf-registry` è escluso dalla normalizzazione. È un repository dati (contiene solo `registry.json` e `README.md`) e non è un pacchetto SCF deployabile nel workspace utente.
 
 ---
 
@@ -131,7 +137,7 @@ Il file `copilot-instructions.md` nel workspace dell'utente è un file **aggrega
 
 ### Regole dei Marcatori
 
-Il marker di apertura ha la forma `<!-- SCF:BEGIN:{package_id}@{version} -->`. Il marker di chiusura ha la forma `<!-- SCF:END:{package_id} -->`. La regex di ricerca per trovare un blocco esistente è tollerante sulla versione: usa `<!-- SCF:BEGIN:{package_id}@[^-]+ -->` per il match, così un aggiornamento da `1.0.0` a `1.1.0` trova e sostituisce correttamente il blocco precedente.
+Il marker di apertura ha la forma `<!-- SCF:BEGIN:{package_id}@{version} -->`. Il marker di chiusura ha la forma `<!-- SCF:END:{package_id} -->`. La regex di ricerca per trovare un blocco esistente è tollerante sulla versione: usa `<!-- SCF:BEGIN:{package_id}@[^\s>]+ -->` per il match, così un aggiornamento da `1.0.0` a `1.1.0` (o anche `2.0.0-beta.1`) trova e sostituisce correttamente il blocco precedente. Il pattern `[^\s>]+` è compatibile con SemVer completo incluse versioni pre-release e build metadata.
 
 Il testo dell'utente che si trova **fuori** da qualsiasi marcatore `SCF:BEGIN/END` è **intoccabile** in qualunque modalità operativa, inclusa quella Sostitutiva. Questa è la garanzia assoluta di non-distruzione del contenuto personalizzato.
 
@@ -143,6 +149,7 @@ Ogni pacchetto espone nel proprio `copilot-instructions.md` **solo la propria se
 
 ```yaml
 ---
+spark: true
 scf_owner: "scf-master-codecrafter"
 scf_version: "1.0.0"
 scf_file_role: "config"
@@ -218,22 +225,23 @@ Anche con `auto_update: true` e `default_mode: "replace"`, il sistema non sovras
 
 ### Configurazione alla Prima Esecuzione
 
-Il primo avvio di `scf_bootstrap_workspace`, prima che esista qualsiasi preferenza, presenta all'utente questa domanda unica:
+Il primo avvio di `scf_bootstrap_workspace`, prima che esista qualsiasi preferenza, restituisce un risultato strutturato che include la richiesta di configurazione. L'agente (Copilot) presenta le opzioni all'utente in chat:
 
+> **Nota MCP:** I tool MCP non supportano prompt interattivi nativi. Tutti i "dialoghi" descritti in questo documento sono return value strutturati che l'agente di chat interpreta e presenta all'utente. Il tool restituisce `{"action_required": "configure_update_policy", "options": [...]}` e l'agente formula la domanda.
+
+```json
+{
+  "action_required": "configure_update_policy",
+  "options": [
+    {"key": "ask", "label": "Chiedimi ogni volta (default sicuro)", "recommended": true},
+    {"key": "integrative", "label": "Automatico integrativo"},
+    {"key": "conservative", "label": "Automatico conservativo"},
+    {"key": "ask_later", "label": "Sceglier\u00f2 in seguito"}
+  ]
+}
 ```
-[SPARK] Configurazione preferenze di aggiornamento
 
-Come vuoi che SPARK gestisca i futuri aggiornamenti dei file nel workspace?
-
-  [1] Chiedimi ogni volta (default sicuro — raccomandato)
-  [2] Automatico integrativo — aggiorna unendo, preserva le mie modifiche
-  [3] Automatico conservativo — non toccare mai i miei file senza chiedermi
-  [4] Sceglierò in seguito (equivale a opzione 1)
-
-Puoi modificare questa scelta in qualsiasi momento con scf_set_update_policy().
-```
-
-La risposta viene salvata in `spark-user-prefs.json` prima di procedere con qualsiasi altra operazione. Se l'utente non risponde o annulla, il sistema salva `auto_update: false` e continua: il fail-safe punta sempre verso la modalità interattiva.
+La risposta viene salvata in `spark-user-prefs.json` tramite `scf_set_update_policy()` prima di procedere. Se l'utente non risponde o annulla, il sistema salva `auto_update: false` e continua: il fail-safe punta sempre verso la modalit\u00e0 interattiva.
 
 ---
 
@@ -349,7 +357,9 @@ La logica è distribuita in utility private e tool pubblici. Nessun monolite.
 
 **`_scf_diff_workspace(package_id, version)`** — Confronta il manifest del pacchetto con lo snapshot corrente del workspace. Ritorna lista di file con status: `new`, `updated_clean`, `updated_user_modified`, `unchanged`. Il rilevamento di `updated_user_modified` avviene confrontando SHA-256 corrente con quello registrato nel manifest all'ultima installazione. Chiamata da tutti i tool pubblici per generare il riepilogo.
 
-**`_scf_merge_file(source_content, target_path, strategy, package_id, version)`** — Implementa le tre strategie di merge. Per `merge_sections`: regex tollerante sulla versione del marcatore, gestione di `merge_priority` per l'ordinamento delle sezioni nel file aggregato, preservazione garantita del testo utente fuori dai marcatori. **Non scrive su disco**: restituisce il contenuto finale al chiamante, che è responsabile della scrittura. Questo mantiene il principio di separazione tra logica e I/O.
+**`_scf_section_merge(source_content, target_path, strategy, package_id, version)`** — Implementa le tre strategie di merge per i file a sezioni. Per `merge_sections`: regex tollerante sulla versione del marcatore, gestione di `merge_priority` per l'ordinamento delle sezioni nel file aggregato, preservazione garantita del testo utente fuori dai marcatori. **Non scrive su disco**: restituisce il contenuto finale al chiamante, che \u00e8 responsabile della scrittura. Questo mantiene il principio di separazione tra logica e I/O.
+
+> **Nota:** Questa utility \u00e8 distinta da `MergeEngine.diff3_merge()` gi\u00e0 presente nell'engine. `MergeEngine` gestisce merge 3-way a livello di file (confronto riga per riga tra base/ours/theirs). `_scf_section_merge()` gestisce composizione per blocchi marcati `SCF:BEGIN/END` in file aggregati. Le due utility non si sovrappongono.
 
 **`_scf_backup_workspace(package_id)`** — Crea snapshot datato in `.github/runtime/backups/YYYYMMDD-HHMMSS/` dei soli file che verranno modificati dall'operazione corrente. Chiamata automaticamente e obbligatoriamente prima di qualsiasi operazione in modalità Sostitutiva.
 
@@ -375,7 +385,29 @@ Le fasi sono strettamente sequenziali. Ogni fase è prerequisito della successiv
 
 **Scope:** tutti i repo dei pacchetti. Nessuna modifica all'engine.
 
-Aggiungere il front matter SCF a tutti i file `.md` in `.github/` di `spark-base`, `scf-master-codecrafter`, `scf-pycode-crafter`. Creare `copilot-instructions.md` per `scf-pycode-crafter` e `scf-registry` con front matter e contenuto della sezione contribuita. Aggiornare i `package-manifest.json` di ogni pacchetto aggiungendo il campo `files` con l'elenco completo dei file deployabili, ciascuno con i propri metadati SCF. Verificare la coerenza tra front matter dei file e voci nel manifest.
+Aggiungere il front matter SCF a tutti i file `.md` in `.github/` di `spark-base`, `scf-master-codecrafter`, `scf-pycode-crafter`. Il campo `spark: true` gi\u00e0 presente va preservato; i nuovi campi `scf_*` si aggiungono dopo di esso. Creare `copilot-instructions.md` per `scf-pycode-crafter` con front matter e contenuto della sezione contribuita.
+
+Aggiornare i `package-manifest.json` di ogni pacchetto portando lo schema a `2.1` e aggiungendo il campo `files_metadata` come array parallelo a `files`. Il campo `files` attuale (array di stringhe) resta invariato per backward compatibility. Il campo `files_metadata` contiene gli oggetti con metadati SCF:
+
+```json
+{
+  "schema_version": "2.1",
+  "files": [".github/agents/Agent-Code.md", "..."],
+  "files_metadata": [
+    {
+      "path": ".github/agents/Agent-Code.md",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    }
+  ]
+}
+```
+
+> **Nota backward compatibility:** L'engine deve supportare sia schema `2.0` (senza `files_metadata`) che `2.1` (con `files_metadata`). Quando `files_metadata` \u00e8 assente, tutti i file vengono trattati con strategia `replace` e `scf_protected: false` come default.
+
+Verificare la coerenza tra front matter dei file e voci nel manifest.
 
 ### Fase B — Tool di Policy e Utility Diff/Backup
 
@@ -387,19 +419,19 @@ Creare il template di `spark-user-prefs.json` con schema e valori default. Imple
 
 **Scope:** `spark-framework-engine.py`. Nessuna modifica ai tool pubblici esistenti.
 
-Implementare `_scf_merge_file()` con tutte e tre le strategie. La strategia `merge_sections` è la più complessa e richiede: regex tollerante sulla versione nel marker di apertura, ricostruzione del file rispettando `merge_priority`, preservazione assoluta del testo utente fuori dai marcatori, gestione del caso di rimozione pacchetto (eliminazione del blocco). Test unitari per ogni strategia, inclusi casi limite (file nuovo, file senza marcatori esistenti, blocco corrotto).
+Implementare `_scf_section_merge()` con tutte e tre le strategie. La strategia `merge_sections` \u00e8 la pi\u00f9 complessa e richiede: regex tollerante sulla versione nel marker di apertura (`[^\s>]+` per SemVer completo), ricostruzione del file rispettando `merge_priority`, preservazione assoluta del testo utente fuori dai marcatori, gestione del caso di rimozione pacchetto (eliminazione del blocco). Test unitari per ogni strategia, inclusi casi limite (file nuovo, file senza marcatori esistenti, blocco corrotto, versioni pre-release nei marker).
 
 ### Fase D — Integrazione Flusso nei Tool Pubblici
 
 **Scope:** `spark-framework-engine.py`, tool `scf_install_package` e `scf_update_package`.
 
-Agganciare la sequenza completa degli Step 1-6 della Parte 4 in entrambi i tool. Il parametro `mode` diventa opzionale. Integrare l'avviso cartella protetta e il controllo `github_write_authorized` dall'`orchestrator-state.json`. Implementare la logica di risoluzione degli override della policy (`mode_per_package` → `mode_per_file_role` → `default_mode`). Test di integrazione end-to-end con workspace di test.
+Agganciare la sequenza completa degli Step 1-6 della Parte 4 in entrambi i tool. Il nuovo parametro `update_mode` (opzionale, distinto da `conflict_mode`) accetta i valori `integrative|replace|conservative|selective`. Se assente, il sistema consulta la policy utente o chiede in chat. `conflict_mode` mantiene il ruolo attuale per la gestione dei conflitti file-level. Integrare l'avviso cartella protetta e il controllo `github_write_authorized` dall'`orchestrator-state.json`. Implementare la logica di risoluzione degli override della policy (`mode_per_package` → `mode_per_file_role` → `default_mode`). Test di integrazione end-to-end con workspace di test.
 
-### Fase E — Implementazione `scf_bootstrap_workspace`
+### Fase E — Estensione `scf_bootstrap_workspace`
 
-**Scope:** `spark-framework-engine.py`, nuovo tool pubblico.
+**Scope:** `spark-framework-engine.py`, tool pubblico esistente.
 
-Implementare il 28° tool usando esclusivamente le utility costruite nelle fasi precedenti. Il tool non introduce nuova logica: è un orchestratore del flusso. Verificare il comportamento idempotente con workspace già inizializzato. Verificare il flusso completo dalla configurazione policy iniziale all'esecuzione finale.
+Estendere il tool esistente (attualmente gestisce copia asset + installazione opzionale spark-base) aggiungendo il flusso policy/diff/auth descritto nella Parte 4. Il tool non introduce nuova logica: riusa le utility costruite nelle fasi precedenti. Preservare il comportamento attuale come sottoinsieme del flusso esteso. Verificare il comportamento idempotente con workspace gi\u00e0 inizializzato. Verificare il flusso completo dalla configurazione policy iniziale all'esecuzione finale.
 
 ### Fase F — Documentazione e Release
 
@@ -407,6 +439,73 @@ Implementare il 28° tool usando esclusivamente le utility costruite nelle fasi 
 
 Aggiornare il `copilot-instructions.md` dell'engine per riflettere i nuovi tool e il nuovo sistema. Aggiornare il `CHANGELOG.md` con sezione dedicata alla feature. Bump versione engine secondo SemVer (feature aggiunta → minor version). Aggiornare `README.md` con sezione sulla gestione degli aggiornamenti del workspace.
 
+### Fase G — Migrazione Workspace Esistenti
+
+**Scope:** `spark-framework-engine.py`, documentazione utente.
+
+Implementare la logica di migrazione per workspace già inizializzati con versioni precedenti del sistema. Il primo `scf_update_package` o `scf_bootstrap_workspace` su un workspace pre-esistente deve:
+- Rilevare che `spark-user-prefs.json` non esiste e avviare la configurazione iniziale della policy.
+- Riconoscere i file già installati senza front matter SCF e trattarli come `scf_merge_strategy: replace` (default retrocompatibile).
+- Se `copilot-instructions.md` esiste senza marcatori SCF, **non** iniettare marcatori automaticamente: proporre all'utente la migrazione esplicita al formato a marcatori.
+- Creare `spark-user-prefs.json` con policy default `ask` e registrare l'evento nel log.
+- Documentare la procedura di migrazione nel README e in un prompt dedicato.
+
 ---
 
-*Documento generato nell'ambito della sessione di architettura SPARK del 17 Aprile 2026. Stato: bozza approvata, pronta per implementazione sequenziale a partire dalla Fase A.*
+## Appendice A — Note di Compatibilità con Engine Esistente
+
+### Componenti Riusabili
+
+| Componente esistente | Ruolo attuale | Riuso nella proposta |
+|---|---|---|
+| `ManifestManager._is_user_modified()` | SHA-256 compare | Base per `_scf_diff_workspace()` classificazione `updated_user_modified` |
+| `ManifestManager.verify_integrity()` | Audit workspace | Esteso con check coerenza front matter vs manifest |
+| `SnapshotManager` | Snapshot BASE per 3-way merge | Riusato da `_scf_backup_workspace()` come infrastruttura |
+| `MergeEngine.diff3_merge()` | 3-way merge file-level | Invariato — complementare a `_scf_section_merge()` |
+| `_SUPPORTED_CONFLICT_MODES` | Validazione conflict_mode | Invariato — il nuovo `update_mode` è parametro separato |
+
+### Invarianti Preservate
+
+- `conflict_mode` parametro di `scf_install_package` e `scf_update_package`: invariato, stessa semantica
+- Schema manifest runtime `.scf-manifest.json`: invariato (schema `1.0` entries con file/package/version/sha256)
+- Schema registry `registry.json`: invariato (schema `2.0`)
+- Comportamento `scf_bootstrap_workspace` attuale: preservato come sottoinsieme del flusso esteso
+- `spark: true` come campo di riconoscimento: preservato, i nuovi campi `scf_*` si aggiungono
+
+### Breaking Change Controllati
+
+- `package-manifest.json` dei pacchetti: schema bump `2.0` → `2.1` (aggiunta `files_metadata`)
+- Engine deve supportare entrambi gli schema durante il periodo di transizione
+- `copilot-instructions.md` nei pacchetti: passa da file completo a sezione contribuita
+- I pacchetti aggiornano il proprio `copilot-instructions.md` solo nella release che implementa questa proposta
+
+---
+
+## Appendice B — Log di Validazione
+
+### Validazione v1.1.0 — 17 Aprile 2026
+
+**Esito:** Superata con 13 correzioni applicate.
+
+**Issue critiche risolte:**
+1. ✅ Regex marker: `[^-]+` → `[^\s>]+` (compatibile SemVer pre-release)
+2. ✅ `spark: true` aggiunto come campo obbligatorio nel front matter
+3. ✅ Tool count corretto: bootstrap esiste già (33 tool), 2 nuovi → 35 totali
+4. ✅ Schema `files` manifest: introdotto `files_metadata` parallelo per backward compat
+5. ✅ MCP interaction model: prompt interattivi riformulati come return value strutturati
+
+**Issue significative risolte:**
+6. ✅ `_scf_merge_file` → `_scf_section_merge` per evitare collisione con `MergeEngine`
+7. ✅ Aggiunta nota esplicita sulla relazione `conflict_mode` vs `update_mode`
+8. ✅ `scf-registry` rimosso dalla normalizzazione (repo dati, non pacchetto)
+9. ✅ Aggiunta Fase G per migrazione workspace esistenti
+
+**Issue minori risolte:**
+10. ✅ Tabella componenti riusabili in Appendice A
+11. ✅ Chiarita complementarità `_scf_backup_workspace` vs `SnapshotManager`
+12. ✅ Fase E riformulata come estensione del tool esistente
+13. ✅ Sezione backward compatibility manifest in Fase A
+
+---
+
+*Documento generato nell'ambito della sessione di architettura SPARK del 17 Aprile 2026. Versione 1.1.0-draft: correzioni post-validazione applicate.*

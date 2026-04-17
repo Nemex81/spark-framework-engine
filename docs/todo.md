@@ -62,3 +62,39 @@ Ordine di esecuzione raccomandato (dipendenze):
 7. F7 (release)
 
 Nota: le regole e le dipendenze sono descritte in dettaglio in [SCF-3WAY-MERGE-IMPLEMENTATION-PLAN.md](SCF-3WAY-MERGE-IMPLEMENTATION-PLAN.md).
+
+---
+
+## Progetto SCF File Ownership & Workspace Merge System
+
+Coordinator per l'implementazione del sistema di ownership file, merge a sezioni e preferenze utente.
+
+Piano: [SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md](SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md)
+Validazione: Superata v1.1.0 — 13 correzioni applicate al documento originale
+
+Fasi e stato (coordinator):
+
+- **OWN-A**: Normalizzazione pacchetti (front matter + manifest schema 2.1) — Stato: Non avviata — [todo-fase-OWN-A-normalizzazione.md](todolist/todo-fase-OWN-A-normalizzazione.md)
+- **OWN-B**: Tool policy + utility diff/backup — Stato: Non avviata — [todo-fase-OWN-B-policy-diff-backup.md](todolist/todo-fase-OWN-B-policy-diff-backup.md)
+- **OWN-C**: Utility section merge (SCF markers) — Stato: Non avviata — [todo-fase-OWN-C-section-merge.md](todolist/todo-fase-OWN-C-section-merge.md)
+- **OWN-D**: Integrazione flusso install/update — Stato: Non avviata — [todo-fase-OWN-D-integrazione-flusso.md](todolist/todo-fase-OWN-D-integrazione-flusso.md)
+- **OWN-E**: Estensione bootstrap workspace — Stato: Non avviata — [todo-fase-OWN-E-bootstrap-estensione.md](todolist/todo-fase-OWN-E-bootstrap-estensione.md)
+- **OWN-F**: Documentazione e release — Stato: Non avviata — [todo-fase-OWN-F-docs-release.md](todolist/todo-fase-OWN-F-docs-release.md)
+- **OWN-G**: Migrazione workspace esistenti — Stato: Non avviata — [todo-fase-OWN-G-migrazione-workspace.md](todolist/todo-fase-OWN-G-migrazione-workspace.md)
+
+Ordine di esecuzione (strettamente sequenziale):
+
+1. OWN-A (prerequisito per tutto — nessuna modifica engine)
+2. OWN-B (utility interne + 2 nuovi tool)
+3. OWN-C (section merge, dipende da OWN-B)
+4. OWN-D (integrazione nei tool pubblici, dipende da OWN-B + OWN-C)
+5. OWN-E (estensione bootstrap, dipende da OWN-D)
+6. OWN-F (docs e release, dipende da OWN-E)
+7. OWN-G (migrazione, dipende da OWN-F — può procedere in parallelo parziale)
+
+Regole di avanzamento:
+
+- Ogni fase richiede gate di uscita verificato (test + audit).
+- Non avviare la fase N+1 se la fase N non ha il gate superato.
+- Prima di marcare completata: aggiornare il rispettivo `todo-fase-OWN-*.md` con tutti i checkbox.
+- OWN-A non richiede test engine ma richiede validazione coerenza front matter ↔ manifest.
