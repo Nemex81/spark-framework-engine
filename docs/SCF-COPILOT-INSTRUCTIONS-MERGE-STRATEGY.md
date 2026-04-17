@@ -369,11 +369,13 @@ La logica è distribuita in utility private e tool pubblici. Nessun monolite.
 
 **`scf_set_update_policy(auto_update, default_mode, mode_per_package, mode_per_file_role)`** — Scrive la policy. Parametri opzionali tranne `auto_update`. Valida `default_mode`, aggiorna `last_changed` e `changed_by_user`.
 
-**`scf_bootstrap_workspace(mode)`** — Il 28° tool. Flusso completo in ordine: configurazione policy iniziale (se prima esecuzione) → riepilogo diff su tutti i file base di `spark-base` → avviso cartella protetta → autorizzazione → esecuzione con modalità scelta. Sentinella di idempotenza: `.github/agents/spark-assistant.agent.md`. Se già presente, il riepilogo mostra "workspace già inizializzato" e propone solo le differenze rispetto alla versione corrente installata.
+**`scf_bootstrap_workspace(update_mode)`** — Tool pubblico già esistente da estendere. Flusso completo in ordine: configurazione policy iniziale (se prima esecuzione) → riepilogo diff su tutti i file base di `spark-base` → avviso cartella protetta → autorizzazione → esecuzione con modalità scelta. Sentinella di idempotenza: `.github/agents/spark-assistant.agent.md`. Se già presente, il riepilogo mostra "workspace già inizializzato" e propone solo il delta rispetto alla versione corrente installata.
+
+> **Nota contatore:** L'engine registra oggi 33 tool. L'aggiunta di `scf_get_update_policy()` e `scf_set_update_policy()` porta il totale previsto a 35. Il log finale e il commento di classe devono restare allineati al numero reale di tool.
 
 ### Tool Pubblici Esistenti da Aggiornare
 
-**`scf_install_package(package_id, version, mode)`** e **`scf_update_package(...)`** — Il parametro `mode` diventa opzionale. Se assente, esegue l'intero flusso interattivo (Steps 1-6 della Parte 4). Se presente, legge comunque la policy per le protezioni implicite, poi esegue direttamente con il mode passato saltando la domanda di scelta.
+**`scf_install_package(package_id, conflict_mode, update_mode)`** e **`scf_update_package(...)`** — `conflict_mode` mantiene il significato attuale file-level (`abort|replace|manual|auto|assisted`). Il nuovo parametro opzionale `update_mode` governa invece la policy operativa package-level (`integrative|replace|conservative|selective`). Se `update_mode` è assente, il tool esegue l'intero flusso interattivo (Steps 1-6 della Parte 4) o risolve automaticamente dalla policy. Se è presente, legge comunque la policy per le protezioni implicite, poi esegue direttamente con la modalità passata saltando la domanda di scelta.
 
 ---
 
@@ -420,6 +422,8 @@ Creare il template di `spark-user-prefs.json` con schema e valori default. Imple
 **Scope:** `spark-framework-engine.py`. Nessuna modifica ai tool pubblici esistenti.
 
 Implementare `_scf_section_merge()` con tutte e tre le strategie. La strategia `merge_sections` \u00e8 la pi\u00f9 complessa e richiede: regex tollerante sulla versione nel marker di apertura (`[^\s>]+` per SemVer completo), ricostruzione del file rispettando `merge_priority`, preservazione assoluta del testo utente fuori dai marcatori, gestione del caso di rimozione pacchetto (eliminazione del blocco). Test unitari per ogni strategia, inclusi casi limite (file nuovo, file senza marcatori esistenti, blocco corrotto, versioni pre-release nei marker).
+
+> **Nota convenzione marker:** Il piano OWN standardizza i file aggregati su `SCF:BEGIN/END`. Le utility esistenti basate su `SCF:SECTION:{package}:BEGIN/END` vanno considerate predecessori interni da adattare o sostituire durante OWN-C. Il comportamento canonico finale resta quello descritto nella Parte 2.
 
 ### Fase D — Integrazione Flusso nei Tool Pubblici
 

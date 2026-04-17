@@ -74,8 +74,8 @@ Validazione: Superata v1.1.0 — 13 correzioni applicate al documento originale
 
 Fasi e stato (coordinator):
 
-- **OWN-A**: Normalizzazione pacchetti (front matter + manifest schema 2.1) — Stato: Non avviata — [todo-fase-OWN-A-normalizzazione.md](todolist/todo-fase-OWN-A-normalizzazione.md)
-- **OWN-B**: Tool policy + utility diff/backup — Stato: Non avviata — [todo-fase-OWN-B-policy-diff-backup.md](todolist/todo-fase-OWN-B-policy-diff-backup.md)
+- **OWN-A**: Normalizzazione pacchetti (front matter + manifest schema 2.1) — Stato: Completata — [todo-fase-OWN-A-normalizzazione.md](todolist/todo-fase-OWN-A-normalizzazione.md)
+- **OWN-B**: Tool policy + utility diff/backup — Stato: Completata — [todo-fase-OWN-B-policy-diff-backup.md](todolist/todo-fase-OWN-B-policy-diff-backup.md)
 - **OWN-C**: Utility section merge (SCF markers) — Stato: Non avviata — [todo-fase-OWN-C-section-merge.md](todolist/todo-fase-OWN-C-section-merge.md)
 - **OWN-D**: Integrazione flusso install/update — Stato: Non avviata — [todo-fase-OWN-D-integrazione-flusso.md](todolist/todo-fase-OWN-D-integrazione-flusso.md)
 - **OWN-E**: Estensione bootstrap workspace — Stato: Non avviata — [todo-fase-OWN-E-bootstrap-estensione.md](todolist/todo-fase-OWN-E-bootstrap-estensione.md)

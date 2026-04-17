@@ -47,6 +47,11 @@ ENGINE_VERSION: str = "2.2.1"
 _CHANGELOGS_SUBDIR: str = "changelogs"
 _SNAPSHOTS_SUBDIR: str = "runtime/snapshots"
 _MERGE_SESSIONS_SUBDIR: str = "runtime/merge-sessions"
+_BACKUPS_SUBDIR: str = "runtime/backups"
+_USER_PREFS_FILENAME: str = "runtime/spark-user-prefs.json"
+_ALLOWED_UPDATE_MODES: frozenset[str] = frozenset(
+    {"ask", "integrative", "replace", "conservative", "selective"}
+)
 
 # ---------------------------------------------------------------------------
 # FastMCP import guard
@@ -304,6 +309,145 @@ def _parse_utc_timestamp(value: str) -> datetime | None:
 def _sha256_text(text: str) -> str:
     """Return the SHA-256 of a UTF-8 text payload."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _default_update_policy() -> dict[str, Any]:
+    """Return the canonical workspace update policy defaults."""
+    return {
+        "auto_update": False,
+        "default_mode": "ask",
+        "mode_per_package": {},
+        "mode_per_file_role": {},
+        "last_changed": "",
+        "changed_by_user": False,
+    }
+
+
+def _default_update_policy_payload() -> dict[str, Any]:
+    """Wrap the default update policy in the persisted JSON payload shape."""
+    return {"update_policy": _default_update_policy()}
+
+
+def _update_policy_path(github_root: Path) -> Path:
+    """Return the persisted workspace update policy path."""
+    return github_root / _USER_PREFS_FILENAME
+
+
+def _normalize_update_mode(mode: str) -> str:
+    """Normalize an update mode token for validation and storage."""
+    return mode.strip().lower()
+
+
+def _validate_update_mode(mode: str, *, allow_selective: bool) -> str | None:
+    """Validate and normalize one update mode token."""
+    normalized = _normalize_update_mode(mode)
+    if normalized not in _ALLOWED_UPDATE_MODES:
+        return None
+    if not allow_selective and normalized == "selective":
+        return None
+    return normalized
+
+
+def _normalize_manifest_relative_path(path_value: str) -> str | None:
+    """Normalize a package path to the manifest-relative form under .github/."""
+    normalized = path_value.replace("\\", "/").strip()
+    if not normalized:
+        return None
+    if normalized.startswith(".github/"):
+        normalized = normalized[len(".github/") :]
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+        return None
+
+    candidate = PurePosixPath(normalized)
+    parts = candidate.parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return None
+    return candidate.as_posix()
+
+
+def _infer_scf_file_role(path_value: str) -> str:
+    """Infer a default SCF file role from its package-relative path."""
+    normalized = path_value.replace("\\", "/")
+    if "/agents/" in f"/{normalized}" or normalized.endswith(".agent.md"):
+        return "agent"
+    if "/instructions/" in f"/{normalized}" or normalized.endswith(".instructions.md"):
+        return "instruction"
+    if "/skills/" in f"/{normalized}" or normalized.endswith("/SKILL.md") or normalized.endswith(".skill.md"):
+        return "skill"
+    if "/prompts/" in f"/{normalized}" or normalized.endswith(".prompt.md"):
+        return "prompt"
+    return "config"
+
+
+def _read_update_policy_payload(github_root: Path) -> tuple[dict[str, Any], str]:
+    """Load the workspace update policy, falling back to defaults when missing or invalid."""
+    policy_path = _update_policy_path(github_root)
+    if not policy_path.is_file():
+        return _default_update_policy_payload(), "default_missing"
+
+    try:
+        raw_payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _log.warning("spark-user-prefs.json unreadable, using defaults: %s", exc)
+        return _default_update_policy_payload(), "default_corrupt"
+
+    if not isinstance(raw_payload, dict):
+        return _default_update_policy_payload(), "default_invalid"
+
+    raw_policy = raw_payload.get("update_policy", raw_payload)
+    if not isinstance(raw_policy, dict):
+        return _default_update_policy_payload(), "default_invalid"
+
+    policy = _default_update_policy()
+    if isinstance(raw_policy.get("auto_update"), bool):
+        policy["auto_update"] = raw_policy["auto_update"]
+
+    default_mode = raw_policy.get("default_mode")
+    if isinstance(default_mode, str):
+        validated_mode = _validate_update_mode(default_mode, allow_selective=False)
+        if validated_mode is not None:
+            policy["default_mode"] = validated_mode
+
+    mode_per_package = raw_policy.get("mode_per_package")
+    if isinstance(mode_per_package, dict):
+        policy["mode_per_package"] = {
+            str(key).strip(): normalized_mode
+            for key, value in mode_per_package.items()
+            if str(key).strip()
+            for normalized_mode in [_validate_update_mode(str(value), allow_selective=True)]
+            if normalized_mode is not None
+        }
+
+    mode_per_file_role = raw_policy.get("mode_per_file_role")
+    if isinstance(mode_per_file_role, dict):
+        policy["mode_per_file_role"] = {
+            str(key).strip(): normalized_mode
+            for key, value in mode_per_file_role.items()
+            if str(key).strip()
+            for normalized_mode in [_validate_update_mode(str(value), allow_selective=True)]
+            if normalized_mode is not None
+        }
+
+    last_changed = raw_policy.get("last_changed")
+    if isinstance(last_changed, str):
+        policy["last_changed"] = last_changed.strip()
+
+    changed_by_user = raw_policy.get("changed_by_user")
+    if isinstance(changed_by_user, bool):
+        policy["changed_by_user"] = changed_by_user
+
+    return {"update_policy": policy}, "file"
+
+
+def _write_update_policy_payload(github_root: Path, payload: dict[str, Any]) -> Path:
+    """Persist the workspace update policy payload to disk."""
+    policy_path = _update_policy_path(github_root)
+    policy_path.parent.mkdir(parents=True, exist_ok=True)
+    policy_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return policy_path
 
 
 # ---------------------------------------------------------------------------
@@ -1418,6 +1562,118 @@ class SnapshotManager:
         return candidate.as_posix()
 
 
+def _normalize_remote_file_record(
+    package_id: str,
+    version: str,
+    remote_file: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Normalize one incoming package file record for diff classification."""
+    raw_path = str(remote_file.get("path", remote_file.get("file", ""))).strip()
+    manifest_rel = _normalize_manifest_relative_path(raw_path)
+    if manifest_rel is None:
+        return None
+
+    incoming_sha256 = str(remote_file.get("sha256", "")).strip()
+    if not incoming_sha256 and isinstance(remote_file.get("content"), str):
+        incoming_sha256 = _sha256_text(remote_file["content"])
+
+    public_file = f".github/{manifest_rel}"
+    return {
+        "file": public_file,
+        "manifest_rel": manifest_rel,
+        "package": package_id,
+        "package_version": version,
+        "scf_owner": str(remote_file.get("scf_owner", package_id)).strip() or package_id,
+        "scf_version": str(remote_file.get("scf_version", version)).strip() or version,
+        "scf_file_role": str(
+            remote_file.get("scf_file_role", _infer_scf_file_role(manifest_rel))
+        ).strip()
+        or _infer_scf_file_role(manifest_rel),
+        "scf_merge_strategy": str(remote_file.get("scf_merge_strategy", "replace")).strip()
+        or "replace",
+        "scf_merge_priority": int(remote_file.get("scf_merge_priority", 0) or 0),
+        "scf_protected": bool(remote_file.get("scf_protected", False)),
+        "incoming_sha256": incoming_sha256,
+    }
+
+
+def _scf_diff_workspace(
+    package_id: str,
+    version: str,
+    remote_files: list[dict[str, Any]],
+    manifest: ManifestManager,
+) -> list[dict[str, Any]]:
+    """Classify incoming package files against the current workspace state."""
+    diff_records: list[dict[str, Any]] = []
+    for remote_file in remote_files:
+        normalized_record = _normalize_remote_file_record(package_id, version, remote_file)
+        if normalized_record is None:
+            continue
+
+        manifest_rel = str(normalized_record["manifest_rel"])
+        file_abs = manifest._github_root / manifest_rel
+        exists = file_abs.is_file()
+        current_sha256 = manifest._sha256(file_abs) if exists else ""
+        incoming_sha256 = str(normalized_record.get("incoming_sha256", ""))
+        tracked_state = manifest.is_user_modified(manifest_rel) if exists else None
+
+        if not exists:
+            status = "new"
+        elif incoming_sha256 and current_sha256 == incoming_sha256:
+            status = "unchanged"
+        elif tracked_state is False:
+            status = "updated_clean"
+        else:
+            status = "updated_user_modified"
+
+        diff_records.append(
+            {
+                **normalized_record,
+                "status": status,
+                "exists": exists,
+                "tracked": tracked_state is not None,
+                "user_modified": tracked_state is True,
+                "current_sha256": current_sha256,
+            }
+        )
+
+    return diff_records
+
+
+def _scf_backup_workspace(
+    package_id: str,
+    files_to_backup: list[tuple[str, Path]],
+) -> str:
+    """Create a timestamped backup directory for files about to be modified."""
+    github_root: Path | None = None
+    for _, file_abs in files_to_backup:
+        for candidate in (file_abs.parent, *file_abs.parents):
+            if candidate.name == ".github":
+                github_root = candidate
+                break
+        if github_root is not None:
+            break
+
+    if github_root is None:
+        raise ValueError("Cannot infer .github root for workspace backup.")
+
+    timestamp = _utc_now().strftime("%Y%m%d-%H%M%S")
+    backup_root = github_root / _BACKUPS_SUBDIR / timestamp
+    backup_root.mkdir(parents=True, exist_ok=True)
+    snapshot_manager = SnapshotManager(github_root / _SNAPSHOTS_SUBDIR)
+
+    for rel_path, file_abs in files_to_backup:
+        normalized_rel = snapshot_manager._validate_relative_path(rel_path)
+        if normalized_rel is None or not file_abs.is_file():
+            continue
+        destination = backup_root / PurePosixPath(normalized_rel)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(file_abs.read_bytes())
+
+    _log.info("Workspace backup created for %s: %s", package_id, backup_root)
+    return str(backup_root)
+
+
 class MergeSessionManager:
     """Manage manual merge sessions persisted under .github/runtime/merge-sessions/."""
 
@@ -1728,7 +1984,7 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (15) and Tools (33)
+# SparkFrameworkEngine — Resources (15) and Tools (35)
 # ---------------------------------------------------------------------------
 
 
@@ -1880,7 +2136,7 @@ class SparkFrameworkEngine:
         _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 33 MCP tools."""
+        """Register all 35 MCP tools."""
         inventory = self._inventory
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
@@ -4189,7 +4445,98 @@ class SparkFrameworkEngine:
                 "validator_results": validator_results_map,
             }
 
-        _log.info("Tools registered: 33 total")
+        @self._mcp.tool()
+        async def scf_get_update_policy() -> dict[str, Any]:
+            """Return the workspace update policy used for SCF file updates."""
+            payload, source = _read_update_policy_payload(self._ctx.github_root)
+            return {
+                "success": True,
+                "policy": payload["update_policy"],
+                "path": str(_update_policy_path(self._ctx.github_root)),
+                "source": source,
+            }
+
+        @self._mcp.tool()
+        async def scf_set_update_policy(
+            auto_update: bool,
+            default_mode: str | None = None,
+            mode_per_package: dict[str, str] | None = None,
+            mode_per_file_role: dict[str, str] | None = None,
+        ) -> dict[str, Any]:
+            """Create or update the workspace update policy for SCF file operations."""
+            payload, source = _read_update_policy_payload(self._ctx.github_root)
+            policy = dict(payload["update_policy"])
+
+            if default_mode is not None:
+                validated_default_mode = _validate_update_mode(
+                    default_mode,
+                    allow_selective=False,
+                )
+                if validated_default_mode is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            "Invalid default_mode. Supported values: ask, integrative, "
+                            "replace, conservative."
+                        ),
+                        "path": str(_update_policy_path(self._ctx.github_root)),
+                    }
+                policy["default_mode"] = validated_default_mode
+
+            if mode_per_package is not None:
+                normalized_package_modes: dict[str, str] = {}
+                invalid_package_modes: list[str] = []
+                for package_key, mode_value in mode_per_package.items():
+                    normalized_key = str(package_key).strip()
+                    validated_mode = _validate_update_mode(str(mode_value), allow_selective=True)
+                    if not normalized_key or validated_mode is None:
+                        invalid_package_modes.append(f"{package_key}={mode_value}")
+                        continue
+                    normalized_package_modes[normalized_key] = validated_mode
+                if invalid_package_modes:
+                    return {
+                        "success": False,
+                        "error": "Invalid mode_per_package entries.",
+                        "invalid_entries": invalid_package_modes,
+                        "path": str(_update_policy_path(self._ctx.github_root)),
+                    }
+                policy["mode_per_package"] = normalized_package_modes
+
+            if mode_per_file_role is not None:
+                normalized_role_modes: dict[str, str] = {}
+                invalid_role_modes: list[str] = []
+                for role_key, mode_value in mode_per_file_role.items():
+                    normalized_key = str(role_key).strip()
+                    validated_mode = _validate_update_mode(str(mode_value), allow_selective=True)
+                    if not normalized_key or validated_mode is None:
+                        invalid_role_modes.append(f"{role_key}={mode_value}")
+                        continue
+                    normalized_role_modes[normalized_key] = validated_mode
+                if invalid_role_modes:
+                    return {
+                        "success": False,
+                        "error": "Invalid mode_per_file_role entries.",
+                        "invalid_entries": invalid_role_modes,
+                        "path": str(_update_policy_path(self._ctx.github_root)),
+                    }
+                policy["mode_per_file_role"] = normalized_role_modes
+
+            policy["auto_update"] = bool(auto_update)
+            policy["last_changed"] = _format_utc_timestamp(_utc_now())
+            policy["changed_by_user"] = True
+
+            saved_path = _write_update_policy_payload(
+                self._ctx.github_root,
+                {"update_policy": policy},
+            )
+            return {
+                "success": True,
+                "policy": policy,
+                "path": str(saved_path),
+                "source": source,
+            }
+
+        _log.info("Tools registered: 35 total")
 
 
 # ---------------------------------------------------------------------------
