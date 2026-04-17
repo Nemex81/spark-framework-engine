@@ -6,6 +6,16 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.2.0] - 2026-04-17
+
+### Removed
+- `scf_get_package_info`: rimosso il campo legacy `engine_min_version` dall'output.
+  Il campo canonico è `min_engine_version`. Breaking change dell'output del tool.
+  La funzione interna `_get_registry_min_engine_version` mantiene ancora il fallback
+  in lettura del campo legacy per compatibilità con cache locali non ancora aggiornate.
+
+---
+
 ## [2.1.3] — 2026-04-17
 
 ### Changed

@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.1.3"
+ENGINE_VERSION: str = "2.2.0"
 
 
 # ---------------------------------------------------------------------------
@@ -2270,7 +2270,6 @@ class SparkFrameworkEngine:
                     "latest_version": pkg.get("latest_version", ""),
                     "status": pkg.get("status", "unknown"),
                     "min_engine_version": _get_registry_min_engine_version(pkg),
-                    "engine_min_version": _get_registry_min_engine_version(pkg),
                     "tags": pkg.get("tags", []),
                 },
                 "manifest": {
