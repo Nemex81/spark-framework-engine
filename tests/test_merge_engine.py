@@ -67,6 +67,21 @@ class TestMergeEngine(unittest.TestCase):
         self.assertEqual(result.conflicts[0].start_line, 2)
         self.assertEqual(result.conflicts[0].end_line, 2)
 
+    def test_diff3_merge_when_base_has_no_shared_context_keeps_base_coordinates(self) -> None:
+        result = self.engine.diff3_merge(
+            "x\ny\n",
+            "a\nb\nc\n",
+            "a\nb\nd\n",
+        )
+
+        self.assertEqual(result.status, MERGE_STATUS_CONFLICT)
+        self.assertEqual(len(result.conflicts), 1)
+        self.assertEqual(result.conflicts[0].start_line, 1)
+        self.assertEqual(result.conflicts[0].end_line, 2)
+        self.assertEqual(result.conflicts[0].base_text, "x\ny\n")
+        self.assertEqual(result.conflicts[0].ours_text, "a\nb\nc\n")
+        self.assertEqual(result.conflicts[0].theirs_text, "a\nb\nd\n")
+
     def test_render_with_markers_when_conflict_returns_expected_text(self) -> None:
         result = self.engine.diff3_merge(
             "alpha\nbeta\nomega\n",

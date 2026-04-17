@@ -49,7 +49,8 @@ jobs:
           for pkg in packages:
               if pkg.get("id") == pkg_id:
                   pkg["latest_version"] = version
-                  pkg["engine_min_version"] = engine_min
+                  pkg["min_engine_version"] = engine_min
+                  pkg.pop("engine_min_version", None)
                   found = True
                   break
 
@@ -92,13 +93,13 @@ jobs:
 
           for pkg in data.get("packages", []):
               pkg_id = pkg.get("id", "<missing>")
-              for field in ("id", "repo_url", "latest_version", "description", "engine_min_version", "status"):
+              for field in ("id", "repo_url", "latest_version", "description", "min_engine_version", "status"):
                   if not pkg.get(field):
                       errors.append(f"{pkg_id}: campo obbligatorio mancante '{field}'")
               if pkg.get("latest_version") and not semver_re.match(pkg["latest_version"]):
                   errors.append(f"{pkg_id}: latest_version '{pkg['latest_version']}' non è semver valido")
-              if pkg.get("engine_min_version") and not semver_re.match(pkg["engine_min_version"]):
-                  errors.append(f"{pkg_id}: engine_min_version '{pkg['engine_min_version']}' non è semver valido")
+              if pkg.get("min_engine_version") and not semver_re.match(pkg["min_engine_version"]):
+                  errors.append(f"{pkg_id}: min_engine_version '{pkg['min_engine_version']}' non è semver valido")
               if pkg.get("status") and pkg["status"] not in valid_statuses:
                   errors.append(f"{pkg_id}: status '{pkg['status']}' non è valido (attesi: {valid_statuses})")
 
@@ -116,19 +117,19 @@ jobs:
         with:
           token: ${{ secrets.REGISTRY_WRITE_TOKEN }}
           path: scf-registry
-          branch: sync/${{ env.PKG_ID }}-${{ env.VERSION }}
-          title: "sync: ${{ env.PKG_ID }} ${{ env.VERSION }}"
+          branch: sync/${{ github.event.client_payload.pkg_id }}-${{ github.event.client_payload.version }}
+          title: "sync: ${{ github.event.client_payload.pkg_id }} ${{ github.event.client_payload.version }}"
           body: |
             Sync automatico generato dal motore `spark-framework-engine`.
 
-            - **Pacchetto:** `${{ env.PKG_ID }}`
-            - **Versione:** `${{ env.VERSION }}`
-            - **Engine min:** `${{ env.ENGINE_MIN }}`
+            - **Pacchetto:** `${{ github.event.client_payload.pkg_id }}`
+            - **Versione:** `${{ github.event.client_payload.version }}`
+            - **Engine min:** `${{ github.event.client_payload.engine_min }}`
             - **Evento origine:** `plugin-manifest-updated`
             - **Repository sorgente:** `${{ github.event.sender.login }}`
 
             Aperto automaticamente da `registry-sync-gateway.yml`.
-          commit-message: "sync: ${{ env.PKG_ID }} ${{ env.VERSION }}"
+          commit-message: "sync: ${{ github.event.client_payload.pkg_id }} ${{ github.event.client_payload.version }}"
           delete-branch: true
 
       - name: Auto-merge se mittente fidato

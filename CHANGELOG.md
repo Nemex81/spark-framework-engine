@@ -6,6 +6,18 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.1.3] — 2026-04-17
+
+### Changed
+
+- Il registry usa ora `min_engine_version` come campo canonico anche nel workflow di sincronizzazione automatica, mantenendo nel motore la compatibilita' in lettura del legacy `engine_min_version`.
+
+### Fixed
+
+- `MergeEngine` calcola ora `start_line` e `end_line` dei conflitti sulla base del contesto realmente condiviso da `base`, `ours` e `theirs`, evitando coordinate sfalsate quando il testo base diverge.
+
+---
+
 ## [2.1.2] — 2026-04-17
 
 ### Changed

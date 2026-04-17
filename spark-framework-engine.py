@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.1.2"
+ENGINE_VERSION: str = "2.1.3"
 
 
 # ---------------------------------------------------------------------------
@@ -184,18 +184,21 @@ class MergeEngine:
         theirs_lines = self._split_lines(theirs)
         base_lines = self._split_lines(base)
 
-        prefix_len = self._shared_prefix_len(ours_lines, theirs_lines)
-        suffix_len = self._shared_suffix_len(ours_lines, theirs_lines, prefix_len)
+        prefix_len = self._shared_prefix_len_threeway(base_lines, ours_lines, theirs_lines)
+        suffix_len = self._shared_suffix_len_threeway(
+            base_lines,
+            ours_lines,
+            theirs_lines,
+            prefix_len,
+        )
         ours_end = len(ours_lines) - suffix_len if suffix_len else len(ours_lines)
         theirs_end = len(theirs_lines) - suffix_len if suffix_len else len(theirs_lines)
+        base_end = len(base_lines) - suffix_len if suffix_len else len(base_lines)
 
         prefix_text = "".join(ours_lines[:prefix_len])
         suffix_text = "".join(ours_lines[len(ours_lines) - suffix_len :]) if suffix_len else ""
 
-        base_start = min(prefix_len, len(base_lines))
-        base_end = len(base_lines) - suffix_len if suffix_len else len(base_lines)
-        if base_end < base_start:
-            base_end = base_start
+        base_start = prefix_len
 
         conflict = MergeConflict(
             start_line=base_start + 1,
@@ -244,6 +247,19 @@ class MergeEngine:
             index += 1
         return index
 
+    @classmethod
+    def _shared_prefix_len_threeway(
+        cls,
+        base_lines: list[str],
+        ours_lines: list[str],
+        theirs_lines: list[str],
+    ) -> int:
+        return min(
+            cls._shared_prefix_len(base_lines, ours_lines),
+            cls._shared_prefix_len(base_lines, theirs_lines),
+            cls._shared_prefix_len(ours_lines, theirs_lines),
+        )
+
     @staticmethod
     def _shared_suffix_len(left: list[str], right: list[str], prefix_len: int) -> int:
         max_suffix = min(len(left), len(right)) - prefix_len
@@ -251,6 +267,20 @@ class MergeEngine:
         while index < max_suffix and left[-(index + 1)] == right[-(index + 1)]:
             index += 1
         return index
+
+    @classmethod
+    def _shared_suffix_len_threeway(
+        cls,
+        base_lines: list[str],
+        ours_lines: list[str],
+        theirs_lines: list[str],
+        prefix_len: int,
+    ) -> int:
+        return min(
+            cls._shared_suffix_len(base_lines, ours_lines, prefix_len),
+            cls._shared_suffix_len(base_lines, theirs_lines, prefix_len),
+            cls._shared_suffix_len(ours_lines, theirs_lines, prefix_len),
+        )
 
 
 def _utc_now() -> datetime:
@@ -937,6 +967,13 @@ def _resolve_package_version(manifest_version: Any, registry_version: Any) -> st
     if registry_value:
         return registry_value
     return "unknown"
+
+
+def _get_registry_min_engine_version(package_entry: Mapping[str, Any]) -> str:
+    """Return the canonical registry minimum engine version, accepting the legacy key."""
+    return str(
+        package_entry.get("min_engine_version", package_entry.get("engine_min_version", ""))
+    ).strip()
 
 
 class ManifestManager:
@@ -2201,7 +2238,7 @@ class SparkFrameworkEngine:
             dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
             conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
             min_engine_version = str(
-                pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
+                pkg_manifest.get("min_engine_version", _get_registry_min_engine_version(pkg))
             ).strip()
             categories = {
                 "root": 0,
@@ -2232,7 +2269,8 @@ class SparkFrameworkEngine:
                     "repo_url": pkg.get("repo_url", ""),
                     "latest_version": pkg.get("latest_version", ""),
                     "status": pkg.get("status", "unknown"),
-                    "engine_min_version": pkg.get("engine_min_version", ""),
+                    "min_engine_version": _get_registry_min_engine_version(pkg),
+                    "engine_min_version": _get_registry_min_engine_version(pkg),
                     "tags": pkg.get("tags", []),
                 },
                 "manifest": {
@@ -2437,7 +2475,7 @@ class SparkFrameworkEngine:
                 pkg.get("latest_version", "unknown"),
             )
             min_engine_version = str(
-                pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
+                pkg_manifest.get("min_engine_version", _get_registry_min_engine_version(pkg))
             ).strip()
             dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
             declared_conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
@@ -3274,7 +3312,10 @@ class SparkFrameworkEngine:
                         dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
                         dependency_map[pkg_id] = dependencies
                         min_engine_version = str(
-                            pkg_manifest.get("min_engine_version", reg_entry.get("engine_min_version", ""))
+                            pkg_manifest.get(
+                                "min_engine_version",
+                                _get_registry_min_engine_version(reg_entry),
+                            )
                         ).strip()
                         missing_dependencies = [
                             dependency for dependency in dependencies if dependency not in installed_versions
@@ -3285,6 +3326,7 @@ class SparkFrameworkEngine:
                         )
                         update_entry["dependencies"] = dependencies
                         update_entry["missing_dependencies"] = missing_dependencies
+                        update_entry["min_engine_version"] = min_engine_version
                         update_entry["engine_min_version"] = min_engine_version
                         update_entry["engine_compatible"] = engine_compatible
 
@@ -3662,14 +3704,14 @@ class SparkFrameworkEngine:
                     })
 
                 min_engine_pkg = str(pkg_manifest_data.get("min_engine_version", "")).strip()
-                min_engine_reg = str(reg_entry.get("engine_min_version", "")).strip()
+                min_engine_reg = _get_registry_min_engine_version(reg_entry)
                 if min_engine_pkg and min_engine_reg and min_engine_pkg != min_engine_reg:
                     issues.append({
                         "type": "engine_min_mismatch",
                         "package": pkg_id,
                         "registry_engine_min": min_engine_reg,
                         "manifest_engine_min": min_engine_pkg,
-                        "fix": f"Aggiornare registry.json: engine_min_version → {min_engine_pkg}",
+                        "fix": f"Aggiornare registry.json: min_engine_version → {min_engine_pkg}",
                     })
 
             return {
