@@ -346,6 +346,25 @@ def test_bootstrap_installer_installs_spark_base_and_updates_manifest(
     assert "manifest remoto dichiara 1.0.0" in capsys.readouterr().err
 
 
+def test_bootstrap_installer_falls_back_to_registry_version_when_manifest_version_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+    _mock_bootstrap_remote(monkeypatch, registry_version="1.2.0", manifest_version="")
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    action = installer.ensure_spark_base()
+
+    assert action == "installato"
+    manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
+    assert {entry["package_version"] for entry in manifest["entries"]} == {"1.2.0"}
+
+
 def test_bootstrap_installer_returns_already_present_when_manifest_tracks_spark_base(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -379,6 +398,41 @@ def test_bootstrap_installer_returns_already_present_when_manifest_tracks_spark_
 
     assert action == "già presente"
     assert "gia tracciato nel manifest" in capsys.readouterr().err
+
+
+def test_bootstrap_installer_accepts_schema_2_0_runtime_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+    _write_manifest(
+        project_root,
+        [
+            {
+                "file": "AGENTS.md",
+                "package": _MODULE.SPARK_BASE_ID,
+                "package_version": "1.0.0",
+                "installed_at": "2026-04-16T00:00:00Z",
+                "sha256": "abc",
+            }
+        ],
+    )
+    manifest_path = project_root / ".github" / ".scf-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema_version"] = "2.0"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    def _unexpected_fetch(self: object, url: str) -> str:
+        raise AssertionError(f"Network fetch should not happen for already-installed spark-base: {url}")
+
+    monkeypatch.setattr(_MODULE._BootstrapInstaller, "_fetch_raw_text", _unexpected_fetch)
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    assert installer.ensure_spark_base() == "già presente"
 
 
 def test_bootstrap_installer_blocks_untracked_conflicts(

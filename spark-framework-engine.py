@@ -923,8 +923,20 @@ def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventor
 # ---------------------------------------------------------------------------
 
 _MANIFEST_SCHEMA_VERSION: str = "1.0"
+_SUPPORTED_MANIFEST_SCHEMA_VERSIONS: frozenset[str] = frozenset({"1.0", "2.0"})
 _MANIFEST_FILENAME: str = ".scf-manifest.json"
 _BOOTSTRAP_PACKAGE_ID: str = "scf-engine-bootstrap"
+
+
+def _resolve_package_version(manifest_version: Any, registry_version: Any) -> str:
+    """Prefer the package manifest version and fall back to the registry hint."""
+    manifest_value = str(manifest_version or "").strip()
+    if manifest_value:
+        return manifest_value
+    registry_value = str(registry_version or "").strip()
+    if registry_value:
+        return registry_value
+    return "unknown"
 
 
 class ManifestManager:
@@ -948,7 +960,17 @@ class ManifestManager:
             return []
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-            return list(raw.get("entries", []))
+            schema_version = str(raw.get("schema_version", "")).strip()
+            if schema_version and schema_version not in _SUPPORTED_MANIFEST_SCHEMA_VERSIONS:
+                _log.warning(
+                    "Manifest schema '%s' unsupported, returning empty.", schema_version
+                )
+                return []
+            entries = raw.get("entries", [])
+            if not isinstance(entries, list):
+                _log.warning("Manifest entries invalid, returning empty.")
+                return []
+            return list(entries)
         except (OSError, json.JSONDecodeError) as exc:
             _log.warning("Manifest unreadable, returning empty: %s", exc)
             return []
@@ -2216,7 +2238,10 @@ class SparkFrameworkEngine:
                 "manifest": {
                     "schema_version": str(pkg_manifest.get("schema_version", "1.0")),
                     "package": pkg_manifest.get("package", package_id),
-                    "version": pkg_manifest.get("version", pkg.get("latest_version", "")),
+                    "version": _resolve_package_version(
+                        pkg_manifest.get("version", ""),
+                        pkg.get("latest_version", ""),
+                    ),
                     "display_name": pkg_manifest.get("display_name", ""),
                     "description": pkg_manifest.get("description", pkg.get("description", "")),
                     "author": pkg_manifest.get("author", ""),
@@ -2407,9 +2432,10 @@ class SparkFrameworkEngine:
                     error=f"Package '{package_id}' has no files in its manifest.",
                 )
 
-            pkg_version = str(
-                pkg_manifest.get("version", pkg.get("latest_version", "unknown"))
-            ).strip()
+            pkg_version = _resolve_package_version(
+                pkg_manifest.get("version", ""),
+                pkg.get("latest_version", "unknown"),
+            )
             min_engine_version = str(
                 pkg_manifest.get("min_engine_version", pkg.get("engine_min_version", ""))
             ).strip()
@@ -3221,7 +3247,19 @@ class SparkFrameworkEngine:
                     continue
 
                 installed_ver = installed_versions[pkg_id]
-                latest_ver = str(reg_entry.get("latest_version", "")).strip()
+                registry_latest_ver = str(reg_entry.get("latest_version", "")).strip()
+                pkg_manifest: dict[str, Any] | None = None
+                manifest_error: str | None = None
+                try:
+                    pkg_manifest = registry.fetch_package_manifest(reg_entry["repo_url"])
+                    manifest_cache[pkg_id] = pkg_manifest
+                except Exception as exc:  # noqa: BLE001
+                    manifest_error = str(exc)
+
+                latest_ver = _resolve_package_version(
+                    pkg_manifest.get("version", "") if pkg_manifest is not None else "",
+                    registry_latest_ver,
+                )
                 status = "up_to_date" if installed_ver == latest_ver else "update_available"
                 update_entry: dict[str, Any] = {
                     "package": pkg_id,
@@ -3231,53 +3269,45 @@ class SparkFrameworkEngine:
                     "registry_status": reg_entry.get("status", "unknown"),
                 }
 
-                pkg_manifest: dict[str, Any] | None = None
-                manifest_error: str | None = None
-                if status == "update_available":
-                    try:
-                        pkg_manifest = registry.fetch_package_manifest(reg_entry["repo_url"])
-                        manifest_cache[pkg_id] = pkg_manifest
-                    except Exception as exc:  # noqa: BLE001
-                        manifest_error = str(exc)
-                        update_entry["status"] = "metadata_unavailable"
-                        update_entry["error"] = f"Cannot fetch package manifest: {exc}"
-
                 if pkg_manifest is not None:
-                    dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
-                    dependency_map[pkg_id] = dependencies
-                    min_engine_version = str(
-                        pkg_manifest.get("min_engine_version", reg_entry.get("engine_min_version", ""))
-                    ).strip()
-                    missing_dependencies = [
-                        dependency for dependency in dependencies if dependency not in installed_versions
-                    ]
-                    engine_compatible = _is_engine_version_compatible(
-                        ENGINE_VERSION,
-                        min_engine_version,
-                    )
-                    update_entry["dependencies"] = dependencies
-                    update_entry["missing_dependencies"] = missing_dependencies
-                    update_entry["engine_min_version"] = min_engine_version
-                    update_entry["engine_compatible"] = engine_compatible
+                    if status == "update_available":
+                        dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
+                        dependency_map[pkg_id] = dependencies
+                        min_engine_version = str(
+                            pkg_manifest.get("min_engine_version", reg_entry.get("engine_min_version", ""))
+                        ).strip()
+                        missing_dependencies = [
+                            dependency for dependency in dependencies if dependency not in installed_versions
+                        ]
+                        engine_compatible = _is_engine_version_compatible(
+                            ENGINE_VERSION,
+                            min_engine_version,
+                        )
+                        update_entry["dependencies"] = dependencies
+                        update_entry["missing_dependencies"] = missing_dependencies
+                        update_entry["engine_min_version"] = min_engine_version
+                        update_entry["engine_compatible"] = engine_compatible
 
-                    if missing_dependencies:
-                        update_entry["status"] = "blocked_missing_dependencies"
-                        blocked.append({
-                            "package": pkg_id,
-                            "reason": "missing_dependencies",
-                            "missing_dependencies": missing_dependencies,
-                        })
-                    elif not engine_compatible:
-                        update_entry["status"] = "blocked_engine_version"
-                        blocked.append({
-                            "package": pkg_id,
-                            "reason": "engine_version",
-                            "required_engine_version": min_engine_version,
-                            "engine_version": ENGINE_VERSION,
-                        })
-                    else:
-                        candidate_ids.add(pkg_id)
+                        if missing_dependencies:
+                            update_entry["status"] = "blocked_missing_dependencies"
+                            blocked.append({
+                                "package": pkg_id,
+                                "reason": "missing_dependencies",
+                                "missing_dependencies": missing_dependencies,
+                            })
+                        elif not engine_compatible:
+                            update_entry["status"] = "blocked_engine_version"
+                            blocked.append({
+                                "package": pkg_id,
+                                "reason": "engine_version",
+                                "required_engine_version": min_engine_version,
+                                "engine_version": ENGINE_VERSION,
+                            })
+                        else:
+                            candidate_ids.add(pkg_id)
                 elif manifest_error is not None:
+                    update_entry["status"] = "metadata_unavailable"
+                    update_entry["error"] = f"Cannot fetch package manifest: {manifest_error}"
                     blocked.append({
                         "package": pkg_id,
                         "reason": "metadata_unavailable",

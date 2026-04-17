@@ -19,8 +19,20 @@ REGISTRY_URL = "https://raw.githubusercontent.com/Nemex81/scf-registry/main/regi
 REGISTRY_CACHE_REL = Path(".github/.scf-registry-cache.json")
 MANIFEST_REL = Path(".github/.scf-manifest.json")
 MANIFEST_SCHEMA_VERSION = "1.0"
+SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {"1.0", "2.0"}
 SPARK_BASE_ID = "spark-base"
 _BOOTSTRAP_SUPPORTED_CONFLICT_MODES = {"abort", "replace", "preserve", "integrate"}
+
+
+def _resolve_package_version(manifest_version: Any, registry_version: Any) -> str:
+    """Prefer the package manifest version and fall back to the registry hint."""
+    manifest_value = str(manifest_version or "").strip()
+    if manifest_value:
+        return manifest_value
+    registry_value = str(registry_version or "").strip()
+    if registry_value:
+        return registry_value
+    return "unknown"
 
 
 def _configure_stdio() -> None:
@@ -335,9 +347,10 @@ class _BootstrapInstaller:
 
         package_info = self._resolve_spark_base_package()
         package_manifest = self._fetch_package_manifest(package_info.repo_url)
-        package_version = str(package_manifest.get("version", "")).strip()
-        if not package_version:
-            package_version = package_info.latest_version or "unknown"
+        package_version = _resolve_package_version(
+            package_manifest.get("version", ""),
+            package_info.latest_version,
+        )
 
         registry_version = package_info.latest_version.strip()
         if registry_version and registry_version != package_version:
@@ -608,6 +621,9 @@ class _BootstrapInstaller:
             raw = json.loads(self._manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise _BootstrapError(f"Manifest non leggibile: {exc}") from exc
+        schema_version = str(raw.get("schema_version", "")).strip()
+        if schema_version and schema_version not in SUPPORTED_MANIFEST_SCHEMA_VERSIONS:
+            raise _BootstrapError(f"Schema manifest locale non supportata: {schema_version}")
         entries = raw.get("entries", [])
         if not isinstance(entries, list):
             raise _BootstrapError("Il manifest locale non contiene una lista 'entries' valida.")

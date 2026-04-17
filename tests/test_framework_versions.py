@@ -25,6 +25,7 @@ ManifestManager = _module.ManifestManager
 WorkspaceContext = _module.WorkspaceContext
 build_workspace_info = _module.build_workspace_info
 ENGINE_VERSION = _module.ENGINE_VERSION
+resolve_package_version = _module._resolve_package_version
 
 
 class TestManifestManagerInstalledVersions(unittest.TestCase):
@@ -63,6 +64,43 @@ class TestManifestManagerInstalledVersions(unittest.TestCase):
                 manager.get_installed_versions(),
                 {"pkg-a": "1.0.0", "pkg-b": "2.1.0"},
             )
+
+    def test_load_accepts_schema_2_0_entries_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            github_root = Path(tmp) / ".github"
+            github_root.mkdir(parents=True)
+            (github_root / ".scf-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "entries": [
+                            {
+                                "file": "agents/a.md",
+                                "package": "pkg-a",
+                                "package_version": "1.0.0",
+                                "installed_at": "2026-03-31T00:00:00Z",
+                                "sha256": "abc",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            manager = ManifestManager(github_root)
+
+            self.assertEqual(manager.get_installed_versions(), {"pkg-a": "1.0.0"})
+
+
+class TestResolvePackageVersion(unittest.TestCase):
+    def test_prefers_manifest_version(self) -> None:
+        self.assertEqual(resolve_package_version("2.0.0", "1.9.0"), "2.0.0")
+
+    def test_falls_back_to_registry_version(self) -> None:
+        self.assertEqual(resolve_package_version("", "1.9.0"), "1.9.0")
+
+    def test_returns_unknown_when_both_sources_missing(self) -> None:
+        self.assertEqual(resolve_package_version("", ""), "unknown")
 
 
 class TestFrameworkInventoryPackageChangelog(unittest.TestCase):

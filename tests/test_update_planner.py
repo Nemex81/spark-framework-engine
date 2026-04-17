@@ -149,6 +149,48 @@ class TestUpdatePlanner(unittest.TestCase):
             )
             self.assertTrue(result["plan"]["can_apply"])
 
+    def test_update_packages_detects_stale_registry_using_manifest_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            (github_root / "agents").mkdir(parents=True)
+            (github_root / "agents" / "Agent-Orchestrator.md").write_text("old master", encoding="utf-8")
+            ManifestManager(github_root).save(
+                [
+                    self._entry("agents/Agent-Orchestrator.md", "scf-master-codecrafter", "old master", "1.0.0"),
+                ]
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            update_packages = cast(
+                Callable[[], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_update_packages"],
+            )
+
+            registry_packages = [self._registry_packages()[0] | {"latest_version": "1.0.0"}]
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=registry_packages),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "scf-master-codecrafter",
+                        "version": "1.1.0",
+                        "min_engine_version": "1.5.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "files": [".github/agents/Agent-Orchestrator.md"],
+                    },
+                ),
+            ):
+                result = asyncio.run(update_packages())
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["updates"][0]["status"], "update_available")
+            self.assertEqual(result["updates"][0]["latest"], "1.1.0")
+            self.assertEqual(result["plan"]["order"][0]["target"], "1.1.0")
+
     def test_apply_updates_for_plugin_includes_dependency_first(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
