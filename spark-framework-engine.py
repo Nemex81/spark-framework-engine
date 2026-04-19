@@ -1350,6 +1350,18 @@ def _get_registry_min_engine_version(package_entry: Mapping[str, Any]) -> str:
     ).strip()
 
 
+def _build_registry_package_summary(package_entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the public summary payload for one registry package entry."""
+    return {
+        "id": package_entry.get("id"),
+        "description": package_entry.get("description", ""),
+        "latest_version": package_entry.get("latest_version", ""),
+        "status": package_entry.get("status", "unknown"),
+        "repo_url": package_entry.get("repo_url", ""),
+        "min_engine_version": _get_registry_min_engine_version(package_entry),
+    }
+
+
 class ManifestManager:
     """Read, write and query the SCF installation manifest (.github/.scf-manifest.json).
 
@@ -2802,16 +2814,7 @@ class SparkFrameworkEngine:
             return {
                 "success": True,
                 "count": len(packages),
-                "packages": [
-                    {
-                        "id": p.get("id"),
-                        "description": p.get("description", ""),
-                        "latest_version": p.get("latest_version", ""),
-                        "status": p.get("status", "unknown"),
-                        "repo_url": p.get("repo_url", ""),
-                    }
-                    for p in packages
-                ],
+                "packages": [_build_registry_package_summary(p) for p in packages],
             }
 
         @self._mcp.tool()

@@ -102,6 +102,49 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             "status": "active",
         }
 
+    def test_scf_list_available_packages_returns_min_engine_version_for_canonical_and_legacy_keys(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            fake_mcp = self._build_engine(workspace_root)
+            list_available_packages = cast(
+                Callable[[], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_list_available_packages"],
+            )
+
+            registry_packages = [
+                self._registry_package("pkg-canonical") | {"min_engine_version": "2.1.0"},
+                self._registry_package("pkg-legacy") | {"engine_min_version": "1.9.0"},
+            ]
+
+            with patch.object(RegistryClient, "list_packages", return_value=registry_packages):
+                result = asyncio.run(list_available_packages())
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["count"], 2)
+            self.assertEqual(
+                result["packages"],
+                [
+                    {
+                        "id": "pkg-canonical",
+                        "description": "Package pkg-canonical",
+                        "latest_version": "2.0.0",
+                        "status": "active",
+                        "repo_url": "https://github.com/example/pkg-canonical",
+                        "min_engine_version": "2.1.0",
+                    },
+                    {
+                        "id": "pkg-legacy",
+                        "description": "Package pkg-legacy",
+                        "latest_version": "2.0.0",
+                        "status": "active",
+                        "repo_url": "https://github.com/example/pkg-legacy",
+                        "min_engine_version": "1.9.0",
+                    },
+                ],
+            )
+
     def test_scf_install_package_blocks_file_conflicts_with_other_package(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
