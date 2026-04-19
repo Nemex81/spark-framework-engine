@@ -16,7 +16,9 @@
 			"path": "../spark-base"
 		}
 	],
-	"settings": {},
+	"settings": {
+		"powershell.cwd": "spark-framework-engine"
+	},
 	"mcp": {
 		"servers": {
 			"sparkFrameworkEngine": {

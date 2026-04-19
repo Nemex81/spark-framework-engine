@@ -32,6 +32,7 @@ Obiettivo: introdurre o rimuovere tool MCP in modo sicuro, coerente e verificabi
 
 5. Post-aggiunta.
 - Invocare scf-changelog per classificare bump minor e aggiornare documentazione release.
+- Se il tool tocca scritture di file condivisi o ownership-aware, documentare esplicitamente quando va usato `_scf_section_merge()` invece di path sostitutivi diretti.
 
 ## Procedura rimozione tool
 
@@ -56,3 +57,8 @@ Obiettivo: introdurre o rimuovere tool MCP in modo sicuro, coerente e verificabi
 - scf_list_prompts
 - scf_get_prompt
 - scf_get_workspace_info
+
+## Nota su file condivisi
+
+- I file con `scf_merge_strategy: merge_sections` non vanno gestiti come semplici overwrite: il percorso canonico del motore e' `_scf_section_merge()`.
+- I file `user_protected` devono restare delegati al workspace senza overwrite impliciti.

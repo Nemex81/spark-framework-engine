@@ -77,6 +77,14 @@ class TestMergeIntegration(unittest.TestCase):
         engine.register_tools()
         return fake_mcp
 
+    def _authorize_github_writes(self, workspace_root: Path) -> None:
+        state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"github_write_authorized": True}, indent=2),
+            encoding="utf-8",
+        )
+
     def _registry_package(self, package_id: str, version: str = "2.0.0") -> dict[str, str]:
         return {
             "id": package_id,
@@ -104,6 +112,7 @@ class TestMergeIntegration(unittest.TestCase):
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
+            self._authorize_github_writes(workspace_root)
 
             fake_mcp = self._build_engine(workspace_root)
             update_package = cast(
@@ -128,7 +137,9 @@ class TestMergeIntegration(unittest.TestCase):
                 ),
                 patch.object(RegistryClient, "fetch_raw_file", return_value=theirs_text),
             ):
-                result = asyncio.run(update_package("pkg-a", conflict_mode="manual"))
+                result = asyncio.run(
+                    update_package("pkg-a", conflict_mode="manual", update_mode="integrative")
+                )
 
             self.assertTrue(result["success"])
             self.assertTrue(result["requires_user_resolution"])
@@ -340,6 +351,7 @@ class TestMergeIntegration(unittest.TestCase):
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
+            self._authorize_github_writes(workspace_root)
 
             fake_mcp = self._build_engine(workspace_root)
             update_package = cast(
@@ -364,7 +376,9 @@ class TestMergeIntegration(unittest.TestCase):
                 ),
                 patch.object(RegistryClient, "fetch_raw_file", return_value=theirs_text),
             ):
-                result = asyncio.run(update_package("pkg-a", conflict_mode="auto"))
+                result = asyncio.run(
+                    update_package("pkg-a", conflict_mode="auto", update_mode="integrative")
+                )
 
             self.assertTrue(result["success"])
             self.assertFalse(result["requires_user_resolution"])
@@ -394,6 +408,7 @@ class TestMergeIntegration(unittest.TestCase):
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
+            self._authorize_github_writes(workspace_root)
 
             fake_mcp = self._build_engine(workspace_root)
             update_package = cast(
@@ -418,7 +433,9 @@ class TestMergeIntegration(unittest.TestCase):
                 ),
                 patch.object(RegistryClient, "fetch_raw_file", return_value=theirs_text),
             ):
-                result = asyncio.run(update_package("pkg-a", conflict_mode="auto"))
+                result = asyncio.run(
+                    update_package("pkg-a", conflict_mode="auto", update_mode="integrative")
+                )
 
             self.assertTrue(result["success"])
             self.assertTrue(result["requires_user_resolution"])
@@ -444,6 +461,7 @@ class TestMergeIntegration(unittest.TestCase):
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
+            self._authorize_github_writes(workspace_root)
 
             fake_mcp = self._build_engine(workspace_root)
             update_package = cast(
@@ -468,7 +486,9 @@ class TestMergeIntegration(unittest.TestCase):
                 ),
                 patch.object(RegistryClient, "fetch_raw_file", return_value=theirs_text),
             ):
-                result = asyncio.run(update_package("pkg-a", conflict_mode="assisted"))
+                result = asyncio.run(
+                    update_package("pkg-a", conflict_mode="assisted", update_mode="integrative")
+                )
 
             self.assertTrue(result["success"])
             self.assertTrue(result["requires_user_resolution"])

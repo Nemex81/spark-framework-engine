@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.2.1"
+ENGINE_VERSION: str = "2.3.0"
 
 
 # ---------------------------------------------------------------------------
@@ -988,32 +988,43 @@ def _scf_render_section(package_id: str, version: str, source_content: str) -> s
     return f"{begin_marker}\n{normalized_content}\n{end_marker}\n"
 
 
-def _scf_strip_section(content: str, package_id: str) -> str:
-    """Remove a canonical or legacy SCF section for one package, preserving all else."""
+def _classify_copilot_instructions_format(content: str) -> str:
+    """Classify the current copilot-instructions.md shape for migration decisions."""
     normalized_content = _normalize_merge_text(content)
-    sections = _scf_iter_section_blocks(normalized_content)
-    for section in sections:
-        if str(section["package"]) != package_id:
-            continue
-        stripped = (
-            f"{normalized_content[: section['start']]}"
-            f"{normalized_content[section['end'] :]}"
-        )
-        stripped = re.sub(r"\n{3,}", "\n\n", stripped)
-        return stripped.lstrip("\n")
-    return normalized_content
+    if not normalized_content.strip():
+        return "plain"
+
+    has_sections = bool(_scf_iter_section_blocks(normalized_content))
+    has_header = normalized_content.startswith(_SCF_SECTION_HEADER)
+    if has_sections and has_header:
+        return "scf_markers"
+    if has_sections:
+        return "scf_markers_partial"
+    return "plain"
 
 
-def _scf_section_merge(
+def _prepare_copilot_instructions_migration(existing_text: str) -> str:
+    """Normalize a legacy copilot-instructions.md into the marker-ready workspace shape."""
+    normalized_existing = _normalize_merge_text(existing_text).strip("\n")
+    current_format = _classify_copilot_instructions_format(normalized_existing)
+    if current_format == "scf_markers":
+        return normalized_existing.rstrip("\n") + "\n"
+
+    if not normalized_existing:
+        return _SCF_SECTION_HEADER.rstrip("\n") + "\n"
+
+    return f"{_SCF_SECTION_HEADER}\n{normalized_existing}\n"
+
+
+def _scf_section_merge_text(
     source_content: str,
-    target_path: Path,
+    existing_text: str,
     strategy: str,
     package_id: str,
     version: str,
 ) -> str:
-    """Return the final content for a section-aware file update without writing to disk."""
+    """Return the final content for a section-aware file update from in-memory text."""
     normalized_source = _normalize_merge_text(source_content)
-    existing_text = target_path.read_text(encoding="utf-8") if target_path.is_file() else ""
     normalized_existing = _normalize_merge_text(existing_text)
 
     if strategy == "replace":
@@ -1027,12 +1038,6 @@ def _scf_section_merge(
         return normalized_source
 
     if strategy == "user_protected":
-        if normalized_existing and normalized_existing != normalized_source:
-            _log.info(
-                "Section merge skipped for user_protected file %s (%s)",
-                target_path,
-                package_id,
-            )
         return normalized_existing
 
     if strategy != "merge_sections":
@@ -1080,6 +1085,50 @@ def _scf_section_merge(
         f"{separator}{rendered_section}"
         f"{trailing}"
     )
+
+
+def _scf_strip_section(content: str, package_id: str) -> str:
+    """Remove a canonical or legacy SCF section for one package, preserving all else."""
+    normalized_content = _normalize_merge_text(content)
+    sections = _scf_iter_section_blocks(normalized_content)
+    for section in sections:
+        if str(section["package"]) != package_id:
+            continue
+        stripped = (
+            f"{normalized_content[: section['start']]}"
+            f"{normalized_content[section['end'] :]}"
+        )
+        stripped = re.sub(r"\n{3,}", "\n\n", stripped)
+        return stripped.lstrip("\n")
+    return normalized_content
+
+
+def _scf_section_merge(
+    source_content: str,
+    target_path: Path,
+    strategy: str,
+    package_id: str,
+    version: str,
+) -> str:
+    """Return the final content for a section-aware file update without writing to disk."""
+    existing_text = target_path.read_text(encoding="utf-8") if target_path.is_file() else ""
+    merged_text = _scf_section_merge_text(
+        source_content,
+        existing_text,
+        strategy,
+        package_id,
+        version,
+    )
+    if strategy == "user_protected":
+        normalized_existing = _normalize_merge_text(existing_text)
+        normalized_source = _normalize_merge_text(source_content)
+        if normalized_existing and normalized_existing != normalized_source:
+            _log.info(
+                "Section merge skipped for user_protected file %s (%s)",
+                target_path,
+                package_id,
+            )
+    return merged_text
 
 
 def _strip_package_section(text: str, package_id: str) -> str:
@@ -2821,6 +2870,10 @@ class SparkFrameworkEngine:
                         merge_strategy = "user_protected"
                     else:
                         merge_strategy = "replace"
+                        _log.info(
+                            "Legacy file without SCF metadata treated with strategy replace: %s",
+                            file_path,
+                        )
 
                 try:
                     merge_priority = int(metadata.get("scf_merge_priority", 0) or 0)
@@ -2981,6 +3034,46 @@ class SparkFrameworkEngine:
                     "conservative",
                     "selective",
                 ],
+            }
+
+        def _detect_workspace_migration_state() -> dict[str, Any]:
+            """Return the current migration state for a legacy SCF workspace."""
+            policy_payload, policy_source = _read_update_policy_payload(self._ctx.github_root)
+            manifest_entries = manifest.load()
+            sentinel_path = self._ctx.github_root / "agents" / "spark-assistant.agent.md"
+            copilot_path = self._ctx.github_root / "copilot-instructions.md"
+            copilot_exists = copilot_path.is_file()
+            copilot_content = _read_text_if_possible(copilot_path) if copilot_exists else None
+            copilot_format = (
+                "unreadable"
+                if copilot_exists and copilot_content is None
+                else _classify_copilot_instructions_format(copilot_content or "")
+                if copilot_exists
+                else "missing"
+            )
+            missing_steps: list[str] = []
+            legacy_workspace = bool(manifest_entries or sentinel_path.is_file() or copilot_exists)
+            if legacy_workspace and policy_source != "file":
+                missing_steps.append("configure_update_policy")
+            if copilot_format in {"plain", "scf_markers_partial"}:
+                missing_steps.append("migrate_copilot_instructions")
+            return {
+                "legacy_workspace": legacy_workspace,
+                "policy_source": policy_source,
+                "policy_path": str(_update_policy_path(self._ctx.github_root)),
+                "copilot_instructions": {
+                    "path": str(copilot_path),
+                    "exists": copilot_exists,
+                    "current_format": copilot_format,
+                    "proposed_format": (
+                        "scf_markers_complete"
+                        if copilot_format == "scf_markers_partial"
+                        else "scf_markers"
+                        if copilot_format == "plain"
+                        else None
+                    ),
+                },
+                "missing_steps": missing_steps,
             }
 
         def _normalize_file_policies(
@@ -3313,6 +3406,7 @@ class SparkFrameworkEngine:
             package_id: str,
             conflict_mode: str = "abort",
             update_mode: str = "",
+            migrate_copilot_instructions: bool = False,
         ) -> dict[str, Any]:
             """Install an SCF package from the public registry into the active workspace .github/."""
             if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
@@ -3491,6 +3585,60 @@ class SparkFrameworkEngine:
                     **flow_payload,
                 )
 
+            migration_state = _detect_workspace_migration_state()
+            copilot_record = next(
+                (
+                    item for item in remote_files
+                    if str(item.get("path", "")).strip() == ".github/copilot-instructions.md"
+                    and str(item.get("scf_merge_strategy", "replace")).strip() == "merge_sections"
+                ),
+                None,
+            )
+            copilot_format = str(
+                migration_state.get("copilot_instructions", {}).get("current_format", "missing")
+            ).strip() or "missing"
+            requires_copilot_migration = copilot_record is not None and copilot_format in {
+                "plain",
+                "scf_markers_partial",
+            }
+            explicit_copilot_migration = requires_copilot_migration and migrate_copilot_instructions
+            if requires_copilot_migration and not migrate_copilot_instructions:
+                return _build_install_result(
+                    True,
+                    action_required="migrate_copilot_instructions",
+                    message=(
+                        "copilot-instructions.md uses a legacy format. Confirm the explicit migration "
+                        "before SPARK adds or updates SCF marker sections."
+                    ),
+                    current_format=copilot_format,
+                    proposed_format=(
+                        "scf_markers_complete"
+                        if copilot_format == "scf_markers_partial"
+                        else "scf_markers"
+                    ),
+                    migration_state=migration_state,
+                    migrate_copilot_instructions=False,
+                    **flow_payload,
+                )
+            if requires_copilot_migration and not flow_payload["github_write_authorized"]:
+                return _build_install_result(
+                    True,
+                    action_required="authorize_github_write",
+                    message=(
+                        "Authorize writes under .github before migrating copilot-instructions.md "
+                        "to the SCF marker format."
+                    ),
+                    current_format=copilot_format,
+                    proposed_format=(
+                        "scf_markers_complete"
+                        if copilot_format == "scf_markers_partial"
+                        else "scf_markers"
+                    ),
+                    migration_state=migration_state,
+                    migrate_copilot_instructions=True,
+                    **flow_payload,
+                )
+
             if flow_payload["policy_enforced"] and not flow_payload["auto_update"] and not requested_update_mode:
                 return _build_install_result(
                     True,
@@ -3528,6 +3676,10 @@ class SparkFrameworkEngine:
                 item
                 for item in classification_report["conflict_plan"]
                 if item.get("classification") == "conflict_untracked_existing"
+                and not (
+                    explicit_copilot_migration
+                    and str(item.get("file", "")).strip() == ".github/copilot-instructions.md"
+                )
             ]
             if unresolved_conflicts and effective_conflict_mode == "abort":
                 return _build_install_result(
@@ -3618,10 +3770,17 @@ class SparkFrameworkEngine:
                         continue
                 if item_classification == "conflict_cross_owner":
                     continue
-                if item_classification == "conflict_untracked_existing" and effective_conflict_mode != "replace":
+                if (
+                    item_classification == "conflict_untracked_existing"
+                    and effective_conflict_mode != "replace"
+                    and not (
+                        explicit_copilot_migration
+                        and file_path == ".github/copilot-instructions.md"
+                    )
+                ):
                     continue
                 rel = file_path.removeprefix(".github/")
-                if item_classification == "conflict_untracked_existing":
+                if item_classification == "conflict_untracked_existing" and not explicit_copilot_migration:
                     replaced_files.append(file_path)
                 remote_file = remote_files_by_path.get(file_path)
                 if remote_file is None:
@@ -3693,15 +3852,45 @@ class SparkFrameworkEngine:
                     previous_content = _read_text_if_possible(dest) if dest.is_file() else None
                     backups[dest] = previous_content
 
+                    remote_strategy = str(
+                        remote_files_by_path.get(file_path, {}).get(
+                            "scf_merge_strategy",
+                            "replace",
+                        )
+                    ).strip() or "replace"
+
+                    if remote_strategy == "merge_sections":
+                        merge_base_text = previous_content or ""
+                        if (
+                            file_path == ".github/copilot-instructions.md"
+                            and migrate_copilot_instructions
+                            and _classify_copilot_instructions_format(merge_base_text) in {
+                                "plain",
+                                "scf_markers_partial",
+                            }
+                        ):
+                            merge_base_text = _prepare_copilot_instructions_migration(merge_base_text)
+                        next_text = _scf_section_merge_text(
+                            content,
+                            merge_base_text,
+                            remote_strategy,
+                            package_id,
+                            pkg_version,
+                        )
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(next_text, encoding="utf-8")
+                        written_paths.append((file_path, rel, dest))
+                        manifest_targets.append((rel, dest))
+                        installed.append(file_path)
+                        if adopt_bootstrap_owner:
+                            adopted_bootstrap_files.append(file_path)
+                            adopted_bootstrap_rels.append(rel)
+                        extended_files.append(file_path)
+                        continue
+
                     if staged_classification == "extend_section":
                         if dest.exists() and previous_content is None:
                             raise OSError(f"Cannot extend non-text file: {dest}")
-                        remote_strategy = str(
-                            remote_files_by_path.get(file_path, {}).get(
-                                "scf_merge_strategy",
-                                "merge_sections",
-                            )
-                        ).strip() or "merge_sections"
                         if remote_strategy == "replace":
                             remote_strategy = "merge_sections"
                         next_text = _scf_section_merge(
@@ -3921,6 +4110,7 @@ class SparkFrameworkEngine:
                 snapshot_skipped=snapshot_skipped,
                 requires_user_resolution=len(merge_conflict) > 0,
                 backup_path=backup_path,
+                migration_state=migration_state if requires_copilot_migration else None,
                 resolution_applied=(
                     "auto"
                     if effective_conflict_mode == "auto" and not merge_conflict and session_payload is not None
@@ -3968,6 +4158,7 @@ class SparkFrameworkEngine:
             package_id: str,
             conflict_mode: str = "abort",
             update_mode: str = "",
+            migrate_copilot_instructions: bool = False,
         ) -> dict[str, Any]:
             """Update one installed SCF package while preserving user-modified files."""
             if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
@@ -4008,6 +4199,46 @@ class SparkFrameworkEngine:
                 }
 
             version_from = installed_versions[package_id]
+            migration_state = _detect_workspace_migration_state()
+            if (
+                migration_state["legacy_workspace"]
+                and migration_state["policy_source"] != "file"
+                and not update_mode.strip()
+            ):
+                return {
+                    "success": True,
+                    "package": package_id,
+                    "version_from": version_from,
+                    "already_up_to_date": False,
+                    "action_required": "configure_update_policy",
+                    "available_update_modes": [
+                        {
+                            "value": "ask",
+                            "label": "ask",
+                            "recommended": True,
+                            "description": "Keep auto_update disabled and ask before package updates.",
+                        },
+                        {
+                            "value": "integrative",
+                            "label": "integrative",
+                            "recommended": False,
+                            "description": "Enable automatic integrative updates for package files.",
+                        },
+                        {
+                            "value": "conservative",
+                            "label": "conservative",
+                            "recommended": False,
+                            "description": "Enable automatic conservative updates preserving local changes.",
+                        },
+                    ],
+                    "recommended_update_mode": "ask",
+                    "migration_state": migration_state,
+                    "message": (
+                        "Legacy workspace detected without spark-user-prefs.json. Configure the update "
+                        "policy before applying package updates."
+                    ),
+                }
+
             plan_report = _plan_package_updates(package_id)
             if plan_report.get("success") is False:
                 return plan_report
@@ -4052,6 +4283,7 @@ class SparkFrameworkEngine:
                 package_id,
                 conflict_mode=conflict_mode,
                 update_mode=update_mode,
+                migrate_copilot_instructions=migrate_copilot_instructions,
             )
             if install_report.get("action_required"):
                 return {
@@ -4300,6 +4532,7 @@ class SparkFrameworkEngine:
         async def scf_apply_updates(
             package_id: str | None = None,
             conflict_mode: str = "abort",
+            migrate_copilot_instructions: bool = False,
         ) -> dict[str, Any]:
             """Apply package updates by reinstalling latest versions from the registry.
 
@@ -4380,7 +4613,11 @@ class SparkFrameworkEngine:
             applied: list[dict[str, Any]] = []
             failed: list[dict[str, Any]] = []
             for pkg_id in target_ids:
-                result = await scf_install_package(pkg_id, conflict_mode=conflict_mode)
+                result = await scf_install_package(
+                    pkg_id,
+                    conflict_mode=conflict_mode,
+                    migrate_copilot_instructions=migrate_copilot_instructions,
+                )
                 if result.get("success") is True:
                     applied.append(result)
                 else:
@@ -4603,6 +4840,8 @@ class SparkFrameworkEngine:
         async def scf_bootstrap_workspace(
             install_base: bool = False,
             conflict_mode: str = "abort",
+            update_mode: str = "",
+            migrate_copilot_instructions: bool = False,
         ) -> dict[str, Any]:
             """Bootstrap the base SPARK assets into this workspace and optionally install spark-base."""
             if install_base and conflict_mode not in _SUPPORTED_CONFLICT_MODES:
@@ -4619,6 +4858,23 @@ class SparkFrameworkEngine:
                         "Supported modes: abort, replace, manual, auto, assisted."
                     ),
                 }
+            normalized_bootstrap_mode = update_mode.strip().lower()
+            allowed_bootstrap_modes = {"", "ask", "integrative", "conservative", "ask_later"}
+            if normalized_bootstrap_mode not in allowed_bootstrap_modes:
+                return {
+                    "success": False,
+                    "status": "error",
+                    "files_written": [],
+                    "preserved": [],
+                    "workspace": str(self._ctx.workspace_root),
+                    "install_base_requested": install_base,
+                    "conflict_mode": conflict_mode,
+                    "update_mode": update_mode,
+                    "note": (
+                        f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                        "ask, integrative, conservative, ask_later."
+                    ),
+                }
             engine_github_root = Path(__file__).resolve().parent / ".github"
             prompts_source_dir = engine_github_root / "prompts"
             agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
@@ -4626,10 +4882,190 @@ class SparkFrameworkEngine:
             workspace_github_root = self._ctx.github_root
             sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
             sentinel_rel = "agents/spark-assistant.agent.md"
+            policy_payload, policy_source = _read_update_policy_payload(self._ctx.github_root)
+            migration_state = _detect_workspace_migration_state()
+            legacy_bootstrap_mode = normalized_bootstrap_mode == "" and policy_source != "file"
+
+            def _bootstrap_policy_options() -> list[dict[str, Any]]:
+                return [
+                    {
+                        "value": "ask",
+                        "label": "ask",
+                        "recommended": True,
+                        "description": "Keep auto_update disabled and ask before package updates.",
+                    },
+                    {
+                        "value": "integrative",
+                        "label": "integrative",
+                        "recommended": False,
+                        "description": "Enable automatic integrative updates for package files.",
+                    },
+                    {
+                        "value": "conservative",
+                        "label": "conservative",
+                        "recommended": False,
+                        "description": "Enable automatic conservative updates preserving local changes.",
+                    },
+                    {
+                        "value": "ask_later",
+                        "label": "ask_later",
+                        "recommended": False,
+                        "description": "Create the policy file now and defer update mode choice to a later step.",
+                    },
+                ]
+
+            def _configure_initial_bootstrap_policy(selected_mode: str) -> tuple[dict[str, Any], Path]:
+                policy_payload = _default_update_policy_payload()
+                policy = policy_payload["update_policy"]
+                if selected_mode == "integrative":
+                    policy["auto_update"] = True
+                    policy["default_mode"] = "integrative"
+                elif selected_mode == "conservative":
+                    policy["auto_update"] = True
+                    policy["default_mode"] = "conservative"
+                else:
+                    policy["auto_update"] = False
+                    policy["default_mode"] = "ask"
+                policy["changed_by_user"] = True
+                policy["last_changed"] = _utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
+                return policy_payload, _write_update_policy_payload(self._ctx.github_root, policy_payload)
+
+            diff_summary: dict[str, Any] = {"total": 0, "counts": {}, "files": []}
+            effective_install_update_mode = "" if normalized_bootstrap_mode == "ask_later" else normalized_bootstrap_mode
+            policy_created = False
+            policy_path = _update_policy_path(self._ctx.github_root)
+
+            if not legacy_bootstrap_mode:
+                if policy_source != "file":
+                    if normalized_bootstrap_mode == "":
+                        return {
+                            "success": True,
+                            "status": "policy_configuration_required",
+                            "files_written": [],
+                            "preserved": [],
+                            "workspace": str(self._ctx.workspace_root),
+                            "install_base_requested": install_base,
+                            "conflict_mode": conflict_mode,
+                            "update_mode": update_mode,
+                            "action_required": "configure_update_policy",
+                            "available_update_modes": _bootstrap_policy_options(),
+                            "recommended_update_mode": "ask",
+                            "policy_source": policy_source,
+                            "migration_state": migration_state,
+                            "note": "Configure the initial workspace update policy before running the extended bootstrap flow.",
+                        }
+                    if migration_state["legacy_workspace"]:
+                        orchestrator_state = inventory.get_orchestrator_state()
+                        github_write_authorized = bool(
+                            orchestrator_state.get("github_write_authorized", False)
+                        )
+                        if not github_write_authorized:
+                            return {
+                                "success": True,
+                                "status": "authorization_required",
+                                "files_written": [],
+                                "preserved": [],
+                                "workspace": str(self._ctx.workspace_root),
+                                "install_base_requested": install_base,
+                                "conflict_mode": conflict_mode,
+                                "update_mode": update_mode,
+                                "resolved_update_mode": normalized_bootstrap_mode or None,
+                                "policy_source": policy_source,
+                                "policy_created": False,
+                                "authorization_required": True,
+                                "github_write_authorized": False,
+                                "diff_summary": diff_summary,
+                                "migration_state": migration_state,
+                                "action_required": "authorize_github_write",
+                                "note": "Authorize writes under .github before migrating this legacy workspace.",
+                            }
+                    policy_payload, policy_path = _configure_initial_bootstrap_policy(normalized_bootstrap_mode)
+                    policy_source = "file"
+                    policy_created = True
+
+                if install_base:
+                    install_context = _get_package_install_context("spark-base")
+                    if install_context.get("success") is False:
+                        return {
+                            **install_context,
+                            "status": "error",
+                            "files_written": [],
+                            "preserved": [],
+                            "workspace": str(self._ctx.workspace_root),
+                            "install_base_requested": install_base,
+                            "conflict_mode": conflict_mode,
+                            "update_mode": update_mode,
+                            "policy_source": policy_source,
+                        }
+                    remote_files, remote_fetch_errors = _build_remote_file_records(
+                        "spark-base",
+                        install_context["pkg_version"],
+                        install_context["pkg"],
+                        install_context["pkg_manifest"],
+                        install_context["files"],
+                        install_context["file_policies"],
+                    )
+                    if remote_fetch_errors:
+                        return {
+                            "success": False,
+                            "status": "error",
+                            "files_written": [],
+                            "preserved": [],
+                            "workspace": str(self._ctx.workspace_root),
+                            "install_base_requested": install_base,
+                            "conflict_mode": conflict_mode,
+                            "update_mode": update_mode,
+                            "policy_source": policy_source,
+                            "errors": remote_fetch_errors,
+                            "note": "Cannot build the spark-base bootstrap diff preview.",
+                        }
+                    diff_summary = _build_diff_summary(
+                        _scf_diff_workspace(
+                            "spark-base",
+                            install_context["pkg_version"],
+                            remote_files,
+                            manifest,
+                        )
+                    )
+
+                orchestrator_state_path = self._ctx.github_root / "runtime" / "orchestrator-state.json"
+                if not orchestrator_state_path.is_file():
+                    inventory.set_orchestrator_state({"github_write_authorized": False})
+                orchestrator_state = inventory.get_orchestrator_state()
+                github_write_authorized = bool(orchestrator_state.get("github_write_authorized", False))
+                if not github_write_authorized:
+                    return {
+                        "success": True,
+                        "status": "authorization_required",
+                        "files_written": [],
+                        "preserved": [],
+                        "workspace": str(self._ctx.workspace_root),
+                        "install_base_requested": install_base,
+                        "conflict_mode": conflict_mode,
+                        "update_mode": update_mode,
+                        "resolved_update_mode": normalized_bootstrap_mode or None,
+                        "policy_source": policy_source,
+                        "policy_created": policy_created,
+                        "policy_path": str(policy_path),
+                        "authorization_required": True,
+                        "github_write_authorized": False,
+                        "diff_summary": diff_summary,
+                        "action_required": "authorize_github_write",
+                        "note": "Authorize writes under .github before running the extended bootstrap flow.",
+                    }
 
             async def _finalize_bootstrap_result(result: dict[str, Any]) -> dict[str, Any]:
                 result["install_base_requested"] = install_base
                 result["conflict_mode"] = conflict_mode
+                result["update_mode"] = update_mode
+                result["policy_source"] = policy_source
+                result["policy_created"] = policy_created
+                if policy_created:
+                    result["policy_path"] = str(policy_path)
+                if not legacy_bootstrap_mode:
+                    result["authorization_required"] = True
+                    result["github_write_authorized"] = True
+                    result["diff_summary"] = diff_summary
                 if not install_base:
                     return result
 
@@ -4644,8 +5080,18 @@ class SparkFrameworkEngine:
                     result["note"] = f"{result['note']} spark-base is already installed."
                     return result
 
-                base_install = await scf_install_package("spark-base", conflict_mode=conflict_mode)
+                base_install = await scf_install_package(
+                    "spark-base",
+                    conflict_mode=conflict_mode,
+                    update_mode=effective_install_update_mode,
+                    migrate_copilot_instructions=migrate_copilot_instructions,
+                )
                 result["base_install"] = base_install
+                if base_install.get("action_required"):
+                    result["bootstrap_status"] = result["status"]
+                    result["status"] = "base_install_action_required"
+                    result["note"] = "Bootstrap completed, but spark-base requires an additional action before installation can continue."
+                    return result
                 if not base_install.get("success", False):
                     result["success"] = False
                     result["bootstrap_status"] = result["status"]

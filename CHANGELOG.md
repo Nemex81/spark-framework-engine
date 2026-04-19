@@ -6,6 +6,26 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.3.0] - 2026-04-19
+
+### Added
+
+- `scf_get_update_policy()` e `scf_set_update_policy()` per leggere e persistare la policy update del workspace in `.github/runtime/spark-user-prefs.json`.
+- `diff_summary`, `authorization_required`, `github_write_authorized` e `backup_path` nei payload pubblici dei flussi install/update quando entra in gioco il sistema di policy del workspace.
+- Estensione di `scf_bootstrap_workspace(..., update_mode="")` con handshake iniziale di policy, preview diff per `spark-base` e gate esplicito per le scritture protette in `.github/`.
+
+### Changed
+
+- `scf_install_package(package_id, conflict_mode, update_mode)` e `scf_update_package(package_id, conflict_mode, update_mode)` risolvono ora il comportamento package-level tramite `mode_per_package`, `mode_per_file_role` e `default_mode`, mantenendo invariato il flusso legacy se il workspace non ha ancora una policy esplicita.
+- I file `merge_sections` usano ora in scrittura `_scf_section_merge()` come path canonico, mentre i file `user_protected` continuano a essere delegati senza fetch o overwrite impliciti.
+- README, copilot instructions, skill e prompt del motore descrivono ora il flusso ownership-aware in 6 step, le modalita `integrative` / `replace` / `conservative` / `selective` e il ruolo del bootstrap esteso.
+
+### Notes
+
+- Release minor: consolida le feature OWN-B, OWN-C, OWN-D, OWN-E e OWN-F in una versione documentata e pronta per il rollout, senza introdurre breaking change sui tool legacy.
+
+---
+
 ## [2.2.1] - 2026-04-17
 
 ### Fixed

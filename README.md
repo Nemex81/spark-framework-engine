@@ -253,11 +253,28 @@ scf://workspace-info
 scf://runtime-state
 ```
 
-## Tools Disponibili (33)
+## Tools Disponibili (35)
 
 ```
 scf_list_agents           scf_get_agent(name)
 scf_list_skills           scf_get_skill(name)
+
+## Migrazione Da Workspace Pre-Ownership
+
+Se il workspace e stato inizializzato con una versione precedente del sistema ownership-aware, il motore entra in modalita migrazione controllata.
+
+- Se manca `.github/runtime/spark-user-prefs.json`, il primo `scf_update_package(...)` o `scf_bootstrap_workspace(...)` restituisce `action_required: configure_update_policy` e propone la configurazione iniziale della policy.
+- I file provenienti da pacchetti legacy che non hanno metadata `scf_*` vengono trattati in modo retrocompatibile come `scf_merge_strategy: replace`.
+- Se `.github/copilot-instructions.md` esiste senza marker SCF completi, il motore non inietta marker automaticamente: restituisce `action_required: migrate_copilot_instructions` e attende una conferma esplicita.
+- La migrazione del file richiede sempre autorizzazione attiva per scrivere sotto `.github/`.
+- Il testo utente fuori dai marker `SCF:BEGIN/END` viene preservato durante la migrazione esplicita.
+
+FAQ rapida:
+
+- Cosa succede ai miei file personalizzati?
+  I file gia modificati dall'utente restano preservati dai flussi `integrative` e `conservative`. In `replace` viene creato prima un backup in `.github/runtime/backups/`.
+- Il motore modifica da solo `copilot-instructions.md` legacy?
+  No. Il file viene migrato solo se il chiamante passa una conferma esplicita nel flusso di tool.
 scf_list_instructions     scf_get_instruction(name)
 scf_list_prompts          scf_get_prompt(name)
 scf_get_project_profile   scf_get_global_instructions
@@ -267,6 +284,8 @@ scf_verify_workspace()
 scf_verify_system()
 scf_get_runtime_state()
 scf_update_runtime_state(patch)
+scf_get_update_policy()
+scf_set_update_policy(auto_update, default_mode=None, mode_per_package=None, mode_per_file_role=None)
 scf_bootstrap_workspace(install_base=False)
 scf_list_available_packages()
 scf_get_package_info(package_id)
@@ -285,24 +304,35 @@ scf_approve_conflict(session_id, conflict_id)
 scf_reject_conflict(session_id, conflict_id)
 ```
 
-`scf_bootstrap_workspace(install_base=False, conflict_mode="abort")` copia nel workspace utente il set base di bootstrap:
-gli 8 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
+`scf_get_update_policy()` restituisce la policy update del workspace, con source
+(`file`, `default_missing`, `default_corrupt`) e configurazione effettiva.
+
+`scf_set_update_policy(auto_update, default_mode=None, mode_per_package=None, mode_per_file_role=None)`
+aggiorna `.github/runtime/spark-user-prefs.json` senza toccare i file dei pacchetti e
+prepara il comportamento di installazione, update e bootstrap esteso.
+
+`scf_bootstrap_workspace(install_base=False, conflict_mode="abort", update_mode="")` copia nel workspace utente il set base di bootstrap:
+gli 9 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
 `spark-guide.agent.md`, e l'instruction `spark-assistant-guide.instructions.md`.
 Se il workspace e gia bootstrap-pato ma manca qualche asset base, il tool copia
 solo i file mancanti.
 
-Con `scf_bootstrap_workspace(install_base=True, conflict_mode=...)` il motore prova anche a
-installare `spark-base` usando il normale preflight del registry e del manifest.
+Con `scf_bootstrap_workspace(install_base=True, conflict_mode=..., update_mode=...)` il motore puo
+anche installare `spark-base` usando il normale preflight del registry e del manifest.
 Se `spark-base` e gia installato, il passo viene saltato senza reinstallazione.
 Quando `install_base=True`, il `conflict_mode` viene inoltrato a `scf_install_package`
 cosi il bootstrap puo scegliere se preservare, sostituire o fondere i file gia presenti.
+Se il workspace ha gia una policy esplicita, oppure il caller passa `update_mode`, il bootstrap
+esteso costruisce anche il `diff_summary` di `spark-base`, verifica `github_write_authorized`
+in `.github/runtime/orchestrator-state.json` e puo' richiedere prima l'autorizzazione o la
+configurazione iniziale della policy.
 
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,
 `file_ownership_policy` e `changelog_path`, insieme a una sezione di
 compatibilita calcolata sul workspace attivo.
 
-`scf_install_package(package_id, conflict_mode="abort")` esegue un preflight
+`scf_install_package(package_id, conflict_mode="abort", update_mode="")` esegue un preflight
 prima di scrivere file: verifica compatibilita del motore, dipendenze dichiarate,
 conflitti di package, ownership dei path gia tracciati nel manifest runtime e
 collisioni con file `.github/` esistenti ma non tracciati. Il `conflict_mode`
@@ -314,8 +344,24 @@ controlla il comportamento in caso di conflitto:
 - `auto`: il motore tenta una risoluzione best-effort deterministica e degrada a `manual` se il caso non e sicuro.
 - `assisted`: apre una sessione con marker su disco e permette approvazione/rifiuto per singolo conflitto.
 
+Il parametro `update_mode` governa invece la strategia package-level nel nuovo sistema
+ownership-aware:
+
+- `integrative`: prova a integrare i file compatibili con merge o sezione condivisa.
+- `replace`: forza il percorso sostitutivo e crea un backup automatico dei file toccati.
+- `conservative`: privilegia la preservazione dei file gia modificati localmente.
+- `selective`: segnala che il workspace richiede una scelta esplicita prima di procedere.
+- stringa vuota: usa la policy del workspace (`mode_per_package` → `mode_per_file_role` → `default_mode`).
+
 In caso di errore in scrittura, il tool tenta il rollback dei file appena toccati
 e non aggiorna il manifest in modo parziale.
+
+Quando il flusso policy e attivo, il payload include anche:
+
+- `resolved_update_mode` e `update_mode_source`
+- `diff_summary` senza i file `unchanged`
+- `authorization_required` / `github_write_authorized`
+- `backup_path` per i percorsi `replace`
 
 `scf_plan_install(package_id)` restituisce un'anteprima read-only del risultato
 di installazione: file scrivibili, file da preservare, conflitti che richiedono
@@ -324,10 +370,10 @@ una decisione esplicita e, per i merge mode, una preview del piano di merge.
 `scf_check_updates()` restituisce solo i pacchetti installati che risultano
 aggiornabili rispetto al registry, con versione installata e versione disponibile.
 
-`scf_update_package(package_id, conflict_mode)` aggiorna un singolo pacchetto
+`scf_update_package(package_id, conflict_mode, update_mode="")` aggiorna un singolo pacchetto
 installato, preservando i file modificati dall'utente. Supporta gli stessi
 `conflict_mode` di `scf_install_package`: `abort`, `replace`, `manual`, `auto`,
-`assisted`.
+`assisted`, e usa lo stesso `update_mode` package-level del flusso di installazione.
 
 `scf_update_packages()` non si limita piu a segnalare i delta di versione: costruisce
 anche una preview ordinata del piano di update, includendo dipendenze tra package,
@@ -353,6 +399,36 @@ per un conflitto nella sessione, marcandolo come risolto.
 
 `scf_reject_conflict(session_id, conflict_id)` rifiuta la risoluzione proposta,
 lasciando il file in fallback manuale con marker di conflitto.
+
+## Gestione Update Workspace
+
+Il nuovo sistema di ownership e update policy si appoggia a tre file runtime sotto `.github/runtime/`:
+
+- `spark-user-prefs.json` per la policy del workspace
+- `orchestrator-state.json` per l'autorizzazione sessione alle scritture protette
+- `backups/<timestamp>/` per i backup automatici dei percorsi sostituiti
+
+### Flusso a 6 step
+
+1. Lettura della policy workspace con fallback sicuro ai default.
+2. Costruzione del `diff_summary` sui file target, escludendo gli `unchanged`.
+3. Verifica dell'autorizzazione `.github` tramite `github_write_authorized`.
+4. Risoluzione del `update_mode` effettivo o richiesta di scelta esplicita.
+5. Backup automatico prima dei percorsi `replace`.
+6. Scrittura file-level con `replace`, 3-way merge oppure `_scf_section_merge()` sui file condivisi.
+
+### Modalita di aggiornamento
+
+| update_mode | Effetto principale |
+|---|---|
+| `integrative` | Integra i file quando possibile e usa i merge gia supportati dal motore |
+| `replace` | Sovrascrive i file target e salva backup automatici |
+| `conservative` | Evita overwrite impliciti sui file toccati dall'utente |
+| `selective` | Richiede una scelta esplicita prima della scrittura |
+| `ask` | Default user-facing della policy: nessuna scrittura finche l'utente non sceglie |
+
+Per i workspace nuovi o migrati, `scf_bootstrap_workspace(..., update_mode=...)` puo' creare la policy iniziale,
+mentre `scf_set_update_policy(...)` permette di aggiornarla in seguito senza reinstallare pacchetti.
 
 ---
 

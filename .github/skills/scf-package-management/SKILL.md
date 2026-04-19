@@ -11,13 +11,22 @@ Obiettivo: gestire il ciclo di vita dei pacchetti SCF nel workspace in modo prev
 
 - Usare `scf_list_available_packages` per il catalogo.
 - Usare `scf_get_package_info(package_id)` per confermare dipendenze, conflitti e compatibilita.
-- Usare `scf_install_package(package_id)` solo dopo aver spiegato l'impatto essenziale.
+- Usare `scf_get_update_policy()` quando serve chiarire come il workspace risolvera `update_mode`, autorizzazione e backup.
+- Usare `scf_install_package(package_id, conflict_mode="...", update_mode="...")` solo dopo aver spiegato l'impatto essenziale.
+- Se il tool restituisce `action_required`, non forzare workaround: completa prima il passo richiesto nel payload, ad esempio `action_required: "configure_update_policy"`, `action_required: "authorize_github_write"` o una scelta esplicita del mode.
 
 ## Aggiornamento
 
 - Usare `scf_check_updates` per il delta rapido.
 - Usare `scf_update_packages` per il piano ordinato e dependency-aware.
-- Usare `scf_apply_updates(package_id | None, conflict_mode)` solo quando l'utente vuole applicare davvero gli update e ha scelto la strategia di conflitto appropriata.
+- Usare `scf_get_update_policy()` o `scf_set_update_policy(...)` quando il workspace deve cambiare comportamento di default prima dell'update.
+- Usare `scf_update_package(package_id, conflict_mode="...", update_mode="...")` o `scf_apply_updates(package_id | None, conflict_mode)` solo quando l'utente vuole applicare davvero gli update e ha scelto la strategia appropriata.
+- Distinguere sempre `conflict_mode` (file-level) da `update_mode` (package-level).
+
+## Bootstrap
+
+- Usare `scf_bootstrap_workspace(install_base=True, conflict_mode="...", update_mode="...")` per l'onboarding orchestrato dal motore MCP.
+- Se il bootstrap restituisce `policy_configuration_required` o `authorization_required`, completa prima quel passaggio invece di ripetere il bootstrap in loop.
 
 ## Rimozione
 
@@ -32,3 +41,4 @@ Obiettivo: gestire il ciclo di vita dei pacchetti SCF nel workspace in modo prev
 ## Regola pratica
 
 - Preferire sempre il tool piu specifico disponibile invece di combinare manualmente piu operazioni se il motore ha gia un flusso dedicato.
+- Quando il workspace e' ownership-aware, riportare sempre `diff_summary`, file preservati, file sostituiti e backup creati se presenti.

@@ -2,46 +2,51 @@
 
 Piano di riferimento: [SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md](../SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md#fase-f--documentazione-e-release)
 
-Stato: Non avviata
+Stato: Completata
 
 ---
 
 ## Aggiornamento documentazione engine
 
-- [ ] Aggiornare `copilot-instructions.md` dell'engine con riferimento ai nuovi tool
-- [ ] Aggiornare sezione tool in README: `scf_get_update_policy`, `scf_set_update_policy`
-- [ ] Documentare il parametro `update_mode` su `scf_install_package` e `scf_update_package`
-- [ ] Documentare il flusso a 6 step nel README
-- [ ] Aggiornare sezione modalità di aggiornamento (Integrativo/Sostitutivo/Conservativo/Selettivo)
+- [x] Aggiornare `copilot-instructions.md` dell'engine con riferimento ai nuovi tool
+- [x] Aggiornare sezione tool in README: `scf_get_update_policy`, `scf_set_update_policy`
+- [x] Documentare il parametro `update_mode` su `scf_install_package` e `scf_update_package`
+- [x] Documentare il flusso a 6 step nel README
+- [x] Aggiornare sezione modalità di aggiornamento (Integrativo/Sostitutivo/Conservativo/Selettivo)
 
 ## CHANGELOG
 
-- [ ] Aggiungere voce CHANGELOG con sezione `### Added` per nuovi tool e utility
-- [ ] Aggiungere sezione `### Changed` per estensione install/update/bootstrap
-- [ ] Seguire formato Keep a Changelog
+- [x] Aggiungere voce CHANGELOG con sezione `### Added` per nuovi tool e utility
+- [x] Aggiungere sezione `### Changed` per estensione install/update/bootstrap
+- [x] Seguire formato Keep a Changelog
 
 ## Versioning
 
-- [ ] Bump `ENGINE_VERSION` in `spark-framework-engine.py` (minor version: nuova feature)
-- [ ] Verificare allineamento `ENGINE_VERSION` ↔ ultima voce CHANGELOG
-- [ ] Aggiornare `min_engine_version` nei pacchetti se necessario
+- [x] Bump `ENGINE_VERSION` in `spark-framework-engine.py` (minor version: nuova feature)
+- [x] Verificare allineamento `ENGINE_VERSION` ↔ ultima voce CHANGELOG
+- [x] Aggiornare `min_engine_version` nei pacchetti se necessario
 
 ## Aggiornamento pacchetti
 
-- [ ] Aggiornare `copilot-instructions.md` di `spark-base` con nota sul sistema ownership
-- [ ] Aggiornare `copilot-instructions.md` di `scf-master-codecrafter` con nota sul sistema
-- [ ] Verificare che i `package-manifest.json` siano allineati alla nuova versione
+- [x] Aggiornare `copilot-instructions.md` di `spark-base` con nota sul sistema ownership
+- [x] Aggiornare `copilot-instructions.md` di `scf-master-codecrafter` con nota sul sistema
+- [x] Verificare che i `package-manifest.json` siano allineati alla nuova versione
 
 ## Skill e prompt
 
-- [ ] Aggiornare skill `scf-package-management` con riferimento al nuovo flusso
-- [ ] Valutare creazione prompt `/scf-update-policy` per gestione rapida della policy
-- [ ] Aggiornare skill `scf-tool-development` con nota su `_scf_section_merge`
+- [x] Aggiornare skill `scf-package-management` con riferimento al nuovo flusso
+- [x] Valutare creazione prompt `/scf-update-policy` per gestione rapida della policy
+- [x] Aggiornare skill `scf-tool-development` con nota su `_scf_section_merge`
 
 ## Gate di uscita
 
-- [ ] `pytest -q` passa suite completa
-- [ ] README aggiornato
-- [ ] CHANGELOG aggiornato con voce corretta
-- [ ] ENGINE_VERSION bumped
-- [ ] Audit di coerenza (`scf-coherence-audit`) superato
+- [x] `pytest -q` passa suite completa
+- [x] README aggiornato
+- [x] CHANGELOG aggiornato con voce corretta
+- [x] ENGINE_VERSION bumped
+- [x] Audit di coerenza (`scf-coherence-audit`) superato
+
+Nota implementativa:
+
+- Release allineata a `2.3.0` come minor semantico per consolidare OWN-B, OWN-C, OWN-D, OWN-E e OWN-F.
+- I `package-manifest.json` di `spark-base` e `scf-master-codecrafter` sono stati verificati e non richiedono bump di `min_engine_version`: la release OWN-F documenta il sistema, non introduce un nuovo requisito tecnico lato pacchetto.

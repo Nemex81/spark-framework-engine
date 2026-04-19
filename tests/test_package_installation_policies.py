@@ -638,14 +638,25 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             github_root = workspace_root / ".github"
             target_file = github_root / "copilot-instructions.md"
             target_file.parent.mkdir(parents=True)
-            target_file.write_text("# User Preface\n\nUser text\n", encoding="utf-8")
+            target_file.write_text(
+                "<!-- SCF:HEADER — generato da SPARK Framework Engine -->\n"
+                "<!-- NON modificare i marker SCF. Il contenuto tra i marker è gestito dal sistema. -->\n"
+                "<!-- Il testo fuori dai marker è tuo: SPARK non lo tocca mai in nessuna modalità. -->\n\n"
+                "# Copilot Instructions — Workspace\n\n"
+                "<!-- Le tue istruzioni custom personali vanno QUI, sopra i blocchi SCF -->\n\n"
+                "# User Preface\n\nUser text\n\n"
+                "<!-- SCF:BEGIN:spark-base@1.2.0 -->\n"
+                "---\nscf_merge_priority: 10\n---\n\n## Base Block\n"
+                "<!-- SCF:END:spark-base -->\n",
+                encoding="utf-8",
+            )
             self._authorize_github_writes(workspace_root)
             ManifestManager(github_root).save(
                 [
                     self._entry(
                         "copilot-instructions.md",
                         "spark-base",
-                        "# User Preface\n\nUser text\n",
+                        target_file.read_text(encoding="utf-8"),
                         "1.2.0",
                     )
                 ]
@@ -690,6 +701,205 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertIn("# User Preface", merged_text)
             self.assertIn("<!-- SCF:BEGIN:pkg-b@2.0.0 -->", merged_text)
             self.assertIn("# Package Block", merged_text)
+
+    def test_scf_install_package_requires_explicit_migration_for_plain_copilot_instructions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("Istruzioni utente legacy\n", encoding="utf-8")
+            self._authorize_github_writes(workspace_root)
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            incoming_text = "---\nscf_merge_strategy: merge_sections\nscf_merge_priority: 20\n---\n\n## Package Block\n"
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/copilot-instructions.md"],
+                        "files_metadata": [
+                            {
+                                "path": ".github/copilot-instructions.md",
+                                "scf_merge_strategy": "merge_sections",
+                                "scf_file_role": "config",
+                                "scf_merge_priority": 20,
+                            }
+                        ],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=incoming_text),
+            ):
+                result = asyncio.run(install_package("pkg-b", update_mode="integrative"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "migrate_copilot_instructions")
+            self.assertEqual(result["current_format"], "plain")
+            self.assertFalse(result["migrate_copilot_instructions"])
+            self.assertEqual(target_file.read_text(encoding="utf-8"), "Istruzioni utente legacy\n")
+
+    def test_scf_install_package_migrates_plain_copilot_instructions_when_explicitly_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("Istruzioni utente legacy\n", encoding="utf-8")
+            self._authorize_github_writes(workspace_root)
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            incoming_text = "---\nscf_merge_strategy: merge_sections\nscf_merge_priority: 20\n---\n\n## Package Block\n"
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/copilot-instructions.md"],
+                        "files_metadata": [
+                            {
+                                "path": ".github/copilot-instructions.md",
+                                "scf_merge_strategy": "merge_sections",
+                                "scf_file_role": "config",
+                                "scf_merge_priority": 20,
+                            }
+                        ],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=incoming_text),
+            ):
+                result = asyncio.run(
+                    install_package(
+                        "pkg-b",
+                        update_mode="integrative",
+                        migrate_copilot_instructions=True,
+                    )
+                )
+
+            self.assertTrue(result["success"])
+            self.assertIn(".github/copilot-instructions.md", result["installed"])
+            merged_text = target_file.read_text(encoding="utf-8")
+            self.assertIn("Istruzioni utente legacy", merged_text)
+            self.assertIn("<!-- SCF:HEADER", merged_text)
+            self.assertIn("<!-- SCF:BEGIN:pkg-b@2.0.0 -->", merged_text)
+
+    def test_scf_install_package_blocks_copilot_migration_without_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("legacy\n", encoding="utf-8")
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            incoming_text = "---\nscf_merge_strategy: merge_sections\nscf_merge_priority: 20\n---\n\n## Package Block\n"
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/copilot-instructions.md"],
+                        "files_metadata": [
+                            {
+                                "path": ".github/copilot-instructions.md",
+                                "scf_merge_strategy": "merge_sections",
+                                "scf_file_role": "config",
+                                "scf_merge_priority": 20,
+                            }
+                        ],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=incoming_text),
+            ):
+                result = asyncio.run(
+                    install_package(
+                        "pkg-b",
+                        update_mode="integrative",
+                        migrate_copilot_instructions=True,
+                    )
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertFalse(result["github_write_authorized"])
+
+    def test_scf_update_package_legacy_workspace_requires_policy_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "legacy.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("legacy content", encoding="utf-8")
+            ManifestManager(github_root).save(
+                [self._entry("agents/legacy.md", "pkg-b", "legacy content", "1.0.0")]
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            update_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_update_package"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/legacy.md"],
+                    },
+                ),
+            ):
+                result = asyncio.run(update_package("pkg-b"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "configure_update_policy")
+            self.assertEqual(result["recommended_update_mode"], "ask")
 
     def test_scf_plan_install_returns_conflict_classification(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

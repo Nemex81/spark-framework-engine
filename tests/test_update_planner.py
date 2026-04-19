@@ -404,6 +404,7 @@ class TestUpdatePlanner(unittest.TestCase):
                     self._entry("agents/py-Agent-Code.md", "scf-pycode-crafter", "old plugin", "2.0.0"),
                 ]
             )
+            self._authorize_github_writes(workspace_root)
 
             fake_mcp = self._build_engine(workspace_root)
             update_package = cast(
@@ -434,7 +435,9 @@ class TestUpdatePlanner(unittest.TestCase):
                 patch.object(RegistryClient, "list_packages", return_value=self._registry_packages()),
                 patch.object(RegistryClient, "fetch_package_manifest", side_effect=lambda repo_url: manifests[repo_url]),
             ):
-                result = asyncio.run(update_package("scf-pycode-crafter"))
+                result = asyncio.run(
+                    update_package("scf-pycode-crafter", update_mode="integrative")
+                )
 
             self.assertFalse(result["success"])
             self.assertEqual(

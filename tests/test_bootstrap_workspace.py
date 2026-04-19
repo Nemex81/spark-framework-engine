@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -56,6 +57,14 @@ class TestBootstrapWorkspace(unittest.TestCase):
         engine = SparkFrameworkEngine(mcp, ctx, inventory)
         engine.register_tools()
         return engine, mcp
+
+    def _authorize_github_writes(self, workspace_root: Path) -> None:
+        state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"github_write_authorized": True}, indent=2),
+            encoding="utf-8",
+        )
 
     def test_bootstrap_copies_prompts_agent_and_guide(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,6 +262,136 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(result["base_install"]["success"])
             self.assertEqual(guide_path.read_text(encoding="utf-8"), "base guide")
             self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
+
+    def test_bootstrap_extended_creates_policy_then_requires_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True, update_mode="ask"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "authorization_required")
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertTrue(result["policy_created"])
+            self.assertEqual(result["files_written"], [])
+            self.assertFalse((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").exists())
+
+    def test_bootstrap_extended_requires_authorization_after_policy_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="integrative"))
+
+            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "authorization_required")
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertTrue(result["policy_created"])
+            self.assertTrue(prefs_path.is_file())
+            self.assertEqual(result["files_written"], [])
+            self.assertFalse((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").exists())
+
+    def test_bootstrap_extended_writes_assets_and_policy_when_authorized(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            self._authorize_github_writes(workspace_root)
+            _, mcp = self._build_engine(workspace_root)
+
+            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="integrative"))
+
+            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "bootstrapped")
+            self.assertTrue(result["policy_created"])
+            self.assertTrue(result["github_write_authorized"])
+            self.assertTrue(prefs_path.is_file())
+            self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
+
+            payload = json.loads(prefs_path.read_text(encoding="utf-8"))
+            self.assertTrue(payload["update_policy"]["auto_update"])
+            self.assertEqual(payload["update_policy"]["default_mode"], "integrative")
+
+    def test_bootstrap_install_base_with_integrative_mode_and_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            self._authorize_github_writes(workspace_root)
+            _, mcp = self._build_engine(workspace_root)
+
+            with (
+                patch.object(
+                    _module.RegistryClient,
+                    "list_packages",
+                    return_value=[
+                        {
+                            "id": "spark-base",
+                            "description": "SPARK Base Layer",
+                            "repo_url": "https://github.com/example/spark-base",
+                            "latest_version": "1.2.0",
+                            "status": "stable",
+                        }
+                    ],
+                ),
+                patch.object(
+                    _module.RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "spark-base",
+                        "version": "1.2.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/spark-guide.agent.md"],
+                    },
+                ),
+                patch.object(_module.RegistryClient, "fetch_raw_file", return_value="base guide"),
+            ):
+                result = asyncio.run(
+                    mcp.tools["scf_bootstrap_workspace"](
+                        install_base=True,
+                        conflict_mode="manual",
+                        update_mode="integrative",
+                    )
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "bootstrapped_and_installed")
+            self.assertTrue(result["policy_created"])
+            self.assertTrue(result["base_install"]["success"])
+            self.assertEqual(result["base_install"]["resolved_update_mode"], "integrative")
+            self.assertIn("counts", result["diff_summary"])
+
+    def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            sentinel.write_text("legacy bootstrap", encoding="utf-8")
+            _, mcp = self._build_engine(workspace_root)
+
+            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="ask"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "authorization_required")
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertTrue(result["migration_state"]["legacy_workspace"])
+
+    def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            sentinel.write_text("legacy bootstrap", encoding="utf-8")
+            _, mcp = self._build_engine(workspace_root)
+
+            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="ask"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["status"], "authorization_required")
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertFalse(result["github_write_authorized"])
 
 
 if __name__ == "__main__":

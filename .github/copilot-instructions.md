@@ -38,3 +38,10 @@ Per richieste user-facing o di orientamento operativo sul framework, usa invece 
 
 - Convenzioni motore: .github/instructions/spark-engine-maintenance.instructions.md
 - Skill disponibili: .github/skills/scf-*/SKILL.md
+
+## Sezione 5 - Update Policy e Ownership
+
+- Il motore espone anche `scf_get_update_policy()` e `scf_set_update_policy(...)` per governare il comportamento di update del workspace.
+- `scf_install_package(...)`, `scf_update_package(...)` e `scf_bootstrap_workspace(...)` possono ricevere `update_mode` e restituire `diff_summary`, `authorization_required` e `action_required` quando il workflow richiede un passaggio esplicito.
+- I file condivisi con `scf_merge_strategy: merge_sections` devono passare dal percorso canonico `_scf_section_merge()`; i file `user_protected` non vanno sovrascritti implicitamente.
+- Le scritture sotto `.github/` dipendono dallo stato sessione `github_write_authorized` in `.github/runtime/orchestrator-state.json`.
