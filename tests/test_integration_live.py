@@ -137,7 +137,12 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
     assert replan["preserve_plan"] == []
     assert replan["can_install"] is True
     assert replan["can_install_with_replace"] is True
-    assert len(replan["write_plan"]) == len(expected_files)
+    assert len(replan["write_plan"]) + len(replan["extend_plan"]) == len(expected_files)
+    assert any(
+        item["file"] == ".github/copilot-instructions.md"
+        and item["classification"] == "extend_section"
+        for item in replan["extend_plan"]
+    )
     assert all(item["classification"] == "update_tracked_clean" for item in replan["write_plan"])
 
 
@@ -179,6 +184,9 @@ def test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace(
     conflict_path = tmp_workspace.workspace_root / conflict_rel
     conflict_path.parent.mkdir(parents=True, exist_ok=True)
     conflict_path.write_text("file utente non tracciato", encoding="utf-8")
+    base_existing_files = {
+        file_rel for file_rel in master_manifest["files"] if (tmp_workspace.workspace_root / file_rel).exists()
+    }
 
     plan = asyncio.run(plan_install("scf-master-codecrafter"))
 
@@ -202,6 +210,8 @@ def test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace(
     for file_rel in master_manifest["files"]:
         target_path = tmp_workspace.workspace_root / file_rel
         if target_path == conflict_path:
+            continue
+        if file_rel in base_existing_files:
             continue
         assert not target_path.exists()
 
