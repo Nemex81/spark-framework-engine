@@ -17,22 +17,22 @@ Fasi e stato (coordinatore):
 
 ## Progetto spark-base — Riorganizzazione componenti
 
-Coordinator per la migrazione da `scf-master-codecrafter` a `spark-base + master-codecrafter v2.0.0`.
+Coordinator per la migrazione da `scf-master-codecrafter` standalone a `spark-base` + `scf-master-codecrafter` ridotto nel perimetro CORE-CRAFT.
 
 Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
 Analisi: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md)
 
 Fasi e stato (coordinator):
 
-- **SB-0**: Preflight workspace — Stato: In corso (fix engine su `duplicate_owners` per file `merge_sections` implementato e validato localmente; rerun operativo workspace ancora da eseguire) — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
-- **SB-1**: Creazione repository spark-base — Stato: In corso (scaffold locale pronto, publish remoto bloccato da auth GitHub) — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
-- **SB-2**: Riduzione scf-master-codecrafter → v2.0.0 — Stato: In corso (modifiche locali validate, commit/push non eseguiti) — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
-- **SB-3**: Dry-run manifest spark-base — Stato: Non avviata — [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)
-- **SB-4**: Aggiornamento registry — Stato: In corso (entry locale aggiornata e validata, commit/push non eseguiti) — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
-- **SB-5**: Migrazione workspace utente — Stato: Non avviata — [todo-fase-SB-5-migrazione.md](todolist/todo-fase-SB-5-migrazione.md)
-- **SB-6**: Gate di verifica post-migrazione — Stato: Non avviata — [todo-fase-SB-6-gate.md](todolist/todo-fase-SB-6-gate.md)
+- **SB-0**: Preflight workspace — Stato: Completata (rieseguito su workspace reali; `tabboz-simulator-202` e `uno-ultra-v68` risultano `is_clean: true`) — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
+- **SB-1**: Creazione repository spark-base — Stato: Completata (repo remoto raggiungibile; manifest corrente `spark-base@1.2.0`, 79 file, consumato correttamente dal motore) — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
+- **SB-2**: Riduzione scf-master-codecrafter → CORE-CRAFT — Stato: Completata (manifest corrente `scf-master-codecrafter@2.1.0`, 14 file, dipendenza `spark-base` attiva) — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
+- **SB-3**: Dry-run manifest spark-base — Stato: Completata (`scf_plan_install("spark-base")` eseguito su `uno-ultra-v68`; richiesto `conflict_mode="replace"` per 9 prompt untracked) — [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)
+- **SB-4**: Aggiornamento registry — Stato: Completata (`registry.json` allineato ai manifest correnti: `spark-base@1.2.0`, `scf-master-codecrafter@2.1.0`, `scf-pycode-crafter@2.0.1`) — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
+- **SB-5**: Migrazione workspace utente — Stato: Completata con nota (eseguita su `uno-ultra-v68`; verify finale pulito, ma il repo target resta git-dirty per file `.github/**` non tracciati) — [todo-fase-SB-5-migrazione.md](todolist/todo-fase-SB-5-migrazione.md)
+- **SB-6**: Gate di verifica post-migrazione — Stato: In corso (workspace target pulito e stack base/core-craft allineato; gate bloccati dall'assenza di `scf-pycode-crafter` e da conteggi documentati non aggiornati) — [todo-fase-SB-6-gate.md](todolist/todo-fase-SB-6-gate.md)
 - **SB-7**: Migrazione `spark-init.py` a bootstrap embedded `spark-base` — Stato: Completata (script, test e README allineati localmente) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
-- **SB-2b**: Correzione asset split (`Agent-Code` + `spark-guide`) — Stato: In corso (fix coordinato engine/base/master avviato) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
+- **SB-2b**: Correzione asset split (`Agent-Code` + `spark-guide`) — Stato: Completata (`Agent-Code` ora nel master ridotto, `spark-guide` in `spark-base`) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
 
 Ordine di esecuzione:
 
