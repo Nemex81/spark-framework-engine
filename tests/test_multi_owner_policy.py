@@ -179,7 +179,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertIn("pkg-a rules", second_text)
             self.assertIn("pkg-b rules v2", second_text)
             self.assertNotIn("pkg-b rules v1", second_text)
-            self.assertEqual(second_text.count("<!-- SCF:SECTION:pkg-b:BEGIN -->"), 1)
+            self.assertEqual(second_text.count("<!-- SCF:BEGIN:pkg-b@2.0.0 -->"), 1)
             self.assertIn("footer\n", second_text)
 
     def test_delegate_policy_on_shared_file_skips_write_and_returns_delegated_files(self) -> None:
@@ -357,7 +357,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertEqual(result["extended_files"], [".github/copilot-instructions.md"])
             self.assertTrue(target_file.is_file())
             written_text = target_file.read_text(encoding="utf-8")
-            self.assertIn("<!-- SCF:SECTION:pkg-b:BEGIN -->", written_text)
+            self.assertIn("<!-- SCF:BEGIN:pkg-b@2.0.0 -->", written_text)
             self.assertIn("pkg-b created section", written_text)
             self.assertEqual(
                 manifest.get_file_owners("copilot-instructions.md"),

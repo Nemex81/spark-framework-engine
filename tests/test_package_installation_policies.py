@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -75,6 +76,14 @@ class TestPackageInstallationPolicies(unittest.TestCase):
         engine = SparkFrameworkEngine(fake_mcp, context, inventory)
         engine.register_tools()
         return fake_mcp
+
+    def _authorize_github_writes(self, workspace_root: Path) -> None:
+        state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"github_write_authorized": True}, indent=2),
+            encoding="utf-8",
+        )
 
     def _registry_package(self, package_id: str) -> dict[str, str]:
         return {
@@ -452,6 +461,235 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertEqual(result["replaced_files"], [".github/agents/shared.md"])
             self.assertEqual(result["resolution_applied"], "replace")
             self.assertEqual(target_file.read_text(encoding="utf-8"), "new content")
+
+    def test_scf_install_package_requires_github_authorization_when_auto_update_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            fake_mcp = self._build_engine(workspace_root)
+            set_update_policy = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_set_update_policy"],
+            )
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            asyncio.run(set_update_policy(False, default_mode="ask"))
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/new.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertTrue(result["authorization_required"])
+            self.assertFalse(result["github_write_authorized"])
+            self.assertEqual(result["resolved_update_mode"], "ask")
+            self.assertEqual(result["diff_summary"]["counts"], {"new": 1})
+
+    def test_scf_install_package_requires_explicit_mode_after_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            fake_mcp = self._build_engine(workspace_root)
+            set_update_policy = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_set_update_policy"],
+            )
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            asyncio.run(set_update_policy(False, default_mode="ask"))
+            self._authorize_github_writes(workspace_root)
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/new.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "choose_update_mode")
+            self.assertEqual(result["suggested_update_mode"], "integrative")
+            self.assertTrue(result["authorization_required"])
+
+    def test_scf_install_package_applies_policy_mode_when_auto_update_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            fake_mcp = self._build_engine(workspace_root)
+            set_update_policy = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_set_update_policy"],
+            )
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            asyncio.run(
+                set_update_policy(
+                    True,
+                    default_mode="integrative",
+                    mode_per_package={"pkg-b": "integrative"},
+                )
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/new.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["installed"], [".github/agents/new.md"])
+            self.assertEqual(result["resolved_update_mode"], "integrative")
+            self.assertEqual(result["update_mode_source"], "policy_package")
+            self.assertFalse(result["authorization_required"])
+
+    def test_scf_install_package_replace_update_mode_creates_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+            self._authorize_github_writes(workspace_root)
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b", update_mode="replace"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["resolved_update_mode"], "replace")
+            self.assertEqual(result["replaced_files"], [".github/agents/shared.md"])
+            self.assertTrue(Path(result["backup_path"]).is_dir())
+            self.assertEqual(
+                (Path(result["backup_path"]) / "agents" / "shared.md").read_text(encoding="utf-8"),
+                "user content",
+            )
+
+    def test_scf_install_package_merge_sections_uses_section_merge_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("# User Preface\n\nUser text\n", encoding="utf-8")
+            self._authorize_github_writes(workspace_root)
+            ManifestManager(github_root).save(
+                [
+                    self._entry(
+                        "copilot-instructions.md",
+                        "spark-base",
+                        "# User Preface\n\nUser text\n",
+                        "1.2.0",
+                    )
+                ]
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+            incoming_text = "---\nscf_merge_strategy: merge_sections\nscf_merge_priority: 20\n---\n\n# Package Block\n"
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/copilot-instructions.md"],
+                        "files_metadata": [
+                            {
+                                "path": ".github/copilot-instructions.md",
+                                "scf_merge_strategy": "merge_sections",
+                                "scf_file_role": "config",
+                                "scf_merge_priority": 20,
+                            }
+                        ],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=incoming_text),
+            ):
+                result = asyncio.run(install_package("pkg-b", update_mode="integrative"))
+
+            self.assertTrue(result["success"])
+            merged_text = target_file.read_text(encoding="utf-8")
+            self.assertIn("# User Preface", merged_text)
+            self.assertIn("<!-- SCF:BEGIN:pkg-b@2.0.0 -->", merged_text)
+            self.assertIn("# Package Block", merged_text)
 
     def test_scf_plan_install_returns_conflict_classification(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,0 +1,2918 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="11" skipped="0" tests="25" time="0.752" timestamp="2026-04-19T10:39:43.902606+02:00" hostname="nemexMaster"><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_get_package_info_returns_manifest_v2_and_compatibility" time="0.006" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_aborts_on_untracked_existing_file" time="0.004"><failure message="AssertionError: True is not false">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_aborts_on_untracked_existing_file&gt;
+
+    def test_scf_install_package_aborts_on_untracked_existing_file(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+    
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content") as fetch_raw,
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+    
+&gt;           self.assertFalse(result["success"])
+E           AssertionError: True is not false
+
+tests\test_package_installation_policies.py:417: AssertionError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_adopts_bootstrap_owned_spark_guide_for_spark_base" time="0.005"><failure message="KeyError: 'adopted_bootstrap_files'">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_adopts_bootstrap_owned_spark_guide_for_spark_base&gt;
+
+    def test_scf_install_package_adopts_bootstrap_owned_spark_guide_for_spark_base(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            guide_file = github_root / "agents" / "spark-guide.agent.md"
+            guide_file.parent.mkdir(parents=True)
+            guide_file.write_text("bootstrap guide", encoding="utf-8")
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry(
+                        "agents/spark-guide.agent.md",
+                        "scf-engine-bootstrap",
+                        "bootstrap guide",
+                        "2.0.0",
+                    )
+                ]
+            )
+    
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("spark-base")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "spark-base",
+                        "version": "1.2.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/spark-guide.agent.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="base guide"),
+            ):
+                result = asyncio.run(install_package("spark-base"))
+    
+            self.assertTrue(result["success"])
+&gt;           self.assertEqual(result["adopted_bootstrap_files"], [".github/agents/spark-guide.agent.md"])
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           KeyError: 'adopted_bootstrap_files'
+
+tests\test_package_installation_policies.py:380: KeyError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_allows_reinstall_for_same_package" time="0.006"><failure message="AssertionError: Lists differ: [] != ['.github/agents/shared.md']&#10;&#10;Second list contains 1 additional elements.&#10;First extra element 0:&#10;'.github/agents/shared.md'&#10;&#10;- []&#10;+ ['.github/agents/shared.md']">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_allows_reinstall_for_same_package&gt;
+
+    def test_scf_install_package_allows_reinstall_for_same_package(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            shared_file = github_root / "agents" / "shared.md"
+            shared_file.parent.mkdir(parents=True)
+            shared_file.write_text("old content", encoding="utf-8")
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry(
+                        "agents/shared.md",
+                        "pkg-b",
+                        "old content",
+                        "1.0.0",
+                    )
+                ]
+            )
+    
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+    
+            self.assertTrue(result["success"])
+&gt;           self.assertEqual(result["installed"], [".github/agents/shared.md"])
+E           AssertionError: Lists differ: [] != ['.github/agents/shared.md']
+E           
+E           Second list contains 1 additional elements.
+E           First extra element 0:
+E           '.github/agents/shared.md'
+E           
+E           - []
+E           + ['.github/agents/shared.md']
+
+tests\test_package_installation_policies.py:191: AssertionError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_applies_policy_mode_when_auto_update_enabled" time="0.009"><failure message="TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_applies_policy_mode_when_auto_update_enabled&gt;
+
+    def test_scf_install_package_applies_policy_mode_when_auto_update_enabled(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            fake_mcp = self._build_engine(workspace_root)
+            set_update_policy = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_set_update_policy"],
+            )
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            asyncio.run(
+                set_update_policy(
+                    True,
+                    default_mode="integrative",
+                    mode_per_package={"pkg-b": "integrative"},
+                )
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/new.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+&gt;               result = asyncio.run(install_package("pkg-b"))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_package_installation_policies.py:572: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\Python311\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\base_events.py:650: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+package_id = 'pkg-b', conflict_mode = 'abort', update_mode = ''
+
+    @self._mcp.tool()
+    async def scf_install_package(
+        package_id: str,
+        conflict_mode: str = "abort",
+        update_mode: str = "",
+    ) -&gt; dict[str, Any]:
+        """Install an SCF package from the public registry into the active workspace .github/."""
+        if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Unsupported conflict_mode '{conflict_mode}'. "
+                    "Supported modes: abort, replace, manual, auto, assisted."
+                ),
+                package=package_id,
+                conflict_mode=conflict_mode,
+            )
+        requested_update_mode = ""
+        if update_mode.strip():
+            validated_update_mode = _validate_update_mode(
+                update_mode,
+                allow_selective=True,
+            )
+            if validated_update_mode is None:
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                        "ask, integrative, replace, conservative, selective."
+                    ),
+                    package=package_id,
+                    conflict_mode=conflict_mode,
+                    update_mode=update_mode,
+                )
+            requested_update_mode = validated_update_mode
+    
+        install_context = _get_package_install_context(package_id)
+        if install_context.get("success") is False:
+            return install_context
+    
+        pkg = install_context["pkg"]
+        pkg_manifest = install_context["pkg_manifest"]
+        files = install_context["files"]
+        pkg_version = install_context["pkg_version"]
+        min_engine_version = install_context["min_engine_version"]
+        file_ownership_policy = install_context["file_ownership_policy"]
+        file_policies = install_context["file_policies"]
+        installed_versions = install_context["installed_versions"]
+        missing_dependencies = install_context["missing_dependencies"]
+        present_conflicts = install_context["present_conflicts"]
+        engine_compatible = install_context["engine_compatible"]
+    
+        if not engine_compatible:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires engine version &gt;= {min_engine_version}."
+                ),
+                package=package_id,
+                required_engine_version=min_engine_version,
+                engine_version=ENGINE_VERSION,
+            )
+        if missing_dependencies:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires missing dependencies: "
+                    f"{', '.join(missing_dependencies)}"
+                ),
+                package=package_id,
+                missing_dependencies=missing_dependencies,
+                installed_packages=installed_versions,
+            )
+        if present_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with installed packages: "
+                    f"{', '.join(present_conflicts)}"
+                ),
+                package=package_id,
+                present_conflicts=present_conflicts,
+                installed_packages=installed_versions,
+            )
+    
+        try:
+            classification_report = _classify_install_files(
+                package_id,
+                files,
+                file_policies=file_policies,
+            )
+        except ValueError as exc:
+            return _build_install_result(
+                False,
+                error=str(exc),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+            )
+        ownership_conflicts = list(classification_report["ownership_issues"])
+        if ownership_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with files already owned by another package."
+                ),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+                effective_file_ownership_policy="error",
+                conflicts=ownership_conflicts,
+                conflicts_detected=classification_report["conflict_plan"],
+                blocked_files=[item["file"] for item in classification_report["conflict_plan"]],
+                requires_user_resolution=True,
+            )
+    
+        remote_files, remote_fetch_errors = _build_remote_file_records(
+            package_id,
+            pkg_version,
+            pkg,
+            pkg_manifest,
+            files,
+            file_policies,
+        )
+        if remote_fetch_errors:
+            return _build_install_result(
+                False,
+                package=package_id,
+                version=pkg_version,
+                delegated_files=[
+                    str(item["file"])
+                    for item in classification_report["delegate_plan"]
+                    if item.get("classification") == "delegate_skip"
+                ],
+                conflicts_detected=classification_report["conflict_plan"],
+                errors=remote_fetch_errors,
+            )
+    
+        diff_records = _scf_diff_workspace(
+            package_id,
+            pkg_version,
+            remote_files,
+            manifest,
+        )
+        diff_summary = _build_diff_summary(diff_records)
+        effective_update_mode = _resolve_effective_update_mode(
+            package_id,
+            requested_update_mode,
+            diff_records,
+            *_read_update_policy_payload(self._ctx.github_root),
+        )
+        flow_payload = _build_update_flow_payload(
+            package_id,
+            pkg_version,
+            conflict_mode,
+            requested_update_mode,
+            effective_update_mode,
+            diff_summary,
+        )
+        if flow_payload["authorization_required"] and not flow_payload["github_write_authorized"]:
+            return _build_install_result(
+                True,
+                action_required="authorize_github_write",
+                message=(
+                    "GitHub protected writes require authorization for this session before "
+                    "installing package files under .github/."
+                ),
+                **flow_payload,
+            )
+    
+        if not flow_payload["auto_update"] and not requested_update_mode:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an update_mode to continue with the package install.",
+                suggested_update_mode=flow_payload["resolved_update_mode"],
+                **flow_payload,
+            )
+    
+        if flow_payload["resolved_update_mode"] in {"ask", "selective"}:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an explicit update_mode to continue.",
+                suggested_update_mode=(
+                    "integrative"
+                    if flow_payload["resolved_update_mode"] == "ask"
+                    else None
+                ),
+                **flow_payload,
+            )
+    
+        effective_conflict_mode = (
+            "replace"
+            if flow_payload["resolved_update_mode"] == "replace"
+            else conflict_mode
+        )
+        remote_files_by_path = {
+            str(item.get("path", item.get("file", ""))): item for item in remote_files
+        }
+    
+        unresolved_conflicts = [
+            item
+            for item in classification_report["conflict_plan"]
+            if item.get("classification") == "conflict_untracked_existing"
+        ]
+        if unresolved_conflicts and effective_conflict_mode == "abort":
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' would overwrite existing untracked files. "
+                    "Review conflicts and retry with conflict_mode='replace'."
+                ),
+                package=package_id,
+                version=pkg_version,
+                conflicts_detected=unresolved_conflicts,
+                blocked_files=[item["file"] for item in unresolved_conflicts],
+                requires_user_resolution=True,
+                **flow_payload,
+            )
+    
+        preserved = [item["file"] for item in classification_report["preserve_plan"]]
+        staged_files: list[tuple[str, str, str, str, bool]] = []
+        replaced_files: list[str] = []
+        extended_files: list[str] = []
+        adopted_bootstrap_files: list[str] = []
+        adopted_bootstrap_rels: list[str] = []
+        delegated_files = [
+            str(item["file"])
+            for item in classification_report["delegate_plan"]
+            if item.get("classification") == "delegate_skip"
+        ]
+        merge_clean: list[dict[str, Any]] = []
+        merge_conflict: list[dict[str, Any]] = []
+        session_entries: list[dict[str, Any]] = []
+        manifest_targets: list[tuple[str, Path]] = []
+        snapshot_written: list[str] = []
+        snapshot_skipped: list[str] = []
+        merge_candidates = {
+            str(item["file"])
+            for item in classification_report["merge_plan"]
+            if item.get("classification") == "merge_candidate"
+        }
+        used_manual_merge = False
+        for item in classification_report["records"]:
+            file_path = str(item["file"])
+            item_classification = str(item["classification"])
+            if item_classification == "preserve_tracked_modified":
+                if flow_payload["resolved_update_mode"] == "replace":
+                    replaced_files.append(file_path)
+                else:
+                    continue
+            if item_classification == "update_tracked_clean" and flow_payload["resolved_update_mode"] == "conservative":
+                preserved.append(file_path)
+                continue
+            if item_classification == "delegate_skip":
+                continue
+            if item_classification == "merge_candidate":
+                if flow_payload["resolved_update_mode"] == "conservative":
+                    preserved.append(file_path)
+                    continue
+                if effective_conflict_mode == "replace":
+                    replaced_files.append(file_path)
+                elif not _supports_stateful_merge(effective_conflict_mode):
+                    preserved.append(file_path)
+                    continue
+            if item_classification == "conflict_cross_owner":
+                continue
+            if item_classification == "conflict_untracked_existing" and effective_conflict_mode != "replace":
+                continue
+            rel = file_path.removeprefix(".github/")
+            if item_classification == "conflict_untracked_existing":
+                replaced_files.append(file_path)
+            remote_file = remote_files_by_path.get(file_path)
+            if remote_file is None:
+                preserved.append(file_path)
+                continue
+            content = str(remote_file.get("content", ""))
+            staged_files.append(
+                (
+                    file_path,
+                    rel,
+                    content,
+                    item_classification,
+                    bool(item.get("adopt_bootstrap_owner", False)),
+                )
+            )
+        # --- Diff-based cleanup: remove files obsoleted by this update ---
+        old_files: set[str] = {
+            entry["file"]
+            for entry in manifest.load()
+            if entry.get("package") == package_id
+        }
+        new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
+        to_remove: set[str] = old_files - new_files
+        removed_files: list[str] = []
+        preserved_obsolete: list[str] = []
+        for rel_path in sorted(to_remove):
+            is_modified = manifest.is_user_modified(rel_path)
+            file_abs = self._ctx.github_root / rel_path
+            if is_modified:
+                preserved_obsolete.append(rel_path)
+                _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
+            else:
+                if file_abs.is_file():
+                    try:
+                        file_abs.unlink()
+                        removed_files.append(rel_path)
+                        _log.info("Obsolete file removed: %s", rel_path)
+                    except OSError as exc:
+                        _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
+        # --- End diff-based cleanup ---
+        installed: list[str] = []
+        backups: dict[Path, str | None] = {}
+        written_paths: list[tuple[str, str, Path]] = []
+        session_payload: dict[str, Any] | None = None
+        auto_validator_results: dict[str, Any] = {}
+        backup_path: str | None = None
+        if flow_payload["resolved_update_mode"] == "replace":
+            files_to_backup = [
+                (rel, self._ctx.workspace_root / file_path)
+                for file_path, rel, _, _, _ in staged_files
+                if (self._ctx.workspace_root / file_path).is_file()
+            ]
+            if files_to_backup:
+                try:
+                    backup_path = _scf_backup_workspace(package_id, files_to_backup)
+                except (OSError, ValueError) as exc:
+                    return _build_install_result(
+                        False,
+                        error=f"Cannot create workspace backup: {exc}",
+                        delegated_files=delegated_files,
+                        preserved=preserved,
+                        replaced_files=replaced_files,
+                        conflicts_detected=classification_report["conflict_plan"],
+                        **flow_payload,
+                    )
+        try:
+            for file_path, rel, content, staged_classification, adopt_bootstrap_owner in staged_files:
+                dest = self._ctx.workspace_root / file_path
+                previous_content = _read_text_if_possible(dest) if dest.is_file() else None
+                backups[dest] = previous_content
+    
+                if staged_classification == "extend_section":
+                    if dest.exists() and previous_content is None:
+                        raise OSError(f"Cannot extend non-text file: {dest}")
+                    remote_strategy = str(
+                        remote_files_by_path.get(file_path, {}).get(
+                            "scf_merge_strategy",
+                            "merge_sections",
+                        )
+                    ).strip() or "merge_sections"
+                    if remote_strategy == "replace":
+                        remote_strategy = "merge_sections"
+                    next_text = _scf_section_merge(
+                        content,
+                        dest,
+                        remote_strategy,
+                        package_id,
+                        pkg_version,
+                    )
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_text(next_text, encoding="utf-8")
+                    written_paths.append((file_path, rel, dest))
+                    manifest_targets.append((rel, dest))
+                    installed.append(file_path)
+                    if adopt_bootstrap_owner:
+                        adopted_bootstrap_files.append(file_path)
+                        adopted_bootstrap_rels.append(rel)
+                    extended_files.append(file_path)
+                    continue
+    
+                if file_path in merge_candidates and _supports_stateful_merge(effective_conflict_mode):
+                    base_text = snapshots.load_snapshot(package_id, rel)
+                    ours_text = previous_content
+                    if base_text is None or ours_text is None:
+                        preserved.append(file_path)
+                        snapshot_skipped.append(file_path)
+                        continue
+    
+                    used_manual_merge = effective_conflict_mode == "manual"
+                    merge_result = merge_engine.diff3_merge(base_text, ours_text, content)
+                    if merge_result.status in {MERGE_STATUS_CLEAN, MERGE_STATUS_IDENTICAL}:
+                        merged_text = merge_result.merged_text
+                        if merged_text != ours_text:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(merged_text, encoding="utf-8")
+                            written_paths.append((file_path, rel, dest))
+                        merge_clean.append(
+                            {
+                                "file": file_path,
+                                "status": merge_result.status,
+                            }
+                        )
+                        manifest_targets.append((rel, dest))
+                        installed.append(file_path)
+                        if adopt_bootstrap_owner:
+                            adopted_bootstrap_files.append(file_path)
+                            adopted_bootstrap_rels.append(rel)
+                        continue
+    
+                    merged_text = merge_engine.render_with_markers(merge_result)
+                    if effective_conflict_mode in {"manual", "assisted"}:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(merged_text, encoding="utf-8")
+                        written_paths.append((file_path, rel, dest))
+                    merge_conflict.append(
+                        {
+                            "file": file_path,
+                            "status": merge_result.status,
+                            "conflict_count": len(merge_result.conflicts),
+                        }
+                    )
+                    session_entries.append(
+                        _build_session_entry(
+                            file_path,
+                            rel,
+                            base_text,
+                            ours_text,
+                            content,
+                            merged_text,
+                        )
+                    )
+                    continue
+    
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+                written_paths.append((file_path, rel, dest))
+                manifest_targets.append((rel, dest))
+                installed.append(file_path)
+                if adopt_bootstrap_owner:
+                    adopted_bootstrap_files.append(file_path)
+                    adopted_bootstrap_rels.append(rel)
+    
+            if session_entries:
+                session_payload = sessions.create_session(
+                    package_id,
+                    pkg_version,
+                    session_entries,
+                    conflict_mode=conflict_mode,
+                )
+    
+                if conflict_mode == "auto":
+                    auto_clean_entries: list[dict[str, Any]] = []
+                    remaining_conflict_entries: list[dict[str, Any]] = []
+                    for conflict in list(session_payload.get("files", [])):
+                        conflict_id = str(conflict.get("conflict_id", "")).strip()
+                        resolution = _propose_conflict_resolution(
+                            session_payload,
+                            conflict_id,
+                            persist=False,
+                        )
+                        current = _find_session_entry(session_payload, conflict_id)
+                        if current is None:
+                            continue
+                        current_index, current_entry = current
+                        public_file = str(current_entry.get("file", "")).strip()
+                        manifest_rel = str(current_entry.get("manifest_rel", "")).strip()
+                        workspace_path = str(current_entry.get("workspace_path", public_file)).strip()
+                        dest = self._ctx.workspace_root / workspace_path
+                        validator_results = current_entry.get("validator_results")
+                        if isinstance(validator_results, dict):
+                            auto_validator_results[public_file] = validator_results
+    
+                        if resolution.get("success") is True:
+                            proposed_text = str(current_entry.get("proposed_text", "") or "")
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(proposed_text, encoding="utf-8")
+                            written_paths.append((public_file, manifest_rel, dest))
+                            current_entry["resolution_status"] = "approved"
+                            _replace_session_entry(session_payload, current_index, current_entry)
+                            auto_clean_entries.append(
+                                {
+                                    "file": public_file,
+                                    "status": "auto_resolved",
+                                }
+                            )
+                            continue
+    
+                        marker_text = _render_marker_text(current_entry)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(marker_text, encoding="utf-8")
+                        written_paths.append((public_file, manifest_rel, dest))
+                        current_entry["resolution_status"] = "manual"
+                        _replace_session_entry(session_payload, current_index, current_entry)
+                        remaining_conflict_entries.append(
+                            {
+                                "file": public_file,
+                                "status": MERGE_STATUS_CONFLICT,
+                                "conflict_count": 1,
+                            }
+                        )
+    
+                    merge_clean.extend(auto_clean_entries)
+                    merge_conflict = remaining_conflict_entries
+                    if remaining_conflict_entries:
+                        sessions.save_session(session_payload)
+                    else:
+                        for file_entry in list(session_payload.get("files", [])):
+                            manifest_rel = str(file_entry.get("manifest_rel", "")).strip()
+                            workspace_path = str(file_entry.get("workspace_path", "")).strip()
+                            if manifest_rel and workspace_path:
+                                manifest_targets.append(
+                                    (manifest_rel, self._ctx.workspace_root / workspace_path)
+                                )
+                        session_payload = sessions.mark_status(
+                            str(session_payload.get("session_id", "")).strip(),
+                            "auto_completed",
+                            session=session_payload,
+                        )
+    
+            if manifest_targets:
+                manifest.upsert_many(
+                    package_id,
+                    pkg_version,
+                    manifest_targets,
+                )
+                if adopted_bootstrap_rels:
+                    manifest.remove_owner_entries(_BOOTSTRAP_PACKAGE_ID, adopted_bootstrap_rels)
+                snapshot_report = _save_snapshots(package_id, manifest_targets)
+                snapshot_written.extend(snapshot_report["written"])
+                snapshot_skipped.extend(snapshot_report["skipped"])
+        except OSError as exc:
+            rollback_errors: list[str] = []
+            for _, _, dest in reversed(written_paths):
+                previous_content = backups.get(dest)
+                try:
+                    if previous_content is None:
+                        if dest.is_file():
+                            dest.unlink()
+                    else:
+                        dest.write_text(previous_content, encoding="utf-8")
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{dest}: {rollback_exc}")
+            result: dict[str, Any] = {
+                "success": False,
+                "package": package_id,
+                "version": pkg_version,
+                "installed": [],
+                "preserved": preserved,
+                "removed_obsolete_files": removed_files,
+                "preserved_obsolete_files": preserved_obsolete,
+                "errors": [f"write failure: {exc}"],
+                "rolled_back": len(rollback_errors) == 0,
+            }
+            if rollback_errors:
+                result["rollback_errors"] = rollback_errors
+            return result
+&gt;       success_result: dict[str, Any] = _build_install_result(
+            True,
+            package=package_id,
+            version=pkg_version,
+            installed=installed,
+            extended_files=extended_files,
+            delegated_files=delegated_files,
+            preserved=preserved,
+            removed_obsolete_files=removed_files,
+            preserved_obsolete_files=preserved_obsolete,
+            replaced_files=replaced_files,
+            adopted_bootstrap_files=adopted_bootstrap_files,
+            merged_files=[item["file"] for item in merge_clean + merge_conflict],
+            merge_clean=merge_clean,
+            merge_conflict=merge_conflict,
+            conflicts_detected=classification_report["conflict_plan"],
+            session_id=None if session_payload is None else session_payload["session_id"],
+            session_status=None if session_payload is None else session_payload["status"],
+            session_expires_at=None if session_payload is None else session_payload["expires_at"],
+            snapshot_written=snapshot_written,
+            snapshot_skipped=snapshot_skipped,
+            requires_user_resolution=len(merge_conflict) &gt; 0,
+            backup_path=backup_path,
+            resolution_applied=(
+                "auto"
+                if effective_conflict_mode == "auto" and not merge_conflict and session_payload is not None
+                else "manual"
+                if effective_conflict_mode == "auto" and merge_conflict
+                else "assisted"
+                if effective_conflict_mode == "assisted" and session_payload is not None
+                else "manual"
+                if used_manual_merge or (effective_conflict_mode == "manual" and session_payload is not None)
+                else "replace" if replaced_files else "none"
+            ),
+            validator_results=auto_validator_results if auto_validator_results else None,
+            remaining_conflicts=len(merge_conflict) if merge_conflict else None,
+            **flow_payload,
+        )
+E       TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'
+
+spark-framework-engine.py:3859: TypeError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_blocks_declared_conflicts" time="0.004" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_blocks_file_conflicts_with_other_package" time="0.004" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_blocks_incompatible_engine_version" time="0.003" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_blocks_missing_dependencies" time="0.003" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_merge_sections_uses_section_merge_flow" time="0.013"><failure message="TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_merge_sections_uses_section_merge_flow&gt;
+
+    def test_scf_install_package_merge_sections_uses_section_merge_flow(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "copilot-instructions.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("# User Preface\n\nUser text\n", encoding="utf-8")
+            self._authorize_github_writes(workspace_root)
+            ManifestManager(github_root).save(
+                [
+                    self._entry(
+                        "copilot-instructions.md",
+                        "spark-base",
+                        "# User Preface\n\nUser text\n",
+                        "1.2.0",
+                    )
+                ]
+            )
+    
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+            incoming_text = "---\nscf_merge_strategy: merge_sections\nscf_merge_priority: 20\n---\n\n# Package Block\n"
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/copilot-instructions.md"],
+                        "files_metadata": [
+                            {
+                                "path": ".github/copilot-instructions.md",
+                                "scf_merge_strategy": "merge_sections",
+                                "scf_file_role": "config",
+                                "scf_merge_priority": 20,
+                            }
+                        ],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=incoming_text),
+            ):
+&gt;               result = asyncio.run(install_package("pkg-b", update_mode="integrative"))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_package_installation_policies.py:674: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\Python311\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\base_events.py:650: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+package_id = 'pkg-b', conflict_mode = 'abort', update_mode = 'integrative'
+
+    @self._mcp.tool()
+    async def scf_install_package(
+        package_id: str,
+        conflict_mode: str = "abort",
+        update_mode: str = "",
+    ) -&gt; dict[str, Any]:
+        """Install an SCF package from the public registry into the active workspace .github/."""
+        if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Unsupported conflict_mode '{conflict_mode}'. "
+                    "Supported modes: abort, replace, manual, auto, assisted."
+                ),
+                package=package_id,
+                conflict_mode=conflict_mode,
+            )
+        requested_update_mode = ""
+        if update_mode.strip():
+            validated_update_mode = _validate_update_mode(
+                update_mode,
+                allow_selective=True,
+            )
+            if validated_update_mode is None:
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                        "ask, integrative, replace, conservative, selective."
+                    ),
+                    package=package_id,
+                    conflict_mode=conflict_mode,
+                    update_mode=update_mode,
+                )
+            requested_update_mode = validated_update_mode
+    
+        install_context = _get_package_install_context(package_id)
+        if install_context.get("success") is False:
+            return install_context
+    
+        pkg = install_context["pkg"]
+        pkg_manifest = install_context["pkg_manifest"]
+        files = install_context["files"]
+        pkg_version = install_context["pkg_version"]
+        min_engine_version = install_context["min_engine_version"]
+        file_ownership_policy = install_context["file_ownership_policy"]
+        file_policies = install_context["file_policies"]
+        installed_versions = install_context["installed_versions"]
+        missing_dependencies = install_context["missing_dependencies"]
+        present_conflicts = install_context["present_conflicts"]
+        engine_compatible = install_context["engine_compatible"]
+    
+        if not engine_compatible:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires engine version &gt;= {min_engine_version}."
+                ),
+                package=package_id,
+                required_engine_version=min_engine_version,
+                engine_version=ENGINE_VERSION,
+            )
+        if missing_dependencies:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires missing dependencies: "
+                    f"{', '.join(missing_dependencies)}"
+                ),
+                package=package_id,
+                missing_dependencies=missing_dependencies,
+                installed_packages=installed_versions,
+            )
+        if present_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with installed packages: "
+                    f"{', '.join(present_conflicts)}"
+                ),
+                package=package_id,
+                present_conflicts=present_conflicts,
+                installed_packages=installed_versions,
+            )
+    
+        try:
+            classification_report = _classify_install_files(
+                package_id,
+                files,
+                file_policies=file_policies,
+            )
+        except ValueError as exc:
+            return _build_install_result(
+                False,
+                error=str(exc),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+            )
+        ownership_conflicts = list(classification_report["ownership_issues"])
+        if ownership_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with files already owned by another package."
+                ),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+                effective_file_ownership_policy="error",
+                conflicts=ownership_conflicts,
+                conflicts_detected=classification_report["conflict_plan"],
+                blocked_files=[item["file"] for item in classification_report["conflict_plan"]],
+                requires_user_resolution=True,
+            )
+    
+        remote_files, remote_fetch_errors = _build_remote_file_records(
+            package_id,
+            pkg_version,
+            pkg,
+            pkg_manifest,
+            files,
+            file_policies,
+        )
+        if remote_fetch_errors:
+            return _build_install_result(
+                False,
+                package=package_id,
+                version=pkg_version,
+                delegated_files=[
+                    str(item["file"])
+                    for item in classification_report["delegate_plan"]
+                    if item.get("classification") == "delegate_skip"
+                ],
+                conflicts_detected=classification_report["conflict_plan"],
+                errors=remote_fetch_errors,
+            )
+    
+        diff_records = _scf_diff_workspace(
+            package_id,
+            pkg_version,
+            remote_files,
+            manifest,
+        )
+        diff_summary = _build_diff_summary(diff_records)
+        effective_update_mode = _resolve_effective_update_mode(
+            package_id,
+            requested_update_mode,
+            diff_records,
+            *_read_update_policy_payload(self._ctx.github_root),
+        )
+        flow_payload = _build_update_flow_payload(
+            package_id,
+            pkg_version,
+            conflict_mode,
+            requested_update_mode,
+            effective_update_mode,
+            diff_summary,
+        )
+        if flow_payload["authorization_required"] and not flow_payload["github_write_authorized"]:
+            return _build_install_result(
+                True,
+                action_required="authorize_github_write",
+                message=(
+                    "GitHub protected writes require authorization for this session before "
+                    "installing package files under .github/."
+                ),
+                **flow_payload,
+            )
+    
+        if not flow_payload["auto_update"] and not requested_update_mode:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an update_mode to continue with the package install.",
+                suggested_update_mode=flow_payload["resolved_update_mode"],
+                **flow_payload,
+            )
+    
+        if flow_payload["resolved_update_mode"] in {"ask", "selective"}:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an explicit update_mode to continue.",
+                suggested_update_mode=(
+                    "integrative"
+                    if flow_payload["resolved_update_mode"] == "ask"
+                    else None
+                ),
+                **flow_payload,
+            )
+    
+        effective_conflict_mode = (
+            "replace"
+            if flow_payload["resolved_update_mode"] == "replace"
+            else conflict_mode
+        )
+        remote_files_by_path = {
+            str(item.get("path", item.get("file", ""))): item for item in remote_files
+        }
+    
+        unresolved_conflicts = [
+            item
+            for item in classification_report["conflict_plan"]
+            if item.get("classification") == "conflict_untracked_existing"
+        ]
+        if unresolved_conflicts and effective_conflict_mode == "abort":
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' would overwrite existing untracked files. "
+                    "Review conflicts and retry with conflict_mode='replace'."
+                ),
+                package=package_id,
+                version=pkg_version,
+                conflicts_detected=unresolved_conflicts,
+                blocked_files=[item["file"] for item in unresolved_conflicts],
+                requires_user_resolution=True,
+                **flow_payload,
+            )
+    
+        preserved = [item["file"] for item in classification_report["preserve_plan"]]
+        staged_files: list[tuple[str, str, str, str, bool]] = []
+        replaced_files: list[str] = []
+        extended_files: list[str] = []
+        adopted_bootstrap_files: list[str] = []
+        adopted_bootstrap_rels: list[str] = []
+        delegated_files = [
+            str(item["file"])
+            for item in classification_report["delegate_plan"]
+            if item.get("classification") == "delegate_skip"
+        ]
+        merge_clean: list[dict[str, Any]] = []
+        merge_conflict: list[dict[str, Any]] = []
+        session_entries: list[dict[str, Any]] = []
+        manifest_targets: list[tuple[str, Path]] = []
+        snapshot_written: list[str] = []
+        snapshot_skipped: list[str] = []
+        merge_candidates = {
+            str(item["file"])
+            for item in classification_report["merge_plan"]
+            if item.get("classification") == "merge_candidate"
+        }
+        used_manual_merge = False
+        for item in classification_report["records"]:
+            file_path = str(item["file"])
+            item_classification = str(item["classification"])
+            if item_classification == "preserve_tracked_modified":
+                if flow_payload["resolved_update_mode"] == "replace":
+                    replaced_files.append(file_path)
+                else:
+                    continue
+            if item_classification == "update_tracked_clean" and flow_payload["resolved_update_mode"] == "conservative":
+                preserved.append(file_path)
+                continue
+            if item_classification == "delegate_skip":
+                continue
+            if item_classification == "merge_candidate":
+                if flow_payload["resolved_update_mode"] == "conservative":
+                    preserved.append(file_path)
+                    continue
+                if effective_conflict_mode == "replace":
+                    replaced_files.append(file_path)
+                elif not _supports_stateful_merge(effective_conflict_mode):
+                    preserved.append(file_path)
+                    continue
+            if item_classification == "conflict_cross_owner":
+                continue
+            if item_classification == "conflict_untracked_existing" and effective_conflict_mode != "replace":
+                continue
+            rel = file_path.removeprefix(".github/")
+            if item_classification == "conflict_untracked_existing":
+                replaced_files.append(file_path)
+            remote_file = remote_files_by_path.get(file_path)
+            if remote_file is None:
+                preserved.append(file_path)
+                continue
+            content = str(remote_file.get("content", ""))
+            staged_files.append(
+                (
+                    file_path,
+                    rel,
+                    content,
+                    item_classification,
+                    bool(item.get("adopt_bootstrap_owner", False)),
+                )
+            )
+        # --- Diff-based cleanup: remove files obsoleted by this update ---
+        old_files: set[str] = {
+            entry["file"]
+            for entry in manifest.load()
+            if entry.get("package") == package_id
+        }
+        new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
+        to_remove: set[str] = old_files - new_files
+        removed_files: list[str] = []
+        preserved_obsolete: list[str] = []
+        for rel_path in sorted(to_remove):
+            is_modified = manifest.is_user_modified(rel_path)
+            file_abs = self._ctx.github_root / rel_path
+            if is_modified:
+                preserved_obsolete.append(rel_path)
+                _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
+            else:
+                if file_abs.is_file():
+                    try:
+                        file_abs.unlink()
+                        removed_files.append(rel_path)
+                        _log.info("Obsolete file removed: %s", rel_path)
+                    except OSError as exc:
+                        _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
+        # --- End diff-based cleanup ---
+        installed: list[str] = []
+        backups: dict[Path, str | None] = {}
+        written_paths: list[tuple[str, str, Path]] = []
+        session_payload: dict[str, Any] | None = None
+        auto_validator_results: dict[str, Any] = {}
+        backup_path: str | None = None
+        if flow_payload["resolved_update_mode"] == "replace":
+            files_to_backup = [
+                (rel, self._ctx.workspace_root / file_path)
+                for file_path, rel, _, _, _ in staged_files
+                if (self._ctx.workspace_root / file_path).is_file()
+            ]
+            if files_to_backup:
+                try:
+                    backup_path = _scf_backup_workspace(package_id, files_to_backup)
+                except (OSError, ValueError) as exc:
+                    return _build_install_result(
+                        False,
+                        error=f"Cannot create workspace backup: {exc}",
+                        delegated_files=delegated_files,
+                        preserved=preserved,
+                        replaced_files=replaced_files,
+                        conflicts_detected=classification_report["conflict_plan"],
+                        **flow_payload,
+                    )
+        try:
+            for file_path, rel, content, staged_classification, adopt_bootstrap_owner in staged_files:
+                dest = self._ctx.workspace_root / file_path
+                previous_content = _read_text_if_possible(dest) if dest.is_file() else None
+                backups[dest] = previous_content
+    
+                if staged_classification == "extend_section":
+                    if dest.exists() and previous_content is None:
+                        raise OSError(f"Cannot extend non-text file: {dest}")
+                    remote_strategy = str(
+                        remote_files_by_path.get(file_path, {}).get(
+                            "scf_merge_strategy",
+                            "merge_sections",
+                        )
+                    ).strip() or "merge_sections"
+                    if remote_strategy == "replace":
+                        remote_strategy = "merge_sections"
+                    next_text = _scf_section_merge(
+                        content,
+                        dest,
+                        remote_strategy,
+                        package_id,
+                        pkg_version,
+                    )
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_text(next_text, encoding="utf-8")
+                    written_paths.append((file_path, rel, dest))
+                    manifest_targets.append((rel, dest))
+                    installed.append(file_path)
+                    if adopt_bootstrap_owner:
+                        adopted_bootstrap_files.append(file_path)
+                        adopted_bootstrap_rels.append(rel)
+                    extended_files.append(file_path)
+                    continue
+    
+                if file_path in merge_candidates and _supports_stateful_merge(effective_conflict_mode):
+                    base_text = snapshots.load_snapshot(package_id, rel)
+                    ours_text = previous_content
+                    if base_text is None or ours_text is None:
+                        preserved.append(file_path)
+                        snapshot_skipped.append(file_path)
+                        continue
+    
+                    used_manual_merge = effective_conflict_mode == "manual"
+                    merge_result = merge_engine.diff3_merge(base_text, ours_text, content)
+                    if merge_result.status in {MERGE_STATUS_CLEAN, MERGE_STATUS_IDENTICAL}:
+                        merged_text = merge_result.merged_text
+                        if merged_text != ours_text:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(merged_text, encoding="utf-8")
+                            written_paths.append((file_path, rel, dest))
+                        merge_clean.append(
+                            {
+                                "file": file_path,
+                                "status": merge_result.status,
+                            }
+                        )
+                        manifest_targets.append((rel, dest))
+                        installed.append(file_path)
+                        if adopt_bootstrap_owner:
+                            adopted_bootstrap_files.append(file_path)
+                            adopted_bootstrap_rels.append(rel)
+                        continue
+    
+                    merged_text = merge_engine.render_with_markers(merge_result)
+                    if effective_conflict_mode in {"manual", "assisted"}:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(merged_text, encoding="utf-8")
+                        written_paths.append((file_path, rel, dest))
+                    merge_conflict.append(
+                        {
+                            "file": file_path,
+                            "status": merge_result.status,
+                            "conflict_count": len(merge_result.conflicts),
+                        }
+                    )
+                    session_entries.append(
+                        _build_session_entry(
+                            file_path,
+                            rel,
+                            base_text,
+                            ours_text,
+                            content,
+                            merged_text,
+                        )
+                    )
+                    continue
+    
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+                written_paths.append((file_path, rel, dest))
+                manifest_targets.append((rel, dest))
+                installed.append(file_path)
+                if adopt_bootstrap_owner:
+                    adopted_bootstrap_files.append(file_path)
+                    adopted_bootstrap_rels.append(rel)
+    
+            if session_entries:
+                session_payload = sessions.create_session(
+                    package_id,
+                    pkg_version,
+                    session_entries,
+                    conflict_mode=conflict_mode,
+                )
+    
+                if conflict_mode == "auto":
+                    auto_clean_entries: list[dict[str, Any]] = []
+                    remaining_conflict_entries: list[dict[str, Any]] = []
+                    for conflict in list(session_payload.get("files", [])):
+                        conflict_id = str(conflict.get("conflict_id", "")).strip()
+                        resolution = _propose_conflict_resolution(
+                            session_payload,
+                            conflict_id,
+                            persist=False,
+                        )
+                        current = _find_session_entry(session_payload, conflict_id)
+                        if current is None:
+                            continue
+                        current_index, current_entry = current
+                        public_file = str(current_entry.get("file", "")).strip()
+                        manifest_rel = str(current_entry.get("manifest_rel", "")).strip()
+                        workspace_path = str(current_entry.get("workspace_path", public_file)).strip()
+                        dest = self._ctx.workspace_root / workspace_path
+                        validator_results = current_entry.get("validator_results")
+                        if isinstance(validator_results, dict):
+                            auto_validator_results[public_file] = validator_results
+    
+                        if resolution.get("success") is True:
+                            proposed_text = str(current_entry.get("proposed_text", "") or "")
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(proposed_text, encoding="utf-8")
+                            written_paths.append((public_file, manifest_rel, dest))
+                            current_entry["resolution_status"] = "approved"
+                            _replace_session_entry(session_payload, current_index, current_entry)
+                            auto_clean_entries.append(
+                                {
+                                    "file": public_file,
+                                    "status": "auto_resolved",
+                                }
+                            )
+                            continue
+    
+                        marker_text = _render_marker_text(current_entry)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(marker_text, encoding="utf-8")
+                        written_paths.append((public_file, manifest_rel, dest))
+                        current_entry["resolution_status"] = "manual"
+                        _replace_session_entry(session_payload, current_index, current_entry)
+                        remaining_conflict_entries.append(
+                            {
+                                "file": public_file,
+                                "status": MERGE_STATUS_CONFLICT,
+                                "conflict_count": 1,
+                            }
+                        )
+    
+                    merge_clean.extend(auto_clean_entries)
+                    merge_conflict = remaining_conflict_entries
+                    if remaining_conflict_entries:
+                        sessions.save_session(session_payload)
+                    else:
+                        for file_entry in list(session_payload.get("files", [])):
+                            manifest_rel = str(file_entry.get("manifest_rel", "")).strip()
+                            workspace_path = str(file_entry.get("workspace_path", "")).strip()
+                            if manifest_rel and workspace_path:
+                                manifest_targets.append(
+                                    (manifest_rel, self._ctx.workspace_root / workspace_path)
+                                )
+                        session_payload = sessions.mark_status(
+                            str(session_payload.get("session_id", "")).strip(),
+                            "auto_completed",
+                            session=session_payload,
+                        )
+    
+            if manifest_targets:
+                manifest.upsert_many(
+                    package_id,
+                    pkg_version,
+                    manifest_targets,
+                )
+                if adopted_bootstrap_rels:
+                    manifest.remove_owner_entries(_BOOTSTRAP_PACKAGE_ID, adopted_bootstrap_rels)
+                snapshot_report = _save_snapshots(package_id, manifest_targets)
+                snapshot_written.extend(snapshot_report["written"])
+                snapshot_skipped.extend(snapshot_report["skipped"])
+        except OSError as exc:
+            rollback_errors: list[str] = []
+            for _, _, dest in reversed(written_paths):
+                previous_content = backups.get(dest)
+                try:
+                    if previous_content is None:
+                        if dest.is_file():
+                            dest.unlink()
+                    else:
+                        dest.write_text(previous_content, encoding="utf-8")
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{dest}: {rollback_exc}")
+            result: dict[str, Any] = {
+                "success": False,
+                "package": package_id,
+                "version": pkg_version,
+                "installed": [],
+                "preserved": preserved,
+                "removed_obsolete_files": removed_files,
+                "preserved_obsolete_files": preserved_obsolete,
+                "errors": [f"write failure: {exc}"],
+                "rolled_back": len(rollback_errors) == 0,
+            }
+            if rollback_errors:
+                result["rollback_errors"] = rollback_errors
+            return result
+&gt;       success_result: dict[str, Any] = _build_install_result(
+            True,
+            package=package_id,
+            version=pkg_version,
+            installed=installed,
+            extended_files=extended_files,
+            delegated_files=delegated_files,
+            preserved=preserved,
+            removed_obsolete_files=removed_files,
+            preserved_obsolete_files=preserved_obsolete,
+            replaced_files=replaced_files,
+            adopted_bootstrap_files=adopted_bootstrap_files,
+            merged_files=[item["file"] for item in merge_clean + merge_conflict],
+            merge_clean=merge_clean,
+            merge_conflict=merge_conflict,
+            conflicts_detected=classification_report["conflict_plan"],
+            session_id=None if session_payload is None else session_payload["session_id"],
+            session_status=None if session_payload is None else session_payload["status"],
+            session_expires_at=None if session_payload is None else session_payload["expires_at"],
+            snapshot_written=snapshot_written,
+            snapshot_skipped=snapshot_skipped,
+            requires_user_resolution=len(merge_conflict) &gt; 0,
+            backup_path=backup_path,
+            resolution_applied=(
+                "auto"
+                if effective_conflict_mode == "auto" and not merge_conflict and session_payload is not None
+                else "manual"
+                if effective_conflict_mode == "auto" and merge_conflict
+                else "assisted"
+                if effective_conflict_mode == "assisted" and session_payload is not None
+                else "manual"
+                if used_manual_merge or (effective_conflict_mode == "manual" and session_payload is not None)
+                else "replace" if replaced_files else "none"
+            ),
+            validator_results=auto_validator_results if auto_validator_results else None,
+            remaining_conflicts=len(merge_conflict) if merge_conflict else None,
+            **flow_payload,
+        )
+E       TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'
+
+spark-framework-engine.py:3859: TypeError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_replace_mode_overwrites_untracked_existing_file" time="0.005"><failure message="AssertionError: Lists differ: [] != ['.github/agents/shared.md']&#10;&#10;Second list contains 1 additional elements.&#10;First extra element 0:&#10;'.github/agents/shared.md'&#10;&#10;- []&#10;+ ['.github/agents/shared.md']">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_replace_mode_overwrites_untracked_existing_file&gt;
+
+    def test_scf_install_package_replace_mode_overwrites_untracked_existing_file(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+    
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b", conflict_mode="replace"))
+    
+            self.assertTrue(result["success"])
+&gt;           self.assertEqual(result["replaced_files"], [".github/agents/shared.md"])
+E           AssertionError: Lists differ: [] != ['.github/agents/shared.md']
+E           
+E           Second list contains 1 additional elements.
+E           First extra element 0:
+E           '.github/agents/shared.md'
+E           
+E           - []
+E           + ['.github/agents/shared.md']
+
+tests\test_package_installation_policies.py:461: AssertionError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_replace_update_mode_creates_backup" time="0.011"><failure message="TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_replace_update_mode_creates_backup&gt;
+
+    def test_scf_install_package_replace_update_mode_creates_backup(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "shared.md"
+            target_file.parent.mkdir(parents=True)
+            target_file.write_text("user content", encoding="utf-8")
+            self._authorize_github_writes(workspace_root)
+    
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/shared.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+&gt;               result = asyncio.run(install_package("pkg-b", update_mode="replace"))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_package_installation_policies.py:612: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\Python311\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\base_events.py:650: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+package_id = 'pkg-b', conflict_mode = 'abort', update_mode = 'replace'
+
+    @self._mcp.tool()
+    async def scf_install_package(
+        package_id: str,
+        conflict_mode: str = "abort",
+        update_mode: str = "",
+    ) -&gt; dict[str, Any]:
+        """Install an SCF package from the public registry into the active workspace .github/."""
+        if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Unsupported conflict_mode '{conflict_mode}'. "
+                    "Supported modes: abort, replace, manual, auto, assisted."
+                ),
+                package=package_id,
+                conflict_mode=conflict_mode,
+            )
+        requested_update_mode = ""
+        if update_mode.strip():
+            validated_update_mode = _validate_update_mode(
+                update_mode,
+                allow_selective=True,
+            )
+            if validated_update_mode is None:
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                        "ask, integrative, replace, conservative, selective."
+                    ),
+                    package=package_id,
+                    conflict_mode=conflict_mode,
+                    update_mode=update_mode,
+                )
+            requested_update_mode = validated_update_mode
+    
+        install_context = _get_package_install_context(package_id)
+        if install_context.get("success") is False:
+            return install_context
+    
+        pkg = install_context["pkg"]
+        pkg_manifest = install_context["pkg_manifest"]
+        files = install_context["files"]
+        pkg_version = install_context["pkg_version"]
+        min_engine_version = install_context["min_engine_version"]
+        file_ownership_policy = install_context["file_ownership_policy"]
+        file_policies = install_context["file_policies"]
+        installed_versions = install_context["installed_versions"]
+        missing_dependencies = install_context["missing_dependencies"]
+        present_conflicts = install_context["present_conflicts"]
+        engine_compatible = install_context["engine_compatible"]
+    
+        if not engine_compatible:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires engine version &gt;= {min_engine_version}."
+                ),
+                package=package_id,
+                required_engine_version=min_engine_version,
+                engine_version=ENGINE_VERSION,
+            )
+        if missing_dependencies:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires missing dependencies: "
+                    f"{', '.join(missing_dependencies)}"
+                ),
+                package=package_id,
+                missing_dependencies=missing_dependencies,
+                installed_packages=installed_versions,
+            )
+        if present_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with installed packages: "
+                    f"{', '.join(present_conflicts)}"
+                ),
+                package=package_id,
+                present_conflicts=present_conflicts,
+                installed_packages=installed_versions,
+            )
+    
+        try:
+            classification_report = _classify_install_files(
+                package_id,
+                files,
+                file_policies=file_policies,
+            )
+        except ValueError as exc:
+            return _build_install_result(
+                False,
+                error=str(exc),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+            )
+        ownership_conflicts = list(classification_report["ownership_issues"])
+        if ownership_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with files already owned by another package."
+                ),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+                effective_file_ownership_policy="error",
+                conflicts=ownership_conflicts,
+                conflicts_detected=classification_report["conflict_plan"],
+                blocked_files=[item["file"] for item in classification_report["conflict_plan"]],
+                requires_user_resolution=True,
+            )
+    
+        remote_files, remote_fetch_errors = _build_remote_file_records(
+            package_id,
+            pkg_version,
+            pkg,
+            pkg_manifest,
+            files,
+            file_policies,
+        )
+        if remote_fetch_errors:
+            return _build_install_result(
+                False,
+                package=package_id,
+                version=pkg_version,
+                delegated_files=[
+                    str(item["file"])
+                    for item in classification_report["delegate_plan"]
+                    if item.get("classification") == "delegate_skip"
+                ],
+                conflicts_detected=classification_report["conflict_plan"],
+                errors=remote_fetch_errors,
+            )
+    
+        diff_records = _scf_diff_workspace(
+            package_id,
+            pkg_version,
+            remote_files,
+            manifest,
+        )
+        diff_summary = _build_diff_summary(diff_records)
+        effective_update_mode = _resolve_effective_update_mode(
+            package_id,
+            requested_update_mode,
+            diff_records,
+            *_read_update_policy_payload(self._ctx.github_root),
+        )
+        flow_payload = _build_update_flow_payload(
+            package_id,
+            pkg_version,
+            conflict_mode,
+            requested_update_mode,
+            effective_update_mode,
+            diff_summary,
+        )
+        if flow_payload["authorization_required"] and not flow_payload["github_write_authorized"]:
+            return _build_install_result(
+                True,
+                action_required="authorize_github_write",
+                message=(
+                    "GitHub protected writes require authorization for this session before "
+                    "installing package files under .github/."
+                ),
+                **flow_payload,
+            )
+    
+        if not flow_payload["auto_update"] and not requested_update_mode:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an update_mode to continue with the package install.",
+                suggested_update_mode=flow_payload["resolved_update_mode"],
+                **flow_payload,
+            )
+    
+        if flow_payload["resolved_update_mode"] in {"ask", "selective"}:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an explicit update_mode to continue.",
+                suggested_update_mode=(
+                    "integrative"
+                    if flow_payload["resolved_update_mode"] == "ask"
+                    else None
+                ),
+                **flow_payload,
+            )
+    
+        effective_conflict_mode = (
+            "replace"
+            if flow_payload["resolved_update_mode"] == "replace"
+            else conflict_mode
+        )
+        remote_files_by_path = {
+            str(item.get("path", item.get("file", ""))): item for item in remote_files
+        }
+    
+        unresolved_conflicts = [
+            item
+            for item in classification_report["conflict_plan"]
+            if item.get("classification") == "conflict_untracked_existing"
+        ]
+        if unresolved_conflicts and effective_conflict_mode == "abort":
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' would overwrite existing untracked files. "
+                    "Review conflicts and retry with conflict_mode='replace'."
+                ),
+                package=package_id,
+                version=pkg_version,
+                conflicts_detected=unresolved_conflicts,
+                blocked_files=[item["file"] for item in unresolved_conflicts],
+                requires_user_resolution=True,
+                **flow_payload,
+            )
+    
+        preserved = [item["file"] for item in classification_report["preserve_plan"]]
+        staged_files: list[tuple[str, str, str, str, bool]] = []
+        replaced_files: list[str] = []
+        extended_files: list[str] = []
+        adopted_bootstrap_files: list[str] = []
+        adopted_bootstrap_rels: list[str] = []
+        delegated_files = [
+            str(item["file"])
+            for item in classification_report["delegate_plan"]
+            if item.get("classification") == "delegate_skip"
+        ]
+        merge_clean: list[dict[str, Any]] = []
+        merge_conflict: list[dict[str, Any]] = []
+        session_entries: list[dict[str, Any]] = []
+        manifest_targets: list[tuple[str, Path]] = []
+        snapshot_written: list[str] = []
+        snapshot_skipped: list[str] = []
+        merge_candidates = {
+            str(item["file"])
+            for item in classification_report["merge_plan"]
+            if item.get("classification") == "merge_candidate"
+        }
+        used_manual_merge = False
+        for item in classification_report["records"]:
+            file_path = str(item["file"])
+            item_classification = str(item["classification"])
+            if item_classification == "preserve_tracked_modified":
+                if flow_payload["resolved_update_mode"] == "replace":
+                    replaced_files.append(file_path)
+                else:
+                    continue
+            if item_classification == "update_tracked_clean" and flow_payload["resolved_update_mode"] == "conservative":
+                preserved.append(file_path)
+                continue
+            if item_classification == "delegate_skip":
+                continue
+            if item_classification == "merge_candidate":
+                if flow_payload["resolved_update_mode"] == "conservative":
+                    preserved.append(file_path)
+                    continue
+                if effective_conflict_mode == "replace":
+                    replaced_files.append(file_path)
+                elif not _supports_stateful_merge(effective_conflict_mode):
+                    preserved.append(file_path)
+                    continue
+            if item_classification == "conflict_cross_owner":
+                continue
+            if item_classification == "conflict_untracked_existing" and effective_conflict_mode != "replace":
+                continue
+            rel = file_path.removeprefix(".github/")
+            if item_classification == "conflict_untracked_existing":
+                replaced_files.append(file_path)
+            remote_file = remote_files_by_path.get(file_path)
+            if remote_file is None:
+                preserved.append(file_path)
+                continue
+            content = str(remote_file.get("content", ""))
+            staged_files.append(
+                (
+                    file_path,
+                    rel,
+                    content,
+                    item_classification,
+                    bool(item.get("adopt_bootstrap_owner", False)),
+                )
+            )
+        # --- Diff-based cleanup: remove files obsoleted by this update ---
+        old_files: set[str] = {
+            entry["file"]
+            for entry in manifest.load()
+            if entry.get("package") == package_id
+        }
+        new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
+        to_remove: set[str] = old_files - new_files
+        removed_files: list[str] = []
+        preserved_obsolete: list[str] = []
+        for rel_path in sorted(to_remove):
+            is_modified = manifest.is_user_modified(rel_path)
+            file_abs = self._ctx.github_root / rel_path
+            if is_modified:
+                preserved_obsolete.append(rel_path)
+                _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
+            else:
+                if file_abs.is_file():
+                    try:
+                        file_abs.unlink()
+                        removed_files.append(rel_path)
+                        _log.info("Obsolete file removed: %s", rel_path)
+                    except OSError as exc:
+                        _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
+        # --- End diff-based cleanup ---
+        installed: list[str] = []
+        backups: dict[Path, str | None] = {}
+        written_paths: list[tuple[str, str, Path]] = []
+        session_payload: dict[str, Any] | None = None
+        auto_validator_results: dict[str, Any] = {}
+        backup_path: str | None = None
+        if flow_payload["resolved_update_mode"] == "replace":
+            files_to_backup = [
+                (rel, self._ctx.workspace_root / file_path)
+                for file_path, rel, _, _, _ in staged_files
+                if (self._ctx.workspace_root / file_path).is_file()
+            ]
+            if files_to_backup:
+                try:
+                    backup_path = _scf_backup_workspace(package_id, files_to_backup)
+                except (OSError, ValueError) as exc:
+                    return _build_install_result(
+                        False,
+                        error=f"Cannot create workspace backup: {exc}",
+                        delegated_files=delegated_files,
+                        preserved=preserved,
+                        replaced_files=replaced_files,
+                        conflicts_detected=classification_report["conflict_plan"],
+                        **flow_payload,
+                    )
+        try:
+            for file_path, rel, content, staged_classification, adopt_bootstrap_owner in staged_files:
+                dest = self._ctx.workspace_root / file_path
+                previous_content = _read_text_if_possible(dest) if dest.is_file() else None
+                backups[dest] = previous_content
+    
+                if staged_classification == "extend_section":
+                    if dest.exists() and previous_content is None:
+                        raise OSError(f"Cannot extend non-text file: {dest}")
+                    remote_strategy = str(
+                        remote_files_by_path.get(file_path, {}).get(
+                            "scf_merge_strategy",
+                            "merge_sections",
+                        )
+                    ).strip() or "merge_sections"
+                    if remote_strategy == "replace":
+                        remote_strategy = "merge_sections"
+                    next_text = _scf_section_merge(
+                        content,
+                        dest,
+                        remote_strategy,
+                        package_id,
+                        pkg_version,
+                    )
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_text(next_text, encoding="utf-8")
+                    written_paths.append((file_path, rel, dest))
+                    manifest_targets.append((rel, dest))
+                    installed.append(file_path)
+                    if adopt_bootstrap_owner:
+                        adopted_bootstrap_files.append(file_path)
+                        adopted_bootstrap_rels.append(rel)
+                    extended_files.append(file_path)
+                    continue
+    
+                if file_path in merge_candidates and _supports_stateful_merge(effective_conflict_mode):
+                    base_text = snapshots.load_snapshot(package_id, rel)
+                    ours_text = previous_content
+                    if base_text is None or ours_text is None:
+                        preserved.append(file_path)
+                        snapshot_skipped.append(file_path)
+                        continue
+    
+                    used_manual_merge = effective_conflict_mode == "manual"
+                    merge_result = merge_engine.diff3_merge(base_text, ours_text, content)
+                    if merge_result.status in {MERGE_STATUS_CLEAN, MERGE_STATUS_IDENTICAL}:
+                        merged_text = merge_result.merged_text
+                        if merged_text != ours_text:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(merged_text, encoding="utf-8")
+                            written_paths.append((file_path, rel, dest))
+                        merge_clean.append(
+                            {
+                                "file": file_path,
+                                "status": merge_result.status,
+                            }
+                        )
+                        manifest_targets.append((rel, dest))
+                        installed.append(file_path)
+                        if adopt_bootstrap_owner:
+                            adopted_bootstrap_files.append(file_path)
+                            adopted_bootstrap_rels.append(rel)
+                        continue
+    
+                    merged_text = merge_engine.render_with_markers(merge_result)
+                    if effective_conflict_mode in {"manual", "assisted"}:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(merged_text, encoding="utf-8")
+                        written_paths.append((file_path, rel, dest))
+                    merge_conflict.append(
+                        {
+                            "file": file_path,
+                            "status": merge_result.status,
+                            "conflict_count": len(merge_result.conflicts),
+                        }
+                    )
+                    session_entries.append(
+                        _build_session_entry(
+                            file_path,
+                            rel,
+                            base_text,
+                            ours_text,
+                            content,
+                            merged_text,
+                        )
+                    )
+                    continue
+    
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+                written_paths.append((file_path, rel, dest))
+                manifest_targets.append((rel, dest))
+                installed.append(file_path)
+                if adopt_bootstrap_owner:
+                    adopted_bootstrap_files.append(file_path)
+                    adopted_bootstrap_rels.append(rel)
+    
+            if session_entries:
+                session_payload = sessions.create_session(
+                    package_id,
+                    pkg_version,
+                    session_entries,
+                    conflict_mode=conflict_mode,
+                )
+    
+                if conflict_mode == "auto":
+                    auto_clean_entries: list[dict[str, Any]] = []
+                    remaining_conflict_entries: list[dict[str, Any]] = []
+                    for conflict in list(session_payload.get("files", [])):
+                        conflict_id = str(conflict.get("conflict_id", "")).strip()
+                        resolution = _propose_conflict_resolution(
+                            session_payload,
+                            conflict_id,
+                            persist=False,
+                        )
+                        current = _find_session_entry(session_payload, conflict_id)
+                        if current is None:
+                            continue
+                        current_index, current_entry = current
+                        public_file = str(current_entry.get("file", "")).strip()
+                        manifest_rel = str(current_entry.get("manifest_rel", "")).strip()
+                        workspace_path = str(current_entry.get("workspace_path", public_file)).strip()
+                        dest = self._ctx.workspace_root / workspace_path
+                        validator_results = current_entry.get("validator_results")
+                        if isinstance(validator_results, dict):
+                            auto_validator_results[public_file] = validator_results
+    
+                        if resolution.get("success") is True:
+                            proposed_text = str(current_entry.get("proposed_text", "") or "")
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(proposed_text, encoding="utf-8")
+                            written_paths.append((public_file, manifest_rel, dest))
+                            current_entry["resolution_status"] = "approved"
+                            _replace_session_entry(session_payload, current_index, current_entry)
+                            auto_clean_entries.append(
+                                {
+                                    "file": public_file,
+                                    "status": "auto_resolved",
+                                }
+                            )
+                            continue
+    
+                        marker_text = _render_marker_text(current_entry)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(marker_text, encoding="utf-8")
+                        written_paths.append((public_file, manifest_rel, dest))
+                        current_entry["resolution_status"] = "manual"
+                        _replace_session_entry(session_payload, current_index, current_entry)
+                        remaining_conflict_entries.append(
+                            {
+                                "file": public_file,
+                                "status": MERGE_STATUS_CONFLICT,
+                                "conflict_count": 1,
+                            }
+                        )
+    
+                    merge_clean.extend(auto_clean_entries)
+                    merge_conflict = remaining_conflict_entries
+                    if remaining_conflict_entries:
+                        sessions.save_session(session_payload)
+                    else:
+                        for file_entry in list(session_payload.get("files", [])):
+                            manifest_rel = str(file_entry.get("manifest_rel", "")).strip()
+                            workspace_path = str(file_entry.get("workspace_path", "")).strip()
+                            if manifest_rel and workspace_path:
+                                manifest_targets.append(
+                                    (manifest_rel, self._ctx.workspace_root / workspace_path)
+                                )
+                        session_payload = sessions.mark_status(
+                            str(session_payload.get("session_id", "")).strip(),
+                            "auto_completed",
+                            session=session_payload,
+                        )
+    
+            if manifest_targets:
+                manifest.upsert_many(
+                    package_id,
+                    pkg_version,
+                    manifest_targets,
+                )
+                if adopted_bootstrap_rels:
+                    manifest.remove_owner_entries(_BOOTSTRAP_PACKAGE_ID, adopted_bootstrap_rels)
+                snapshot_report = _save_snapshots(package_id, manifest_targets)
+                snapshot_written.extend(snapshot_report["written"])
+                snapshot_skipped.extend(snapshot_report["skipped"])
+        except OSError as exc:
+            rollback_errors: list[str] = []
+            for _, _, dest in reversed(written_paths):
+                previous_content = backups.get(dest)
+                try:
+                    if previous_content is None:
+                        if dest.is_file():
+                            dest.unlink()
+                    else:
+                        dest.write_text(previous_content, encoding="utf-8")
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{dest}: {rollback_exc}")
+            result: dict[str, Any] = {
+                "success": False,
+                "package": package_id,
+                "version": pkg_version,
+                "installed": [],
+                "preserved": preserved,
+                "removed_obsolete_files": removed_files,
+                "preserved_obsolete_files": preserved_obsolete,
+                "errors": [f"write failure: {exc}"],
+                "rolled_back": len(rollback_errors) == 0,
+            }
+            if rollback_errors:
+                result["rollback_errors"] = rollback_errors
+            return result
+&gt;       success_result: dict[str, Any] = _build_install_result(
+            True,
+            package=package_id,
+            version=pkg_version,
+            installed=installed,
+            extended_files=extended_files,
+            delegated_files=delegated_files,
+            preserved=preserved,
+            removed_obsolete_files=removed_files,
+            preserved_obsolete_files=preserved_obsolete,
+            replaced_files=replaced_files,
+            adopted_bootstrap_files=adopted_bootstrap_files,
+            merged_files=[item["file"] for item in merge_clean + merge_conflict],
+            merge_clean=merge_clean,
+            merge_conflict=merge_conflict,
+            conflicts_detected=classification_report["conflict_plan"],
+            session_id=None if session_payload is None else session_payload["session_id"],
+            session_status=None if session_payload is None else session_payload["status"],
+            session_expires_at=None if session_payload is None else session_payload["expires_at"],
+            snapshot_written=snapshot_written,
+            snapshot_skipped=snapshot_skipped,
+            requires_user_resolution=len(merge_conflict) &gt; 0,
+            backup_path=backup_path,
+            resolution_applied=(
+                "auto"
+                if effective_conflict_mode == "auto" and not merge_conflict and session_payload is not None
+                else "manual"
+                if effective_conflict_mode == "auto" and merge_conflict
+                else "assisted"
+                if effective_conflict_mode == "assisted" and session_payload is not None
+                else "manual"
+                if used_manual_merge or (effective_conflict_mode == "manual" and session_payload is not None)
+                else "replace" if replaced_files else "none"
+            ),
+            validator_results=auto_validator_results if auto_validator_results else None,
+            remaining_conflicts=len(merge_conflict) if merge_conflict else None,
+            **flow_payload,
+        )
+E       TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'
+
+spark-framework-engine.py:3859: TypeError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_requires_explicit_mode_after_authorization" time="0.004"><failure message="AssertionError: 'ask' != 'integrative'&#10;- ask&#10;+ integrative">self = &lt;test_package_installation_policies.TestPackageInstallationPolicies testMethod=test_scf_install_package_requires_explicit_mode_after_authorization&gt;
+
+    def test_scf_install_package_requires_explicit_mode_after_authorization(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            self._authorize_github_writes(workspace_root)
+            fake_mcp = self._build_engine(workspace_root)
+            install_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_package("pkg-b")]),
+                patch.object(
+                    RegistryClient,
+                    "fetch_package_manifest",
+                    return_value={
+                        "package": "pkg-b",
+                        "version": "2.0.0",
+                        "min_engine_version": "1.0.0",
+                        "dependencies": [],
+                        "conflicts": [],
+                        "file_ownership_policy": "error",
+                        "files": [".github/agents/new.md"],
+                    },
+                ),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new content"),
+            ):
+                result = asyncio.run(install_package("pkg-b"))
+    
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "choose_update_mode")
+&gt;           self.assertEqual(result["suggested_update_mode"], "integrative")
+E           AssertionError: 'ask' != 'integrative'
+E           - ask
+E           + integrative
+
+tests\test_package_installation_policies.py:531: AssertionError</failure></testcase><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_install_package_requires_github_authorization_when_auto_update_disabled" time="0.004" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_plan_install_returns_conflict_classification" time="0.005" /><testcase classname="tests.test_package_installation_policies.TestPackageInstallationPolicies" name="test_scf_remove_package_returns_deleted_snapshots" time="0.010" /><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_apply_updates_aborts_before_first_write_on_preflight_conflict" time="0.006" /><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_apply_updates_for_plugin_includes_dependency_first" time="0.008"><failure message="AssertionError: {'scf-master-codecrafter': '1.0.0', 'scf-pycode-crafter': '2.0.0'} != {'scf-master-codecrafter': '1.1.0', 'scf-pycode-crafter': '2.1.0'}&#10;- {'scf-master-codecrafter': '1.0.0', 'scf-pycode-crafter': '2.0.0'}&#10;?                               ^                              ^&#10;&#10;+ {'scf-master-codecrafter': '1.1.0', 'scf-pycode-crafter': '2.1.0'}&#10;?                               ^                              ^">self = &lt;test_update_planner.TestUpdatePlanner testMethod=test_apply_updates_for_plugin_includes_dependency_first&gt;
+
+    def test_apply_updates_for_plugin_includes_dependency_first(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            (github_root / "agents").mkdir(parents=True)
+            (github_root / "agents" / "Agent-Orchestrator.md").write_text("old master", encoding="utf-8")
+            (github_root / "agents" / "py-Agent-Code.md").write_text("old plugin", encoding="utf-8")
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry("agents/Agent-Orchestrator.md", "scf-master-codecrafter", "old master", "1.0.0"),
+                    self._entry("agents/py-Agent-Code.md", "scf-pycode-crafter", "old plugin", "2.0.0"),
+                ]
+            )
+    
+            fake_mcp = self._build_engine(workspace_root)
+            apply_updates = cast(
+                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_apply_updates"],
+            )
+    
+            raw_content = {
+                "https://raw.githubusercontent.com/example/scf-master-codecrafter/main/.github/agents/Agent-Orchestrator.md": "new master",
+                "https://raw.githubusercontent.com/example/scf-pycode-crafter/main/.github/agents/py-Agent-Code.md": "new plugin",
+            }
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=self._registry_packages()),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=self._manifest_for),
+                patch.object(RegistryClient, "fetch_raw_file", side_effect=lambda url: raw_content[url]),
+            ):
+                result = asyncio.run(apply_updates("scf-pycode-crafter"))
+    
+            self.assertTrue(result["success"])
+            self.assertEqual(
+                [item["package"] for item in result["applied"]],
+                ["scf-master-codecrafter", "scf-pycode-crafter"],
+            )
+&gt;           self.assertEqual(manifest.get_installed_versions(), {
+                "scf-master-codecrafter": "1.1.0",
+                "scf-pycode-crafter": "2.1.0",
+            })
+E           AssertionError: {'scf-master-codecrafter': '1.0.0', 'scf-pycode-crafter': '2.0.0'} != {'scf-master-codecrafter': '1.1.0', 'scf-pycode-crafter': '2.1.0'}
+E           - {'scf-master-codecrafter': '1.0.0', 'scf-pycode-crafter': '2.0.0'}
+E           ?                               ^                              ^
+E           
+E           + {'scf-master-codecrafter': '1.1.0', 'scf-pycode-crafter': '2.1.0'}
+E           ?                               ^                              ^
+
+tests\test_update_planner.py:241: AssertionError</failure></testcase><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_apply_updates_forwards_manual_conflict_mode" time="0.016"><failure message="AssertionError: None != 'active'">self = &lt;test_update_planner.TestUpdatePlanner testMethod=test_apply_updates_forwards_manual_conflict_mode&gt;
+
+    def test_apply_updates_forwards_manual_conflict_mode(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            target_file = github_root / "agents" / "Agent-Orchestrator.md"
+            target_file.parent.mkdir(parents=True)
+            base_text = "alpha\nbase\nomega\n"
+            ours_text = "alpha\nours\nomega\n"
+            theirs_text = "alpha\ntheirs\nomega\n"
+            target_file.write_text(ours_text, encoding="utf-8")
+    
+            manifest = ManifestManager(github_root)
+            manifest.save(
+                [
+                    self._entry("agents/Agent-Orchestrator.md", "scf-master-codecrafter", base_text, "1.0.0"),
+                ]
+            )
+    
+            snapshots = _module.SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshot_source = workspace_root / "snapshot-base.md"
+            snapshot_source.write_text(base_text, encoding="utf-8")
+            self.assertTrue(
+                snapshots.save_snapshot("scf-master-codecrafter", "agents/Agent-Orchestrator.md", snapshot_source)
+            )
+    
+            fake_mcp = self._build_engine(workspace_root)
+            apply_updates = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_apply_updates"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_packages()[0]]),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=self._manifest_for),
+                patch.object(RegistryClient, "fetch_raw_file", return_value=theirs_text),
+            ):
+                result = asyncio.run(apply_updates("scf-master-codecrafter", conflict_mode="manual"))
+    
+            self.assertTrue(result["success"])
+            self.assertEqual(result["conflict_mode"], "manual")
+&gt;           self.assertEqual(result["applied"][0]["session_status"], "active")
+E           AssertionError: None != 'active'
+
+tests\test_update_planner.py:286: AssertionError</failure></testcase><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_update_package_forwards_explicit_replace_mode" time="0.011"><failure message="TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'">self = &lt;test_update_planner.TestUpdatePlanner testMethod=test_update_package_forwards_explicit_replace_mode&gt;
+
+    def test_update_package_forwards_explicit_replace_mode(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            agents_root = github_root / "agents"
+            agents_root.mkdir(parents=True)
+            target_file = agents_root / "Agent-Orchestrator.md"
+            target_file.write_text("user override", encoding="utf-8")
+            ManifestManager(github_root).save(
+                [
+                    self._entry(
+                        "agents/Agent-Orchestrator.md",
+                        "scf-master-codecrafter",
+                        "old master",
+                        "1.0.0",
+                    )
+                ]
+            )
+            self._authorize_github_writes(workspace_root)
+    
+            fake_mcp = self._build_engine(workspace_root)
+            update_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_update_package"],
+            )
+    
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_packages()[0]]),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=self._manifest_for),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new master"),
+            ):
+&gt;               result = asyncio.run(
+                    update_package(
+                        "scf-master-codecrafter",
+                        update_mode="replace",
+                    )
+                )
+
+tests\test_update_planner.py:524: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\Python311\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python311\Lib\asyncio\base_events.py:650: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+spark-framework-engine.py:4009: in scf_update_package
+    install_report = await scf_install_package(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+package_id = 'scf-master-codecrafter', conflict_mode = 'abort'
+update_mode = 'replace'
+
+    @self._mcp.tool()
+    async def scf_install_package(
+        package_id: str,
+        conflict_mode: str = "abort",
+        update_mode: str = "",
+    ) -&gt; dict[str, Any]:
+        """Install an SCF package from the public registry into the active workspace .github/."""
+        if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Unsupported conflict_mode '{conflict_mode}'. "
+                    "Supported modes: abort, replace, manual, auto, assisted."
+                ),
+                package=package_id,
+                conflict_mode=conflict_mode,
+            )
+        requested_update_mode = ""
+        if update_mode.strip():
+            validated_update_mode = _validate_update_mode(
+                update_mode,
+                allow_selective=True,
+            )
+            if validated_update_mode is None:
+                return _build_install_result(
+                    False,
+                    error=(
+                        f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                        "ask, integrative, replace, conservative, selective."
+                    ),
+                    package=package_id,
+                    conflict_mode=conflict_mode,
+                    update_mode=update_mode,
+                )
+            requested_update_mode = validated_update_mode
+    
+        install_context = _get_package_install_context(package_id)
+        if install_context.get("success") is False:
+            return install_context
+    
+        pkg = install_context["pkg"]
+        pkg_manifest = install_context["pkg_manifest"]
+        files = install_context["files"]
+        pkg_version = install_context["pkg_version"]
+        min_engine_version = install_context["min_engine_version"]
+        file_ownership_policy = install_context["file_ownership_policy"]
+        file_policies = install_context["file_policies"]
+        installed_versions = install_context["installed_versions"]
+        missing_dependencies = install_context["missing_dependencies"]
+        present_conflicts = install_context["present_conflicts"]
+        engine_compatible = install_context["engine_compatible"]
+    
+        if not engine_compatible:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires engine version &gt;= {min_engine_version}."
+                ),
+                package=package_id,
+                required_engine_version=min_engine_version,
+                engine_version=ENGINE_VERSION,
+            )
+        if missing_dependencies:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' requires missing dependencies: "
+                    f"{', '.join(missing_dependencies)}"
+                ),
+                package=package_id,
+                missing_dependencies=missing_dependencies,
+                installed_packages=installed_versions,
+            )
+        if present_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with installed packages: "
+                    f"{', '.join(present_conflicts)}"
+                ),
+                package=package_id,
+                present_conflicts=present_conflicts,
+                installed_packages=installed_versions,
+            )
+    
+        try:
+            classification_report = _classify_install_files(
+                package_id,
+                files,
+                file_policies=file_policies,
+            )
+        except ValueError as exc:
+            return _build_install_result(
+                False,
+                error=str(exc),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+            )
+        ownership_conflicts = list(classification_report["ownership_issues"])
+        if ownership_conflicts:
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' conflicts with files already owned by another package."
+                ),
+                package=package_id,
+                version=pkg_version,
+                file_ownership_policy=file_ownership_policy,
+                effective_file_ownership_policy="error",
+                conflicts=ownership_conflicts,
+                conflicts_detected=classification_report["conflict_plan"],
+                blocked_files=[item["file"] for item in classification_report["conflict_plan"]],
+                requires_user_resolution=True,
+            )
+    
+        remote_files, remote_fetch_errors = _build_remote_file_records(
+            package_id,
+            pkg_version,
+            pkg,
+            pkg_manifest,
+            files,
+            file_policies,
+        )
+        if remote_fetch_errors:
+            return _build_install_result(
+                False,
+                package=package_id,
+                version=pkg_version,
+                delegated_files=[
+                    str(item["file"])
+                    for item in classification_report["delegate_plan"]
+                    if item.get("classification") == "delegate_skip"
+                ],
+                conflicts_detected=classification_report["conflict_plan"],
+                errors=remote_fetch_errors,
+            )
+    
+        diff_records = _scf_diff_workspace(
+            package_id,
+            pkg_version,
+            remote_files,
+            manifest,
+        )
+        diff_summary = _build_diff_summary(diff_records)
+        effective_update_mode = _resolve_effective_update_mode(
+            package_id,
+            requested_update_mode,
+            diff_records,
+            *_read_update_policy_payload(self._ctx.github_root),
+        )
+        flow_payload = _build_update_flow_payload(
+            package_id,
+            pkg_version,
+            conflict_mode,
+            requested_update_mode,
+            effective_update_mode,
+            diff_summary,
+        )
+        if flow_payload["authorization_required"] and not flow_payload["github_write_authorized"]:
+            return _build_install_result(
+                True,
+                action_required="authorize_github_write",
+                message=(
+                    "GitHub protected writes require authorization for this session before "
+                    "installing package files under .github/."
+                ),
+                **flow_payload,
+            )
+    
+        if not flow_payload["auto_update"] and not requested_update_mode:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an update_mode to continue with the package install.",
+                suggested_update_mode=flow_payload["resolved_update_mode"],
+                **flow_payload,
+            )
+    
+        if flow_payload["resolved_update_mode"] in {"ask", "selective"}:
+            return _build_install_result(
+                True,
+                action_required="choose_update_mode",
+                message="Choose an explicit update_mode to continue.",
+                suggested_update_mode=(
+                    "integrative"
+                    if flow_payload["resolved_update_mode"] == "ask"
+                    else None
+                ),
+                **flow_payload,
+            )
+    
+        effective_conflict_mode = (
+            "replace"
+            if flow_payload["resolved_update_mode"] == "replace"
+            else conflict_mode
+        )
+        remote_files_by_path = {
+            str(item.get("path", item.get("file", ""))): item for item in remote_files
+        }
+    
+        unresolved_conflicts = [
+            item
+            for item in classification_report["conflict_plan"]
+            if item.get("classification") == "conflict_untracked_existing"
+        ]
+        if unresolved_conflicts and effective_conflict_mode == "abort":
+            return _build_install_result(
+                False,
+                error=(
+                    f"Package '{package_id}' would overwrite existing untracked files. "
+                    "Review conflicts and retry with conflict_mode='replace'."
+                ),
+                package=package_id,
+                version=pkg_version,
+                conflicts_detected=unresolved_conflicts,
+                blocked_files=[item["file"] for item in unresolved_conflicts],
+                requires_user_resolution=True,
+                **flow_payload,
+            )
+    
+        preserved = [item["file"] for item in classification_report["preserve_plan"]]
+        staged_files: list[tuple[str, str, str, str, bool]] = []
+        replaced_files: list[str] = []
+        extended_files: list[str] = []
+        adopted_bootstrap_files: list[str] = []
+        adopted_bootstrap_rels: list[str] = []
+        delegated_files = [
+            str(item["file"])
+            for item in classification_report["delegate_plan"]
+            if item.get("classification") == "delegate_skip"
+        ]
+        merge_clean: list[dict[str, Any]] = []
+        merge_conflict: list[dict[str, Any]] = []
+        session_entries: list[dict[str, Any]] = []
+        manifest_targets: list[tuple[str, Path]] = []
+        snapshot_written: list[str] = []
+        snapshot_skipped: list[str] = []
+        merge_candidates = {
+            str(item["file"])
+            for item in classification_report["merge_plan"]
+            if item.get("classification") == "merge_candidate"
+        }
+        used_manual_merge = False
+        for item in classification_report["records"]:
+            file_path = str(item["file"])
+            item_classification = str(item["classification"])
+            if item_classification == "preserve_tracked_modified":
+                if flow_payload["resolved_update_mode"] == "replace":
+                    replaced_files.append(file_path)
+                else:
+                    continue
+            if item_classification == "update_tracked_clean" and flow_payload["resolved_update_mode"] == "conservative":
+                preserved.append(file_path)
+                continue
+            if item_classification == "delegate_skip":
+                continue
+            if item_classification == "merge_candidate":
+                if flow_payload["resolved_update_mode"] == "conservative":
+                    preserved.append(file_path)
+                    continue
+                if effective_conflict_mode == "replace":
+                    replaced_files.append(file_path)
+                elif not _supports_stateful_merge(effective_conflict_mode):
+                    preserved.append(file_path)
+                    continue
+            if item_classification == "conflict_cross_owner":
+                continue
+            if item_classification == "conflict_untracked_existing" and effective_conflict_mode != "replace":
+                continue
+            rel = file_path.removeprefix(".github/")
+            if item_classification == "conflict_untracked_existing":
+                replaced_files.append(file_path)
+            remote_file = remote_files_by_path.get(file_path)
+            if remote_file is None:
+                preserved.append(file_path)
+                continue
+            content = str(remote_file.get("content", ""))
+            staged_files.append(
+                (
+                    file_path,
+                    rel,
+                    content,
+                    item_classification,
+                    bool(item.get("adopt_bootstrap_owner", False)),
+                )
+            )
+        # --- Diff-based cleanup: remove files obsoleted by this update ---
+        old_files: set[str] = {
+            entry["file"]
+            for entry in manifest.load()
+            if entry.get("package") == package_id
+        }
+        new_files: set[str] = {f.removeprefix(".github/") for f in files if f}
+        to_remove: set[str] = old_files - new_files
+        removed_files: list[str] = []
+        preserved_obsolete: list[str] = []
+        for rel_path in sorted(to_remove):
+            is_modified = manifest.is_user_modified(rel_path)
+            file_abs = self._ctx.github_root / rel_path
+            if is_modified:
+                preserved_obsolete.append(rel_path)
+                _log.warning("Obsolete file preserved (user-modified): %s", rel_path)
+            else:
+                if file_abs.is_file():
+                    try:
+                        file_abs.unlink()
+                        removed_files.append(rel_path)
+                        _log.info("Obsolete file removed: %s", rel_path)
+                    except OSError as exc:
+                        _log.warning("Cannot remove obsolete file %s: %s", rel_path, exc)
+        # --- End diff-based cleanup ---
+        installed: list[str] = []
+        backups: dict[Path, str | None] = {}
+        written_paths: list[tuple[str, str, Path]] = []
+        session_payload: dict[str, Any] | None = None
+        auto_validator_results: dict[str, Any] = {}
+        backup_path: str | None = None
+        if flow_payload["resolved_update_mode"] == "replace":
+            files_to_backup = [
+                (rel, self._ctx.workspace_root / file_path)
+                for file_path, rel, _, _, _ in staged_files
+                if (self._ctx.workspace_root / file_path).is_file()
+            ]
+            if files_to_backup:
+                try:
+                    backup_path = _scf_backup_workspace(package_id, files_to_backup)
+                except (OSError, ValueError) as exc:
+                    return _build_install_result(
+                        False,
+                        error=f"Cannot create workspace backup: {exc}",
+                        delegated_files=delegated_files,
+                        preserved=preserved,
+                        replaced_files=replaced_files,
+                        conflicts_detected=classification_report["conflict_plan"],
+                        **flow_payload,
+                    )
+        try:
+            for file_path, rel, content, staged_classification, adopt_bootstrap_owner in staged_files:
+                dest = self._ctx.workspace_root / file_path
+                previous_content = _read_text_if_possible(dest) if dest.is_file() else None
+                backups[dest] = previous_content
+    
+                if staged_classification == "extend_section":
+                    if dest.exists() and previous_content is None:
+                        raise OSError(f"Cannot extend non-text file: {dest}")
+                    remote_strategy = str(
+                        remote_files_by_path.get(file_path, {}).get(
+                            "scf_merge_strategy",
+                            "merge_sections",
+                        )
+                    ).strip() or "merge_sections"
+                    if remote_strategy == "replace":
+                        remote_strategy = "merge_sections"
+                    next_text = _scf_section_merge(
+                        content,
+                        dest,
+                        remote_strategy,
+                        package_id,
+                        pkg_version,
+                    )
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_text(next_text, encoding="utf-8")
+                    written_paths.append((file_path, rel, dest))
+                    manifest_targets.append((rel, dest))
+                    installed.append(file_path)
+                    if adopt_bootstrap_owner:
+                        adopted_bootstrap_files.append(file_path)
+                        adopted_bootstrap_rels.append(rel)
+                    extended_files.append(file_path)
+                    continue
+    
+                if file_path in merge_candidates and _supports_stateful_merge(effective_conflict_mode):
+                    base_text = snapshots.load_snapshot(package_id, rel)
+                    ours_text = previous_content
+                    if base_text is None or ours_text is None:
+                        preserved.append(file_path)
+                        snapshot_skipped.append(file_path)
+                        continue
+    
+                    used_manual_merge = effective_conflict_mode == "manual"
+                    merge_result = merge_engine.diff3_merge(base_text, ours_text, content)
+                    if merge_result.status in {MERGE_STATUS_CLEAN, MERGE_STATUS_IDENTICAL}:
+                        merged_text = merge_result.merged_text
+                        if merged_text != ours_text:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(merged_text, encoding="utf-8")
+                            written_paths.append((file_path, rel, dest))
+                        merge_clean.append(
+                            {
+                                "file": file_path,
+                                "status": merge_result.status,
+                            }
+                        )
+                        manifest_targets.append((rel, dest))
+                        installed.append(file_path)
+                        if adopt_bootstrap_owner:
+                            adopted_bootstrap_files.append(file_path)
+                            adopted_bootstrap_rels.append(rel)
+                        continue
+    
+                    merged_text = merge_engine.render_with_markers(merge_result)
+                    if effective_conflict_mode in {"manual", "assisted"}:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(merged_text, encoding="utf-8")
+                        written_paths.append((file_path, rel, dest))
+                    merge_conflict.append(
+                        {
+                            "file": file_path,
+                            "status": merge_result.status,
+                            "conflict_count": len(merge_result.conflicts),
+                        }
+                    )
+                    session_entries.append(
+                        _build_session_entry(
+                            file_path,
+                            rel,
+                            base_text,
+                            ours_text,
+                            content,
+                            merged_text,
+                        )
+                    )
+                    continue
+    
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+                written_paths.append((file_path, rel, dest))
+                manifest_targets.append((rel, dest))
+                installed.append(file_path)
+                if adopt_bootstrap_owner:
+                    adopted_bootstrap_files.append(file_path)
+                    adopted_bootstrap_rels.append(rel)
+    
+            if session_entries:
+                session_payload = sessions.create_session(
+                    package_id,
+                    pkg_version,
+                    session_entries,
+                    conflict_mode=conflict_mode,
+                )
+    
+                if conflict_mode == "auto":
+                    auto_clean_entries: list[dict[str, Any]] = []
+                    remaining_conflict_entries: list[dict[str, Any]] = []
+                    for conflict in list(session_payload.get("files", [])):
+                        conflict_id = str(conflict.get("conflict_id", "")).strip()
+                        resolution = _propose_conflict_resolution(
+                            session_payload,
+                            conflict_id,
+                            persist=False,
+                        )
+                        current = _find_session_entry(session_payload, conflict_id)
+                        if current is None:
+                            continue
+                        current_index, current_entry = current
+                        public_file = str(current_entry.get("file", "")).strip()
+                        manifest_rel = str(current_entry.get("manifest_rel", "")).strip()
+                        workspace_path = str(current_entry.get("workspace_path", public_file)).strip()
+                        dest = self._ctx.workspace_root / workspace_path
+                        validator_results = current_entry.get("validator_results")
+                        if isinstance(validator_results, dict):
+                            auto_validator_results[public_file] = validator_results
+    
+                        if resolution.get("success") is True:
+                            proposed_text = str(current_entry.get("proposed_text", "") or "")
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(proposed_text, encoding="utf-8")
+                            written_paths.append((public_file, manifest_rel, dest))
+                            current_entry["resolution_status"] = "approved"
+                            _replace_session_entry(session_payload, current_index, current_entry)
+                            auto_clean_entries.append(
+                                {
+                                    "file": public_file,
+                                    "status": "auto_resolved",
+                                }
+                            )
+                            continue
+    
+                        marker_text = _render_marker_text(current_entry)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(marker_text, encoding="utf-8")
+                        written_paths.append((public_file, manifest_rel, dest))
+                        current_entry["resolution_status"] = "manual"
+                        _replace_session_entry(session_payload, current_index, current_entry)
+                        remaining_conflict_entries.append(
+                            {
+                                "file": public_file,
+                                "status": MERGE_STATUS_CONFLICT,
+                                "conflict_count": 1,
+                            }
+                        )
+    
+                    merge_clean.extend(auto_clean_entries)
+                    merge_conflict = remaining_conflict_entries
+                    if remaining_conflict_entries:
+                        sessions.save_session(session_payload)
+                    else:
+                        for file_entry in list(session_payload.get("files", [])):
+                            manifest_rel = str(file_entry.get("manifest_rel", "")).strip()
+                            workspace_path = str(file_entry.get("workspace_path", "")).strip()
+                            if manifest_rel and workspace_path:
+                                manifest_targets.append(
+                                    (manifest_rel, self._ctx.workspace_root / workspace_path)
+                                )
+                        session_payload = sessions.mark_status(
+                            str(session_payload.get("session_id", "")).strip(),
+                            "auto_completed",
+                            session=session_payload,
+                        )
+    
+            if manifest_targets:
+                manifest.upsert_many(
+                    package_id,
+                    pkg_version,
+                    manifest_targets,
+                )
+                if adopted_bootstrap_rels:
+                    manifest.remove_owner_entries(_BOOTSTRAP_PACKAGE_ID, adopted_bootstrap_rels)
+                snapshot_report = _save_snapshots(package_id, manifest_targets)
+                snapshot_written.extend(snapshot_report["written"])
+                snapshot_skipped.extend(snapshot_report["skipped"])
+        except OSError as exc:
+            rollback_errors: list[str] = []
+            for _, _, dest in reversed(written_paths):
+                previous_content = backups.get(dest)
+                try:
+                    if previous_content is None:
+                        if dest.is_file():
+                            dest.unlink()
+                    else:
+                        dest.write_text(previous_content, encoding="utf-8")
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{dest}: {rollback_exc}")
+            result: dict[str, Any] = {
+                "success": False,
+                "package": package_id,
+                "version": pkg_version,
+                "installed": [],
+                "preserved": preserved,
+                "removed_obsolete_files": removed_files,
+                "preserved_obsolete_files": preserved_obsolete,
+                "errors": [f"write failure: {exc}"],
+                "rolled_back": len(rollback_errors) == 0,
+            }
+            if rollback_errors:
+                result["rollback_errors"] = rollback_errors
+            return result
+&gt;       success_result: dict[str, Any] = _build_install_result(
+            True,
+            package=package_id,
+            version=pkg_version,
+            installed=installed,
+            extended_files=extended_files,
+            delegated_files=delegated_files,
+            preserved=preserved,
+            removed_obsolete_files=removed_files,
+            preserved_obsolete_files=preserved_obsolete,
+            replaced_files=replaced_files,
+            adopted_bootstrap_files=adopted_bootstrap_files,
+            merged_files=[item["file"] for item in merge_clean + merge_conflict],
+            merge_clean=merge_clean,
+            merge_conflict=merge_conflict,
+            conflicts_detected=classification_report["conflict_plan"],
+            session_id=None if session_payload is None else session_payload["session_id"],
+            session_status=None if session_payload is None else session_payload["status"],
+            session_expires_at=None if session_payload is None else session_payload["expires_at"],
+            snapshot_written=snapshot_written,
+            snapshot_skipped=snapshot_skipped,
+            requires_user_resolution=len(merge_conflict) &gt; 0,
+            backup_path=backup_path,
+            resolution_applied=(
+                "auto"
+                if effective_conflict_mode == "auto" and not merge_conflict and session_payload is not None
+                else "manual"
+                if effective_conflict_mode == "auto" and merge_conflict
+                else "assisted"
+                if effective_conflict_mode == "assisted" and session_payload is not None
+                else "manual"
+                if used_manual_merge or (effective_conflict_mode == "manual" and session_payload is not None)
+                else "replace" if replaced_files else "none"
+            ),
+            validator_results=auto_validator_results if auto_validator_results else None,
+            remaining_conflicts=len(merge_conflict) if merge_conflict else None,
+            **flow_payload,
+        )
+E       TypeError: spark_framework_engine.SparkFrameworkEngine.register_tools.&lt;locals&gt;._build_install_result() got multiple values for keyword argument 'package'
+
+spark-framework-engine.py:3859: TypeError</failure></testcase><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_update_package_requires_authorization_before_mode_selection" time="0.006" /><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_update_package_surfaces_preflight_conflicts" time="0.101" /><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_update_packages_blocks_missing_dependencies" time="0.004" /><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_update_packages_detects_stale_registry_using_manifest_version" time="0.004" /><testcase classname="tests.test_update_planner.TestUpdatePlanner" name="test_update_packages_returns_dependency_order" time="0.004" /></testsuite></testsuites>

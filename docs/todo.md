@@ -77,7 +77,7 @@ Fasi e stato (coordinator):
 - **OWN-A**: Normalizzazione pacchetti (front matter + manifest schema 2.1) — Stato: Completata — [todo-fase-OWN-A-normalizzazione.md](todolist/todo-fase-OWN-A-normalizzazione.md)
 - **OWN-B**: Tool policy + utility diff/backup — Stato: Completata — [todo-fase-OWN-B-policy-diff-backup.md](todolist/todo-fase-OWN-B-policy-diff-backup.md)
 - **OWN-C**: Utility section merge (SCF markers) — Stato: Completata — [todo-fase-OWN-C-section-merge.md](todolist/todo-fase-OWN-C-section-merge.md)
-- **OWN-D**: Integrazione flusso install/update — Stato: Non avviata — [todo-fase-OWN-D-integrazione-flusso.md](todolist/todo-fase-OWN-D-integrazione-flusso.md)
+- **OWN-D**: Integrazione flusso install/update — Stato: Completata — [todo-fase-OWN-D-integrazione-flusso.md](todolist/todo-fase-OWN-D-integrazione-flusso.md)
 - **OWN-E**: Estensione bootstrap workspace — Stato: Non avviata — [todo-fase-OWN-E-bootstrap-estensione.md](todolist/todo-fase-OWN-E-bootstrap-estensione.md)
 - **OWN-F**: Documentazione e release — Stato: Non avviata — [todo-fase-OWN-F-docs-release.md](todolist/todo-fase-OWN-F-docs-release.md)
 - **OWN-G**: Migrazione workspace esistenti — Stato: Non avviata — [todo-fase-OWN-G-migrazione-workspace.md](todolist/todo-fase-OWN-G-migrazione-workspace.md)

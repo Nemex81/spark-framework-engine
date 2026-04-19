@@ -2783,6 +2783,206 @@ class SparkFrameworkEngine:
             result.update(extras)
             return result
 
+        def _build_remote_file_records(
+            package_id: str,
+            pkg_version: str,
+            pkg: dict[str, Any],
+            pkg_manifest: dict[str, Any],
+            files: list[str],
+            file_policies: dict[str, str],
+        ) -> tuple[list[dict[str, Any]], list[str]]:
+            """Fetch remote package files and attach SCF metadata for diffing and writes."""
+            metadata_by_path: dict[str, dict[str, Any]] = {}
+            raw_files_metadata = pkg_manifest.get("files_metadata", [])
+            if isinstance(raw_files_metadata, list):
+                for item in raw_files_metadata:
+                    if not isinstance(item, dict):
+                        continue
+                    raw_path = str(item.get("path", "")).strip()
+                    normalized_rel = _normalize_manifest_relative_path(raw_path)
+                    if normalized_rel is None:
+                        continue
+                    metadata_by_path[f".github/{normalized_rel}"] = item
+
+            remote_files: list[dict[str, Any]] = []
+            fetch_errors: list[str] = []
+            base_raw_url = pkg["repo_url"].replace(
+                "https://github.com/", "https://raw.githubusercontent.com/"
+            ) + "/main/"
+
+            for file_path in files:
+                metadata = metadata_by_path.get(file_path, {})
+                merge_strategy = str(metadata.get("scf_merge_strategy", "")).strip()
+                if not merge_strategy:
+                    policy = file_policies.get(file_path, "error")
+                    if policy == "extend":
+                        merge_strategy = "merge_sections"
+                    elif policy == "delegate":
+                        merge_strategy = "user_protected"
+                    else:
+                        merge_strategy = "replace"
+
+                try:
+                    merge_priority = int(metadata.get("scf_merge_priority", 0) or 0)
+                except (TypeError, ValueError):
+                    merge_priority = 0
+
+                try:
+                    content = registry.fetch_raw_file(base_raw_url + file_path)
+                except (urllib.error.URLError, OSError) as exc:
+                    fetch_errors.append(f"{file_path}: {exc}")
+                    continue
+
+                remote_files.append(
+                    {
+                        "path": file_path,
+                        "content": content,
+                        "sha256": _sha256_text(content),
+                        "scf_owner": str(metadata.get("scf_owner", package_id)).strip() or package_id,
+                        "scf_version": str(metadata.get("scf_version", pkg_version)).strip() or pkg_version,
+                        "scf_file_role": str(
+                            metadata.get(
+                                "scf_file_role",
+                                _infer_scf_file_role(file_path.removeprefix(".github/")),
+                            )
+                        ).strip()
+                        or _infer_scf_file_role(file_path.removeprefix(".github/")),
+                        "scf_merge_strategy": merge_strategy,
+                        "scf_merge_priority": merge_priority,
+                        "scf_protected": bool(metadata.get("scf_protected", False)),
+                    }
+                )
+
+            return remote_files, fetch_errors
+
+        def _build_diff_summary(diff_records: list[dict[str, Any]]) -> dict[str, Any]:
+            """Return a compact diff summary excluding unchanged files."""
+            counts: dict[str, int] = {}
+            files_summary: list[dict[str, Any]] = []
+            for item in diff_records:
+                status = str(item.get("status", "")).strip()
+                if status == "unchanged":
+                    continue
+                counts[status] = counts.get(status, 0) + 1
+                files_summary.append(
+                    {
+                        "file": item.get("file", ""),
+                        "status": status,
+                        "scf_file_role": item.get("scf_file_role", "config"),
+                        "scf_merge_strategy": item.get("scf_merge_strategy", "replace"),
+                        "scf_protected": bool(item.get("scf_protected", False)),
+                    }
+                )
+            return {
+                "total": len(files_summary),
+                "counts": counts,
+                "files": files_summary,
+            }
+
+        def _resolve_effective_update_mode(
+            package_id: str,
+            requested_update_mode: str,
+            diff_records: list[dict[str, Any]],
+            policy_payload: dict[str, Any],
+            policy_source: str,
+        ) -> dict[str, Any]:
+            """Resolve the package-level update mode from request and workspace policy."""
+            policy = policy_payload.get("update_policy", _default_update_policy())
+            auto_update = bool(policy.get("auto_update", False))
+            if requested_update_mode:
+                return {
+                    "mode": requested_update_mode,
+                    "source": "explicit",
+                    "auto_update": auto_update,
+                    "policy_source": policy_source,
+                }
+
+            mode_per_package = policy.get("mode_per_package", {})
+            if isinstance(mode_per_package, dict):
+                package_mode = _validate_update_mode(
+                    str(mode_per_package.get(package_id, "")),
+                    allow_selective=True,
+                )
+                if package_mode is not None:
+                    return {
+                        "mode": package_mode,
+                        "source": "policy_package",
+                        "auto_update": auto_update,
+                        "policy_source": policy_source,
+                    }
+
+            default_mode = str(policy.get("default_mode", "ask")).strip() or "ask"
+            mode_per_file_role = policy.get("mode_per_file_role", {})
+            role_modes: set[str] = set()
+            matched_role_override = False
+            if isinstance(mode_per_file_role, dict):
+                for item in diff_records:
+                    if str(item.get("status", "")).strip() == "unchanged":
+                        continue
+                    role = str(item.get("scf_file_role", "config")).strip() or "config"
+                    candidate_mode = _validate_update_mode(
+                        str(mode_per_file_role.get(role, default_mode)),
+                        allow_selective=True,
+                    )
+                    if role in mode_per_file_role:
+                        matched_role_override = True
+                    if candidate_mode is not None:
+                        role_modes.add(candidate_mode)
+
+            if len(role_modes) == 1:
+                return {
+                    "mode": next(iter(role_modes)),
+                    "source": "policy_file_role" if matched_role_override else "policy_default",
+                    "auto_update": auto_update,
+                    "policy_source": policy_source,
+                }
+            if len(role_modes) > 1:
+                return {
+                    "mode": "selective",
+                    "source": "policy_file_role",
+                    "auto_update": auto_update,
+                    "policy_source": policy_source,
+                }
+
+            return {
+                "mode": default_mode,
+                "source": "policy_default",
+                "auto_update": auto_update,
+                "policy_source": policy_source,
+            }
+
+        def _build_update_flow_payload(
+            package_id: str,
+            pkg_version: str,
+            conflict_mode: str,
+            requested_update_mode: str,
+            effective_update_mode: dict[str, Any],
+            diff_summary: dict[str, Any],
+        ) -> dict[str, Any]:
+            """Return the common OWN-D flow metadata for install/update responses."""
+            orchestrator_state = inventory.get_orchestrator_state()
+            auto_update = bool(effective_update_mode.get("auto_update", False))
+            authorized = bool(orchestrator_state.get("github_write_authorized", False))
+            policy_source = str(effective_update_mode.get("policy_source", "default_missing")).strip()
+            policy_enforced = policy_source == "file" or bool(requested_update_mode)
+            return {
+                "update_mode_requested": requested_update_mode or None,
+                "resolved_update_mode": effective_update_mode.get("mode", "ask"),
+                "update_mode_source": effective_update_mode.get("source", "policy_default"),
+                "policy_source": policy_source,
+                "policy_enforced": policy_enforced,
+                "auto_update": auto_update,
+                "authorization_required": policy_enforced and not auto_update,
+                "github_write_authorized": authorized,
+                "diff_summary": diff_summary,
+                "supported_update_modes": [
+                    "integrative",
+                    "replace",
+                    "conservative",
+                    "selective",
+                ],
+            }
+
         def _normalize_file_policies(
             raw_policies: Any,
             raw_files_metadata: Any = None,
@@ -3112,6 +3312,7 @@ class SparkFrameworkEngine:
         async def scf_install_package(
             package_id: str,
             conflict_mode: str = "abort",
+            update_mode: str = "",
         ) -> dict[str, Any]:
             """Install an SCF package from the public registry into the active workspace .github/."""
             if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
@@ -3124,12 +3325,31 @@ class SparkFrameworkEngine:
                     package=package_id,
                     conflict_mode=conflict_mode,
                 )
+            requested_update_mode = ""
+            if update_mode.strip():
+                validated_update_mode = _validate_update_mode(
+                    update_mode,
+                    allow_selective=True,
+                )
+                if validated_update_mode is None:
+                    return _build_install_result(
+                        False,
+                        error=(
+                            f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                            "ask, integrative, replace, conservative, selective."
+                        ),
+                        package=package_id,
+                        conflict_mode=conflict_mode,
+                        update_mode=update_mode,
+                    )
+                requested_update_mode = validated_update_mode
 
             install_context = _get_package_install_context(package_id)
             if install_context.get("success") is False:
                 return install_context
 
             pkg = install_context["pkg"]
+            pkg_manifest = install_context["pkg_manifest"]
             files = install_context["files"]
             pkg_version = install_context["pkg_version"]
             min_engine_version = install_context["min_engine_version"]
@@ -3204,12 +3424,112 @@ class SparkFrameworkEngine:
                     requires_user_resolution=True,
                 )
 
+            remote_candidate_files = [
+                str(item["file"])
+                for item in classification_report["records"]
+                if item.get("classification") != "delegate_skip"
+            ]
+
+            policy_payload, policy_source = _read_update_policy_payload(self._ctx.github_root)
+            remote_files: list[dict[str, Any]] = []
+            remote_fetch_errors: list[str] = []
+            diff_records: list[dict[str, Any]] = []
+            diff_summary = {"total": 0, "counts": {}, "files": []}
+            if requested_update_mode or policy_source == "file":
+                remote_files, remote_fetch_errors = _build_remote_file_records(
+                    package_id,
+                    pkg_version,
+                    pkg,
+                    pkg_manifest,
+                    remote_candidate_files,
+                    file_policies,
+                )
+                if remote_fetch_errors:
+                    return _build_install_result(
+                        False,
+                        package=package_id,
+                        version=pkg_version,
+                        delegated_files=[
+                            str(item["file"])
+                            for item in classification_report["delegate_plan"]
+                            if item.get("classification") == "delegate_skip"
+                        ],
+                        conflicts_detected=classification_report["conflict_plan"],
+                        errors=remote_fetch_errors,
+                    )
+
+                diff_records = _scf_diff_workspace(
+                    package_id,
+                    pkg_version,
+                    remote_files,
+                    manifest,
+                )
+                diff_summary = _build_diff_summary(diff_records)
+            effective_update_mode = _resolve_effective_update_mode(
+                package_id,
+                requested_update_mode,
+                diff_records,
+                policy_payload,
+                policy_source,
+            )
+            flow_payload = _build_update_flow_payload(
+                package_id,
+                pkg_version,
+                conflict_mode,
+                requested_update_mode,
+                effective_update_mode,
+                diff_summary,
+            )
+            if flow_payload["authorization_required"] and not flow_payload["github_write_authorized"]:
+                return _build_install_result(
+                    True,
+                    action_required="authorize_github_write",
+                    message=(
+                        "GitHub protected writes require authorization for this session before "
+                        "installing package files under .github/."
+                    ),
+                    **flow_payload,
+                )
+
+            if flow_payload["policy_enforced"] and not flow_payload["auto_update"] and not requested_update_mode:
+                return _build_install_result(
+                    True,
+                    action_required="choose_update_mode",
+                    message="Choose an update_mode to continue with the package install.",
+                    suggested_update_mode=(
+                        "integrative"
+                        if flow_payload["resolved_update_mode"] == "ask"
+                        else flow_payload["resolved_update_mode"]
+                    ),
+                    **flow_payload,
+                )
+
+            if requested_update_mode in {"ask", "selective"} or (
+                flow_payload["policy_enforced"] and flow_payload["resolved_update_mode"] in {"ask", "selective"}
+            ):
+                return _build_install_result(
+                    True,
+                    action_required="choose_update_mode",
+                    message="Choose an explicit update_mode to continue.",
+                    suggested_update_mode=(
+                        "integrative"
+                        if flow_payload["resolved_update_mode"] == "ask"
+                        else None
+                    ),
+                    **flow_payload,
+                )
+
+            effective_conflict_mode = (
+                "replace"
+                if flow_payload["resolved_update_mode"] == "replace"
+                else conflict_mode
+            )
             unresolved_conflicts = [
                 item
                 for item in classification_report["conflict_plan"]
                 if item.get("classification") == "conflict_untracked_existing"
             ]
-            if unresolved_conflicts and conflict_mode == "abort":
+            if unresolved_conflicts and effective_conflict_mode == "abort":
                 return _build_install_result(
                     False,
                     error=(
@@ -3221,11 +3541,37 @@ class SparkFrameworkEngine:
                     conflicts_detected=unresolved_conflicts,
                     blocked_files=[item["file"] for item in unresolved_conflicts],
                     requires_user_resolution=True,
-                    conflict_mode=conflict_mode,
+                    **flow_payload,
                 )
 
             preserved = [item["file"] for item in classification_report["preserve_plan"]]
-            fetch_errors: list[str] = []
+            if not remote_files:
+                remote_files, remote_fetch_errors = _build_remote_file_records(
+                    package_id,
+                    pkg_version,
+                    pkg,
+                    pkg_manifest,
+                    remote_candidate_files,
+                    file_policies,
+                )
+                if remote_fetch_errors:
+                    return _build_install_result(
+                        False,
+                        package=package_id,
+                        version=pkg_version,
+                        delegated_files=[
+                            str(item["file"])
+                            for item in classification_report["delegate_plan"]
+                            if item.get("classification") == "delegate_skip"
+                        ],
+                        preserved=preserved,
+                        conflicts_detected=classification_report["conflict_plan"],
+                        **flow_payload,
+                        errors=remote_fetch_errors,
+                    )
+            remote_files_by_path = {
+                str(item.get("path", item.get("file", ""))): item for item in remote_files
+            }
             staged_files: list[tuple[str, str, str, str, bool]] = []
             replaced_files: list[str] = []
             extended_files: list[str] = []
@@ -3252,34 +3598,36 @@ class SparkFrameworkEngine:
                 file_path = str(item["file"])
                 item_classification = str(item["classification"])
                 if item_classification == "preserve_tracked_modified":
+                    if flow_payload["resolved_update_mode"] == "replace":
+                        replaced_files.append(file_path)
+                    else:
+                        continue
+                if item_classification == "update_tracked_clean" and flow_payload["resolved_update_mode"] == "conservative":
+                    preserved.append(file_path)
                     continue
                 if item_classification == "delegate_skip":
                     continue
                 if item_classification == "merge_candidate":
-                    if conflict_mode == "replace":
+                    if flow_payload["resolved_update_mode"] == "conservative":
+                        preserved.append(file_path)
+                        continue
+                    if effective_conflict_mode == "replace":
                         replaced_files.append(file_path)
-                    elif not _supports_stateful_merge(conflict_mode):
+                    elif not _supports_stateful_merge(effective_conflict_mode):
                         preserved.append(file_path)
                         continue
                 if item_classification == "conflict_cross_owner":
                     continue
-                if item_classification == "conflict_untracked_existing" and conflict_mode != "replace":
+                if item_classification == "conflict_untracked_existing" and effective_conflict_mode != "replace":
                     continue
-                raw_url = (
-                    pkg["repo_url"].replace(
-                        "https://github.com/", "https://raw.githubusercontent.com/"
-                    )
-                    + "/main/"
-                    + file_path
-                )
                 rel = file_path.removeprefix(".github/")
                 if item_classification == "conflict_untracked_existing":
                     replaced_files.append(file_path)
-                try:
-                    content = registry.fetch_raw_file(raw_url)
-                except (urllib.error.URLError, OSError) as exc:
-                    fetch_errors.append(f"{file_path}: {exc}")
+                remote_file = remote_files_by_path.get(file_path)
+                if remote_file is None:
+                    preserved.append(file_path)
                     continue
+                content = str(remote_file.get("content", ""))
                 staged_files.append(
                     (
                         file_path,
@@ -3288,18 +3636,6 @@ class SparkFrameworkEngine:
                         item_classification,
                         bool(item.get("adopt_bootstrap_owner", False)),
                     )
-                )
-            if fetch_errors:
-                return _build_install_result(
-                    False,
-                    package=package_id,
-                    version=pkg_version,
-                    delegated_files=delegated_files,
-                    preserved=preserved,
-                    replaced_files=replaced_files,
-                    conflicts_detected=classification_report["conflict_plan"],
-                    resolution_applied="replace" if replaced_files else "none",
-                    errors=fetch_errors,
                 )
             # --- Diff-based cleanup: remove files obsoleted by this update ---
             old_files: set[str] = {
@@ -3331,6 +3667,26 @@ class SparkFrameworkEngine:
             written_paths: list[tuple[str, str, Path]] = []
             session_payload: dict[str, Any] | None = None
             auto_validator_results: dict[str, Any] = {}
+            backup_path: str | None = None
+            if flow_payload["resolved_update_mode"] == "replace":
+                files_to_backup = [
+                    (rel, self._ctx.workspace_root / file_path)
+                    for file_path, rel, _, _, _ in staged_files
+                    if (self._ctx.workspace_root / file_path).is_file()
+                ]
+                if files_to_backup:
+                    try:
+                        backup_path = _scf_backup_workspace(package_id, files_to_backup)
+                    except (OSError, ValueError) as exc:
+                        return _build_install_result(
+                            False,
+                            error=f"Cannot create workspace backup: {exc}",
+                            delegated_files=delegated_files,
+                            preserved=preserved,
+                            replaced_files=replaced_files,
+                            conflicts_detected=classification_report["conflict_plan"],
+                            **flow_payload,
+                        )
             try:
                 for file_path, rel, content, staged_classification, adopt_bootstrap_owner in staged_files:
                     dest = self._ctx.workspace_root / file_path
@@ -3340,10 +3696,20 @@ class SparkFrameworkEngine:
                     if staged_classification == "extend_section":
                         if dest.exists() and previous_content is None:
                             raise OSError(f"Cannot extend non-text file: {dest}")
-                        next_text = (
-                            _create_file_with_section(file_path, package_id, content)
-                            if previous_content is None
-                            else _update_package_section(previous_content, package_id, content)
+                        remote_strategy = str(
+                            remote_files_by_path.get(file_path, {}).get(
+                                "scf_merge_strategy",
+                                "merge_sections",
+                            )
+                        ).strip() or "merge_sections"
+                        if remote_strategy == "replace":
+                            remote_strategy = "merge_sections"
+                        next_text = _scf_section_merge(
+                            content,
+                            dest,
+                            remote_strategy,
+                            package_id,
+                            pkg_version,
                         )
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(next_text, encoding="utf-8")
@@ -3356,7 +3722,7 @@ class SparkFrameworkEngine:
                         extended_files.append(file_path)
                         continue
 
-                    if file_path in merge_candidates and _supports_stateful_merge(conflict_mode):
+                    if file_path in merge_candidates and _supports_stateful_merge(effective_conflict_mode):
                         base_text = snapshots.load_snapshot(package_id, rel)
                         ours_text = previous_content
                         if base_text is None or ours_text is None:
@@ -3364,7 +3730,7 @@ class SparkFrameworkEngine:
                             snapshot_skipped.append(file_path)
                             continue
 
-                        used_manual_merge = conflict_mode == "manual"
+                        used_manual_merge = effective_conflict_mode == "manual"
                         merge_result = merge_engine.diff3_merge(base_text, ours_text, content)
                         if merge_result.status in {MERGE_STATUS_CLEAN, MERGE_STATUS_IDENTICAL}:
                             merged_text = merge_result.merged_text
@@ -3386,7 +3752,7 @@ class SparkFrameworkEngine:
                             continue
 
                         merged_text = merge_engine.render_with_markers(merge_result)
-                        if conflict_mode in {"manual", "assisted"}:
+                        if effective_conflict_mode in {"manual", "assisted"}:
                             dest.parent.mkdir(parents=True, exist_ok=True)
                             dest.write_text(merged_text, encoding="utf-8")
                             written_paths.append((file_path, rel, dest))
@@ -3554,19 +3920,21 @@ class SparkFrameworkEngine:
                 snapshot_written=snapshot_written,
                 snapshot_skipped=snapshot_skipped,
                 requires_user_resolution=len(merge_conflict) > 0,
+                backup_path=backup_path,
                 resolution_applied=(
                     "auto"
-                    if conflict_mode == "auto" and not merge_conflict and session_payload is not None
+                    if effective_conflict_mode == "auto" and not merge_conflict and session_payload is not None
                     else "manual"
-                    if conflict_mode == "auto" and merge_conflict
+                    if effective_conflict_mode == "auto" and merge_conflict
                     else "assisted"
-                    if conflict_mode == "assisted" and session_payload is not None
+                    if effective_conflict_mode == "assisted" and session_payload is not None
                     else "manual"
-                    if used_manual_merge or (conflict_mode == "manual" and session_payload is not None)
+                    if used_manual_merge or (effective_conflict_mode == "manual" and session_payload is not None)
                     else "replace" if replaced_files else "none"
                 ),
                 validator_results=auto_validator_results if auto_validator_results else None,
                 remaining_conflicts=len(merge_conflict) if merge_conflict else None,
+                **flow_payload,
             )
             return success_result
 
@@ -3599,6 +3967,7 @@ class SparkFrameworkEngine:
         async def scf_update_package(
             package_id: str,
             conflict_mode: str = "abort",
+            update_mode: str = "",
         ) -> dict[str, Any]:
             """Update one installed SCF package while preserving user-modified files."""
             if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
@@ -3611,6 +3980,24 @@ class SparkFrameworkEngine:
                     "package": package_id,
                     "conflict_mode": conflict_mode,
                 }
+
+            if update_mode.strip():
+                validated_update_mode = _validate_update_mode(
+                    update_mode,
+                    allow_selective=True,
+                )
+                if validated_update_mode is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                            "ask, integrative, replace, conservative, selective."
+                        ),
+                        "package": package_id,
+                        "conflict_mode": conflict_mode,
+                        "update_mode": update_mode,
+                    }
+                update_mode = validated_update_mode
 
             installed_versions = manifest.get_installed_versions()
             if package_id not in installed_versions:
@@ -3661,7 +4048,21 @@ class SparkFrameworkEngine:
                     "version_to": requested_update.get("latest", version_from),
                 }
 
-            install_report = await scf_install_package(package_id, conflict_mode=conflict_mode)
+            install_report = await scf_install_package(
+                package_id,
+                conflict_mode=conflict_mode,
+                update_mode=update_mode,
+            )
+            if install_report.get("action_required"):
+                return {
+                    "success": True,
+                    "package": package_id,
+                    "version_from": version_from,
+                    "version_to": requested_update.get("latest", version_from),
+                    "already_up_to_date": False,
+                    **install_report,
+                }
+
             if install_report.get("success") is False:
                 result = {
                     "success": False,
@@ -3704,6 +4105,13 @@ class SparkFrameworkEngine:
                 "validator_results": install_report.get("validator_results"),
                 "remaining_conflicts": install_report.get("remaining_conflicts"),
                 "already_up_to_date": False,
+                "resolved_update_mode": install_report.get("resolved_update_mode"),
+                "update_mode_source": install_report.get("update_mode_source"),
+                "policy_source": install_report.get("policy_source"),
+                "authorization_required": bool(install_report.get("authorization_required", False)),
+                "github_write_authorized": bool(install_report.get("github_write_authorized", False)),
+                "diff_summary": install_report.get("diff_summary"),
+                "backup_path": install_report.get("backup_path"),
             }
 
         def _plan_package_updates(requested_package_id: str | None = None) -> dict[str, Any]:

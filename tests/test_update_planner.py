@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -74,6 +75,14 @@ class TestUpdatePlanner(unittest.TestCase):
         engine = SparkFrameworkEngine(fake_mcp, context, inventory)
         engine.register_tools()
         return fake_mcp
+
+    def _authorize_github_writes(self, workspace_root: Path) -> None:
+        state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"github_write_authorized": True}, indent=2),
+            encoding="utf-8",
+        )
 
     def _registry_packages(self) -> list[dict[str, str]]:
         return [
@@ -442,6 +451,93 @@ class TestUpdatePlanner(unittest.TestCase):
                     }
                 ],
             )
+
+    def test_update_package_requires_authorization_before_mode_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            agents_root = github_root / "agents"
+            agents_root.mkdir(parents=True)
+            target_file = agents_root / "Agent-Orchestrator.md"
+            target_file.write_text("old master", encoding="utf-8")
+            ManifestManager(github_root).save(
+                [
+                    self._entry(
+                        "agents/Agent-Orchestrator.md",
+                        "scf-master-codecrafter",
+                        "old master",
+                        "1.0.0",
+                    )
+                ]
+            )
+
+            fake_mcp = self._build_engine(workspace_root)
+            set_update_policy = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_set_update_policy"],
+            )
+            update_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_update_package"],
+            )
+
+            asyncio.run(set_update_policy(False, default_mode="ask"))
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_packages()[0]]),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=self._manifest_for),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new master"),
+            ):
+                result = asyncio.run(update_package("scf-master-codecrafter"))
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["action_required"], "authorize_github_write")
+            self.assertTrue(result["authorization_required"])
+            self.assertEqual(result["version_from"], "1.0.0")
+            self.assertEqual(result["version_to"], "1.1.0")
+
+    def test_update_package_forwards_explicit_replace_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            agents_root = github_root / "agents"
+            agents_root.mkdir(parents=True)
+            target_file = agents_root / "Agent-Orchestrator.md"
+            target_file.write_text("user override", encoding="utf-8")
+            ManifestManager(github_root).save(
+                [
+                    self._entry(
+                        "agents/Agent-Orchestrator.md",
+                        "scf-master-codecrafter",
+                        "old master",
+                        "1.0.0",
+                    )
+                ]
+            )
+            self._authorize_github_writes(workspace_root)
+
+            fake_mcp = self._build_engine(workspace_root)
+            update_package = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_update_package"],
+            )
+
+            with (
+                patch.object(RegistryClient, "list_packages", return_value=[self._registry_packages()[0]]),
+                patch.object(RegistryClient, "fetch_package_manifest", side_effect=self._manifest_for),
+                patch.object(RegistryClient, "fetch_raw_file", return_value="new master"),
+            ):
+                result = asyncio.run(
+                    update_package(
+                        "scf-master-codecrafter",
+                        update_mode="replace",
+                    )
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["resolved_update_mode"], "replace")
+            self.assertTrue(Path(result["backup_path"]).is_dir())
+            self.assertEqual(target_file.read_text(encoding="utf-8"), "new master")
 
 
 if __name__ == "__main__":
