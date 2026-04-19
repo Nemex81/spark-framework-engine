@@ -6,6 +6,15 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.3.1] - 2026-04-19
+
+### Fixed
+
+- `scf_verify_workspace()` non segnala piu' come `duplicate_owners` i file condivisi intenzionalmente tra piu' pacchetti quando tutte le entry del manifest usano `scf_merge_strategy: merge_sections`.
+- Il manifest runtime riallinea ora hash e merge strategy delle entry condivise dopo install, update, finalize e remove di file `merge_sections`, evitando falsi `modified` sui package owner residui.
+
+---
+
 ## [2.3.0] - 2026-04-19
 
 ### Added

@@ -57,13 +57,21 @@ class TestManifestIntegrity(unittest.TestCase):
     def _sha256(self, content: str) -> str:
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-    def _entry(self, file_rel: str, package: str, sha256: str, version: str = "1.0.0") -> dict[str, str]:
+    def _entry(
+        self,
+        file_rel: str,
+        package: str,
+        sha256: str,
+        version: str = "1.0.0",
+        merge_strategy: str = "replace",
+    ) -> dict[str, str]:
         return {
             "file": file_rel,
             "package": package,
             "package_version": version,
             "installed_at": "2026-03-31T00:00:00Z",
             "sha256": sha256,
+            "scf_merge_strategy": merge_strategy,
         }
 
     def test_verify_integrity_reports_ok_and_orphan_candidates(self) -> None:
@@ -130,6 +138,39 @@ class TestManifestIntegrity(unittest.TestCase):
                     }
                 ],
             )
+
+    def test_verify_integrity_allows_shared_merge_sections_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            github_root = workspace_root / ".github"
+            shared_file = github_root / "copilot-instructions.md"
+            github_root.mkdir(parents=True)
+            shared_file.write_text("shared merged content", encoding="utf-8")
+
+            manager = ManifestManager(github_root)
+            manager.save(
+                [
+                    self._entry(
+                        "copilot-instructions.md",
+                        "spark-base",
+                        self._sha256("shared merged content"),
+                        merge_strategy="merge_sections",
+                    ),
+                    self._entry(
+                        "copilot-instructions.md",
+                        "scf-master-codecrafter",
+                        self._sha256("shared merged content"),
+                        merge_strategy="merge_sections",
+                    ),
+                ]
+            )
+
+            report = manager.verify_integrity()
+
+            self.assertEqual(report["missing"], [])
+            self.assertEqual(report["modified"], [])
+            self.assertEqual(report["duplicate_owners"], [])
+            self.assertEqual(report["summary"]["issue_count"], 0)
 
     def test_scf_verify_workspace_returns_structured_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

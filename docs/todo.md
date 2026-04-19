@@ -24,7 +24,7 @@ Analisi: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](ANALISI-RIORGANIZZAZIONE-SPARK
 
 Fasi e stato (coordinator):
 
-- **SB-0**: Preflight workspace — Stato: Non avviata — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
+- **SB-0**: Preflight workspace — Stato: In corso (fix engine su `duplicate_owners` per file `merge_sections` implementato e validato localmente; rerun operativo workspace ancora da eseguire) — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
 - **SB-1**: Creazione repository spark-base — Stato: In corso (scaffold locale pronto, publish remoto bloccato da auth GitHub) — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
 - **SB-2**: Riduzione scf-master-codecrafter → v2.0.0 — Stato: In corso (modifiche locali validate, commit/push non eseguiti) — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
 - **SB-3**: Dry-run manifest spark-base — Stato: Non avviata — [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)

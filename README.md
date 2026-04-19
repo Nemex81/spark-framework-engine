@@ -186,6 +186,8 @@ Per usare SPARK la prima volta in un workspace utente:
   - installa con `scf_install_package(package_id)`
 
 - Dopo l'installazione, verifica lo stato locale con `scf_verify_workspace()`.
+  I file condivisi intenzionalmente tra piu' pacchetti con `scf_merge_strategy: merge_sections`
+  non vengono trattati come conflitti di ownership dal report di integrita'.
 
 Il bootstrap eseguito da `spark-init.py` installa `spark-base` e registra i file
 nel manifest runtime dei pacchetti. Per il bootstrap orchestrato dal motore MCP

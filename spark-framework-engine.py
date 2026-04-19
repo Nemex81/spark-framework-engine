@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.3.0"
+ENGINE_VERSION: str = "2.3.1"
 
 
 # ---------------------------------------------------------------------------
@@ -1401,24 +1401,32 @@ class ManifestManager:
             _log.error("Cannot write manifest: %s", exc)
             raise
 
-    def upsert(self, file_rel: str, package: str, package_version: str, file_abs: Path) -> None:
+    def upsert(
+        self,
+        file_rel: str,
+        package: str,
+        package_version: str,
+        file_abs: Path,
+        merge_strategy: str | None = None,
+    ) -> None:
         """Add or update the manifest entry for a single installed file."""
         entries = self.load()
-        sha = self._sha256(file_abs)
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        new_entry: dict[str, Any] = {
-            "file": file_rel,
-            "package": package,
-            "package_version": package_version,
-            "installed_at": now,
-            "sha256": sha,
-        }
         entries = [
             e
             for e in entries
             if not (e.get("file") == file_rel and e.get("package") == package)
         ]
+        new_entry = self._build_entry(
+            file_rel,
+            package,
+            package_version,
+            file_abs,
+            now,
+            self._resolve_entry_merge_strategy(entries, file_rel, package, merge_strategy),
+        )
         entries.append(new_entry)
+        self._sync_entries_for_files(entries, {file_rel: file_abs})
         self.save(entries)
 
     def remove_package(self, package: str) -> list[str]:
@@ -1429,6 +1437,7 @@ class ManifestManager:
         entries = self.load()
         preserved: list[str] = []
         remaining: list[dict[str, Any]] = []
+        updated_files: dict[str, Path] = {}
         for entry in entries:
             if entry.get("package") != package:
                 remaining.append(entry)
@@ -1455,12 +1464,14 @@ class ManifestManager:
                                     preserved.append(entry["file"])
                                 else:
                                     file_path.write_text(updated_text, encoding="utf-8")
+                                    updated_files[str(entry["file"])] = file_path
                                     _log.info(
                                         "[SPARK-ENGINE][INFO] Removed package section for user-modified shared file: %s",
                                         file_path,
                                     )
                             else:
                                 file_path.write_text(updated_text, encoding="utf-8")
+                                updated_files[str(entry["file"])] = file_path
                                 _log.info("Removed package section for shared file: %s", file_path)
                         else:
                             if user_modified:
@@ -1483,6 +1494,7 @@ class ManifestManager:
                         _log.info("Removed file: %s", file_path)
                     except OSError as exc:
                         _log.warning("Cannot remove %s: %s", file_path, exc)
+        self._sync_entries_for_files(remaining, updated_files)
         self.save(remaining)
         return preserved
 
@@ -1518,6 +1530,7 @@ class ManifestManager:
         package: str,
         package_version: str,
         files: list[tuple[str, Path]],
+        merge_strategies_by_file: dict[str, str] | None = None,
     ) -> None:
         """Add or update manifest entries for many installed files in one save."""
         entries = self.load()
@@ -1531,16 +1544,27 @@ class ManifestManager:
             )
         ]
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        files_by_rel = dict(files)
         for file_rel, file_abs in files:
+            requested_strategy = None
+            if merge_strategies_by_file is not None:
+                requested_strategy = merge_strategies_by_file.get(file_rel)
             entries.append(
-                {
-                    "file": file_rel,
-                    "package": package,
-                    "package_version": package_version,
-                    "installed_at": now,
-                    "sha256": self._sha256(file_abs),
-                }
+                self._build_entry(
+                    file_rel,
+                    package,
+                    package_version,
+                    file_abs,
+                    now,
+                    self._resolve_entry_merge_strategy(
+                        entries,
+                        file_rel,
+                        package,
+                        requested_strategy,
+                    ),
+                )
             )
+        self._sync_entries_for_files(entries, files_by_rel)
         self.save(entries)
 
     def remove_owner_entries(self, package: str, files: list[str]) -> None:
@@ -1566,6 +1590,7 @@ class ManifestManager:
         modified: list[str] = []
         ok: list[str] = []
         duplicate_owners_map: dict[str, set[str]] = {}
+        entries_by_file: dict[str, list[dict[str, Any]]] = {}
 
         for entry in entries:
             file_rel = str(entry.get("file", "")).strip()
@@ -1573,6 +1598,7 @@ class ManifestManager:
             if not file_rel:
                 continue
             tracked_files.add(file_rel)
+            entries_by_file.setdefault(file_rel, []).append(entry)
             owners = duplicate_owners_map.setdefault(file_rel, set())
             if package_id:
                 owners.add(package_id)
@@ -1593,6 +1619,7 @@ class ManifestManager:
             }
             for file_rel, owners in sorted(duplicate_owners_map.items())
             if len(owners) > 1
+            and not self._entries_allow_shared_merge_sections(entries_by_file.get(file_rel, []))
         ]
 
         ignored_runtime_files = {_MANIFEST_FILENAME, _REGISTRY_CACHE_FILENAME}
@@ -1666,6 +1693,96 @@ class ManifestManager:
         if not stored:
             return False
         return self._sha256(file_path) != stored
+
+    @staticmethod
+    def _normalize_merge_strategy(value: Any) -> str:
+        strategy = str(value).strip()
+        return strategy or "replace"
+
+    def _resolve_entry_merge_strategy(
+        self,
+        entries: list[dict[str, Any]],
+        file_rel: str,
+        package: str,
+        requested_strategy: str | None,
+    ) -> str:
+        if requested_strategy is not None:
+            return self._normalize_merge_strategy(requested_strategy)
+
+        for entry in entries:
+            if (
+                str(entry.get("file", "")).strip() == file_rel
+                and str(entry.get("package", "")).strip() == package
+            ):
+                raw_strategy = str(entry.get("scf_merge_strategy", "")).strip()
+                if raw_strategy:
+                    return self._normalize_merge_strategy(raw_strategy)
+
+        for entry in entries:
+            if str(entry.get("file", "")).strip() == file_rel:
+                raw_strategy = str(entry.get("scf_merge_strategy", "")).strip()
+                if raw_strategy:
+                    return self._normalize_merge_strategy(raw_strategy)
+
+        return "replace"
+
+    def _build_entry(
+        self,
+        file_rel: str,
+        package: str,
+        package_version: str,
+        file_abs: Path,
+        installed_at: str,
+        merge_strategy: str,
+    ) -> dict[str, Any]:
+        return {
+            "file": file_rel,
+            "package": package,
+            "package_version": package_version,
+            "installed_at": installed_at,
+            "sha256": self._sha256(file_abs),
+            "scf_merge_strategy": self._normalize_merge_strategy(merge_strategy),
+        }
+
+    def _sync_entries_for_files(
+        self,
+        entries: list[dict[str, Any]],
+        files_by_rel: dict[str, Path],
+    ) -> None:
+        for file_rel, file_abs in files_by_rel.items():
+            if not file_rel:
+                continue
+            sha256 = self._sha256(file_abs)
+            related_entries = [
+                entry
+                for entry in entries
+                if str(entry.get("file", "")).strip() == file_rel
+            ]
+            if not related_entries:
+                continue
+
+            uses_shared_merge = any(
+                self._normalize_merge_strategy(entry.get("scf_merge_strategy")) == "merge_sections"
+                for entry in related_entries
+            )
+            for entry in related_entries:
+                entry["sha256"] = sha256
+                if uses_shared_merge:
+                    entry["scf_merge_strategy"] = "merge_sections"
+
+    def _entries_allow_shared_merge_sections(self, entries: list[dict[str, Any]]) -> bool:
+        owners = {
+            str(entry.get("package", "")).strip()
+            for entry in entries
+            if str(entry.get("package", "")).strip()
+        }
+        if len(owners) < 2:
+            return False
+        return all(
+            self._normalize_merge_strategy(entry.get("scf_merge_strategy")) == "merge_sections"
+            for entry in entries
+            if str(entry.get("package", "")).strip()
+        )
 
 
 class SnapshotManager:
@@ -4051,10 +4168,21 @@ class SparkFrameworkEngine:
                             )
 
                 if manifest_targets:
+                    manifest_merge_strategies = {
+                        manifest_rel: str(
+                            remote_files_by_path.get(f".github/{manifest_rel}", {}).get(
+                                "scf_merge_strategy",
+                                "replace",
+                            )
+                        ).strip()
+                        or "replace"
+                        for manifest_rel, _ in manifest_targets
+                    }
                     manifest.upsert_many(
                         package_id,
                         pkg_version,
                         manifest_targets,
+                        merge_strategies_by_file=manifest_merge_strategies,
                     )
                     if adopted_bootstrap_rels:
                         manifest.remove_owner_entries(_BOOTSTRAP_PACKAGE_ID, adopted_bootstrap_rels)

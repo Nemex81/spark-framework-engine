@@ -53,13 +53,21 @@ class TestPackageInstallationPolicies(unittest.TestCase):
     def _sha256(self, content: str) -> str:
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-    def _entry(self, file_rel: str, package: str, content: str, version: str) -> dict[str, str]:
+    def _entry(
+        self,
+        file_rel: str,
+        package: str,
+        content: str,
+        version: str,
+        merge_strategy: str = "replace",
+    ) -> dict[str, str]:
         return {
             "file": file_rel,
             "package": package,
             "package_version": version,
             "installed_at": "2026-03-31T00:00:00Z",
             "sha256": self._sha256(content),
+            "scf_merge_strategy": merge_strategy,
         }
 
     def _make_context(self, workspace_root: Path) -> object:
@@ -701,6 +709,24 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertIn("# User Preface", merged_text)
             self.assertIn("<!-- SCF:BEGIN:pkg-b@2.0.0 -->", merged_text)
             self.assertIn("# Package Block", merged_text)
+            verify_report = ManifestManager(github_root).verify_integrity()
+            self.assertEqual(verify_report["modified"], [])
+            self.assertEqual(verify_report["duplicate_owners"], [])
+            manifest_entries = ManifestManager(github_root).load()
+            shared_entries = [
+                entry
+                for entry in manifest_entries
+                if entry.get("file") == "copilot-instructions.md"
+            ]
+            self.assertEqual(len(shared_entries), 2)
+            self.assertEqual(
+                {entry.get("scf_merge_strategy") for entry in shared_entries},
+                {"merge_sections"},
+            )
+            self.assertEqual(
+                {entry.get("sha256") for entry in shared_entries},
+                {hashlib.sha256(target_file.read_bytes()).hexdigest()},
+            )
 
     def test_scf_install_package_requires_explicit_migration_for_plain_copilot_instructions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

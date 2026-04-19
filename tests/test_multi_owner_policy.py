@@ -52,13 +52,21 @@ class TestMultiOwnerPolicy(unittest.TestCase):
     def _sha256(self, content: str) -> str:
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-    def _entry(self, file_rel: str, package: str, content: str, version: str) -> dict[str, str]:
+    def _entry(
+        self,
+        file_rel: str,
+        package: str,
+        content: str,
+        version: str,
+        merge_strategy: str = "replace",
+    ) -> dict[str, str]:
         return {
             "file": file_rel,
             "package": package,
             "package_version": version,
             "installed_at": "2026-04-14T00:00:00Z",
             "sha256": self._sha256(content),
+            "scf_merge_strategy": merge_strategy,
         }
 
     def _make_context(self, workspace_root: Path) -> object:
@@ -413,6 +421,9 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             )
             self.assertEqual(result["deleted_snapshots"], ["copilot-instructions.md"])
             self.assertEqual(result["preserved_user_modified"], [])
+            verify_report = manifest.verify_integrity()
+            self.assertEqual(verify_report["modified"], [])
+
 
     def test_remove_package_shared_user_modified_validate_passes_writes_file(self) -> None:
         """shared=True, user_modified=True, validate_structural passes: strip applied, file written, not preserved."""
