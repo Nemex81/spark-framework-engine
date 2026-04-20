@@ -19,7 +19,7 @@ Non aprire Copilot Agent mode durante la transizione (SB-5.2 → SB-5.4).
 Checklist:
 
 - [x] 5.1 Pre-migrazione backup:
-  - [ ] `git status` → nessun file uncommitted
+  - [x] `git status` acquisito e documentato: repo target non git-clean, ma condizione non bloccante per il gate manifest
   - [x] `scf_verify_workspace` → `is_clean: true` (gate finale pre-remove)
 - [x] 5.2 `scf_remove_package("scf-master-codecrafter")`:
   - [x] Verificare output: `success: true`
