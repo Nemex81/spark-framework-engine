@@ -1,6 +1,13 @@
 ---
 name: scf-coherence-audit
 description: Esegue un audit di coerenza completo del motore SCF verificando contatori tool, allineamento prompt/tool e consistenza documentazione. Non modifica nulla - riporta solo discrepanze.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "skill"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Skill: scf-coherence-audit

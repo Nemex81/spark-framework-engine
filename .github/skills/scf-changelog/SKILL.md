@@ -1,6 +1,13 @@
 ---
 name: scf-changelog
 description: Determina il bump semantico corretto in base alle modifiche recenti, compila la voce CHANGELOG nel formato Keep a Changelog e aggiorna ENGINE_VERSION in spark-framework-engine.py.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "skill"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Skill: scf-changelog

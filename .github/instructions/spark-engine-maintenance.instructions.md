@@ -1,5 +1,12 @@
 ---
 applyTo: "spark-framework-engine.py, .github/prompts/**, .github/agents/**, .github/skills/**"
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "instruction"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Spark Engine Maintenance Instructions

@@ -1,6 +1,13 @@
 ---
 name: scf-release-check
 description: Esegue la checklist pre-release del motore SCF verificando coerenza interna, CHANGELOG, versione e README. Propone il tag git da creare senza applicarlo autonomamente.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "skill"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Skill: scf-release-check

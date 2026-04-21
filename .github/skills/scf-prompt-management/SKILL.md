@@ -1,6 +1,13 @@
 ---
 name: scf-prompt-management
 description: Crea, valida e corregge prompt SCF verificando frontmatter, naming convention, istruzioni operative e regole di conferma.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "skill"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Skill: scf-prompt-management

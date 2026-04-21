@@ -2,6 +2,13 @@
 type: prompt
 name: scf-update
 description: Applica aggiornamenti pacchetti SCF con conferma esplicita e preservazione file utente.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "prompt"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 Obiettivo: aggiornare pacchetti installati mantenendo sempre i file user-modified.

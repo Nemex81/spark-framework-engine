@@ -5,6 +5,12 @@ description: >
   naturale, orienta sul framework installato e delega le operazioni concrete a
   spark-assistant. Non esegue operazioni distruttive ne accede direttamente al registry.
 spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "agent"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 version: 1.0.0
 model:
   - Claude Sonnet 4.6 (copilot)

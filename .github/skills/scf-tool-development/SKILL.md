@@ -1,6 +1,13 @@
 ---
 name: scf-tool-development
 description: Guida la procedura completa per aggiungere o rimuovere tool MCP dal motore SCF rispettando tutte le convenzioni di naming, struttura e aggiornamento contatori.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "skill"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Skill: scf-tool-development

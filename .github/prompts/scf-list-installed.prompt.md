@@ -2,6 +2,13 @@
 type: prompt
 name: scf-list-installed
 description: Elenca i pacchetti SCF installati nel workspace attivo.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "prompt"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 Obiettivo: mostrare cosa e gia installato localmente.

@@ -2,6 +2,13 @@
 type: prompt
 name: scf-list-available
 description: Elenca i pacchetti SCF disponibili nel registry pubblico.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "prompt"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 Obiettivo: mostrare i pacchetti disponibili senza modificare il workspace.

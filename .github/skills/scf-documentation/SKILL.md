@@ -1,6 +1,13 @@
 ---
 name: scf-documentation
 description: Mantiene sincronizzati README, file di design e piani di progetto con lo stato reale dell'implementazione del motore SCF.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "skill"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 # Skill: scf-documentation

@@ -2,6 +2,13 @@
 type: prompt
 name: scf-check-updates
 description: Controlla aggiornamenti dei pacchetti SCF installati senza modificare il workspace.
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "prompt"
+scf_merge_strategy: "replace"
+scf_merge_priority: 0
+scf_protected: false
 ---
 
 Obiettivo: verificare se i pacchetti SCF installati hanno aggiornamenti disponibili.

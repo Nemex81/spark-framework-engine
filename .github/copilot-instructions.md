@@ -1,3 +1,12 @@
+---
+spark: true
+scf_owner: "spark-framework-engine"
+scf_version: "2.3.1"
+scf_file_role: "config"
+scf_merge_strategy: "merge_sections"
+scf_merge_priority: 0
+scf_protected: false
+---
 # Copilot Instructions - spark-framework-engine
 
 ## Sezione 1 - Contesto repo
