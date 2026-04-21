@@ -6,6 +6,19 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.3.2] - 2026-04-21
+
+### Changed
+
+- `.github/copilot-instructions.md` del motore convertito da file single-owner a file condiviso canonico con marker `<!-- SCF:BEGIN:{package}@{version} -->` / `<!-- SCF:END:{package} -->`, con sezioni per `spark-framework-engine@2.3.1`, `spark-base@1.2.0`, `scf-master-codecrafter@2.1.0` e `scf-pycode-crafter@2.0.1`, ordinate per `scf_merge_priority` (0 → 10 → 20 → 30).
+- File `.github/` del motore classificati esplicitamente per ownership: file nativi engine taggati con `scf_owner: "spark-framework-engine"`; 10 file shadow di `spark-base` (`spark-guide.agent.md` e i 9 prompt `scf-*.prompt.md`) riallineati al contenuto del pacchetto sorgente con `scf_owner: "spark-base"`.
+
+### Notes
+
+- Nessuna modifica al codice Python del motore. Release di governance `.github/` e normalizzazione ownership degli asset installati.
+
+---
+
 ## [2.3.1] - 2026-04-19
 
 ### Fixed

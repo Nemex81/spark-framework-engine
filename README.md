@@ -487,7 +487,13 @@ Livello 1 — spark-framework-engine   ← questo repo (motore universale)
 Livello 2 — scf-pack-*               (pacchetti dominio, repo separati)
 Livello 3 — scf-registry             (indice centralizzato dei pacchetti)
 ```
+### Ownership dei file `.github/` del motore
 
+I file `.github/` di questo repo seguono lo stesso schema ownership che il motore applica ai workspace utente:
+
+- **File nativi engine**: agenti, skill, instruction e prompt specifici del motore hanno `scf_owner: "spark-framework-engine"`.
+- **File shadow di pacchetti**: i prompt `scf-*.prompt.md` e l'agente `spark-guide.agent.md` appartengono a `spark-base` e sono riallineati al contenuto del pacchetto sorgente con `scf_owner: "spark-base"`.
+- **File condivisi**: `.github/copilot-instructions.md` è un file `merge_sections` con sezioni `SCF:BEGIN/END` per tutti i pacchetti installati e serve da implementazione di riferimento del formato canonico.
 ---
 
 ## Progetto Correlati
