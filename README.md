@@ -260,23 +260,6 @@ scf://runtime-state
 ```
 scf_list_agents           scf_get_agent(name)
 scf_list_skills           scf_get_skill(name)
-
-## Migrazione Da Workspace Pre-Ownership
-
-Se il workspace e stato inizializzato con una versione precedente del sistema ownership-aware, il motore entra in modalita migrazione controllata.
-
-- Se manca `.github/runtime/spark-user-prefs.json`, il primo `scf_update_package(...)` o `scf_bootstrap_workspace(...)` restituisce `action_required: configure_update_policy` e propone la configurazione iniziale della policy.
-- I file provenienti da pacchetti legacy che non hanno metadata `scf_*` vengono trattati in modo retrocompatibile come `scf_merge_strategy: replace`.
-- Se `.github/copilot-instructions.md` esiste senza marker SCF completi, il motore non inietta marker automaticamente: restituisce `action_required: migrate_copilot_instructions` e attende una conferma esplicita.
-- La migrazione del file richiede sempre autorizzazione attiva per scrivere sotto `.github/`.
-- Il testo utente fuori dai marker `SCF:BEGIN/END` viene preservato durante la migrazione esplicita.
-
-FAQ rapida:
-
-- Cosa succede ai miei file personalizzati?
-  I file gia modificati dall'utente restano preservati dai flussi `integrative` e `conservative`. In `replace` viene creato prima un backup in `.github/runtime/backups/`.
-- Il motore modifica da solo `copilot-instructions.md` legacy?
-  No. Il file viene migrato solo se il chiamante passa una conferma esplicita nel flusso di tool.
 scf_list_instructions     scf_get_instruction(name)
 scf_list_prompts          scf_get_prompt(name)
 scf_get_project_profile   scf_get_global_instructions
@@ -305,6 +288,23 @@ scf_resolve_conflict_ai(session_id, conflict_id)
 scf_approve_conflict(session_id, conflict_id)
 scf_reject_conflict(session_id, conflict_id)
 ```
+
+## Migrazione Da Workspace Pre-Ownership
+
+Se il workspace e stato inizializzato con una versione precedente del sistema ownership-aware, il motore entra in modalita migrazione controllata.
+
+- Se manca `.github/runtime/spark-user-prefs.json`, il primo `scf_update_package(...)` o `scf_bootstrap_workspace(...)` restituisce `action_required: configure_update_policy` e propone la configurazione iniziale della policy.
+- I file provenienti da pacchetti legacy che non hanno metadata `scf_*` vengono trattati in modo retrocompatibile come `scf_merge_strategy: replace`.
+- Se `.github/copilot-instructions.md` esiste senza marker SCF completi, il motore non inietta marker automaticamente: restituisce `action_required: migrate_copilot_instructions` e attende una conferma esplicita.
+- La migrazione del file richiede sempre autorizzazione attiva per scrivere sotto `.github/`.
+- Il testo utente fuori dai marker `SCF:BEGIN/END` viene preservato durante la migrazione esplicita.
+
+FAQ rapida:
+
+- Cosa succede ai miei file personalizzati?
+  I file gia modificati dall'utente restano preservati dai flussi `integrative` e `conservative`. In `replace` viene creato prima un backup in `.github/runtime/backups/`.
+- Il motore modifica da solo `copilot-instructions.md` legacy?
+  No. Il file viene migrato solo se il chiamante passa una conferma esplicita nel flusso di tool.
 
 `scf_get_update_policy()` restituisce la policy update del workspace, con source
 (`file`, `default_missing`, `default_corrupt`) e configurazione effettiva.
