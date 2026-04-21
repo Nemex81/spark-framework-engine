@@ -1,16 +1,16 @@
 ---
-type: prompt
-name: scf-pre-implementation-audit
 description: Analisi pre-implementazione del piano. SOLO LETTURA. Nessuna scrittura su disco o su repository.
-mode: agent
 tools: ["github", "file_search", "semantic_search"]
-spark: true
-scf_owner: "spark-framework-engine"
-scf_version: "2.3.1"
-scf_file_role: "prompt"
-scf_merge_strategy: "replace"
-scf_merge_priority: 0
 scf_protected: false
+scf_file_role: "prompt"
+name: scf-pre-implementation-audit
+scf_merge_priority: 10
+scf_merge_strategy: "replace"
+scf_version: "1.2.0"
+mode: agent
+type: prompt
+spark: true
+scf_owner: "spark-base"
 ---
 
 # SPARK Pre-Implementation Audit

@@ -1,34 +1,19 @@
 ---
-name: spark-guide
-description: >
-  Punto di ingresso SPARK per l'utente finale. Interpreta richieste in linguaggio
-  naturale, orienta sul framework installato e delega le operazioni concrete a
-  spark-assistant. Non esegue operazioni distruttive ne accede direttamente al registry.
-spark: true
-scf_owner: "spark-framework-engine"
-scf_version: "2.3.1"
-scf_file_role: "agent"
 scf_merge_strategy: "replace"
-scf_merge_priority: 0
-scf_protected: false
+name: spark-guide
 version: 1.0.0
-model:
-  - Claude Sonnet 4.6 (copilot)
-  - GPT-5 mini (copilot)
-layer: workspace
+scf_owner: "spark-base"
+tools: 
 role: executor
 execution_mode: autonomous
-tools:
-  - scf_get_workspace_info
-  - scf_get_framework_version
-  - scf_list_installed_packages
-  - scf_list_available_packages
-  - scf_get_package_info
-  - scf_list_agents
-  - scf_list_skills
-  - scf_list_prompts
-  - vscode/switchAgent
-  - vscode/askQuestions
+scf_file_role: "agent"
+scf_version: "1.2.0"
+layer: workspace
+scf_merge_priority: 10
+scf_protected: false
+spark: true
+model: 
+description: >
 ---
 
 # spark-guide
