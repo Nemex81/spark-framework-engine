@@ -6,6 +6,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [2.4.0] - 2026-04-22
+
+### Added
+
+- Nuova classe `EngineInventory` che legge skill e instruction dal `.github/` del motore (percorso derivato da `Path(__file__).parent / ".github"`), indipendente dal workspace utente.
+- Nuove resource MCP per consumare gli asset universali hostati dal motore: `engine-skills://list`, `engine-skills://{name}`, `engine-instructions://list`, `engine-instructions://{name}`.
+- 18 skill universali copiate in `.github/skills/` del motore (`accessibility-output`, `changelog-entry`, `conventional-commit`, `document-template`, `error-recovery`, `file-deletion-guard`, `framework-guard`, `framework-index`, `framework-query`, `framework-scope-guard`, `git-execution`, `personality`, `rollback-procedure`, `semantic-gate`, `semver-bump`, `style-setup`, `task-scope-guard`, `validate-accessibility`, `verbosity`) + 2 dal layer master (`clean-architecture`, `docs-manager`).
+- 7 instruction universali copiate in `.github/instructions/` del motore (`framework-guard`, `git-policy`, `model-policy`, `personality`, `spark-assistant-guide`, `verbosity`, `workflow-standard`).
+- Schema manifest workspace: `2.1` aggiunto a `_SUPPORTED_MANIFEST_SCHEMA_VERSIONS` per accettare entry con il campo opzionale `stub: true` (infrastruttura pronta; wiring in install/update rinviato a release successiva).
+- `ManifestManager._build_entry` e `ManifestManager.upsert_many` accettano parametro opzionale `stub` / `stub_files` additivo e retrocompatibile.
+
+### Notes
+
+- Nessuna modifica al comportamento delle resource esistenti `skills://` e `instructions://` (continuano a leggere dal workspace utente). I due namespace `engine-*://` sono additivi e non introducono shadowing.
+- `_MANIFEST_SCHEMA_VERSION` resta a `"1.0"` per retrocompatibilita` con i test e con i client esistenti; il valore `2.1` e` accettato in lettura ma non ancora emesso come default di scrittura.
+- Questa release prepara il terreno per `spark-base@1.3.0` e `scf-master-codecrafter@2.2.0` che spediranno stub al posto dei file fisici delegati.
+
+---
+
 ## [2.3.2] - 2026-04-21
 
 ### Changed

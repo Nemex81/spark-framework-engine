@@ -38,7 +38,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.3.2"
+ENGINE_VERSION: str = "2.4.0"
 
 
 # ---------------------------------------------------------------------------
@@ -1301,6 +1301,32 @@ class FrameworkInventory:
 
 
 # ---------------------------------------------------------------------------
+# EngineInventory (v2.4.0 — engine-hosted skills and instructions)
+# ---------------------------------------------------------------------------
+
+
+class EngineInventory(FrameworkInventory):
+    """Discover skills/instructions under the engine's own ``.github/`` tree.
+
+    The engine ships a curated set of universal skills and instructions that
+    are hosted centrally and consumed by workspaces via dedicated MCP
+    resource URIs (``engine-skills://``, ``engine-instructions://``). Unlike
+    :class:`FrameworkInventory`, this inventory does NOT read from the user
+    workspace: it reads from ``Path(__file__).resolve().parent / ".github"``.
+    """
+
+    def __init__(self) -> None:  # noqa: D401 - simple override
+        engine_root = Path(__file__).resolve().parent
+        engine_github_root = engine_root / ".github"
+        synthetic_ctx = WorkspaceContext(
+            workspace_root=engine_root,
+            github_root=engine_github_root,
+            engine_root=engine_root,
+        )
+        super().__init__(synthetic_ctx)
+
+
+# ---------------------------------------------------------------------------
 # workspace-info builder
 # ---------------------------------------------------------------------------
 
@@ -1327,7 +1353,7 @@ def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventor
 # ---------------------------------------------------------------------------
 
 _MANIFEST_SCHEMA_VERSION: str = "1.0"
-_SUPPORTED_MANIFEST_SCHEMA_VERSIONS: frozenset[str] = frozenset({"1.0", "2.0"})
+_SUPPORTED_MANIFEST_SCHEMA_VERSIONS: frozenset[str] = frozenset({"1.0", "2.0", "2.1"})
 _MANIFEST_FILENAME: str = ".scf-manifest.json"
 _BOOTSTRAP_PACKAGE_ID: str = "scf-engine-bootstrap"
 
@@ -1543,8 +1569,15 @@ class ManifestManager:
         package_version: str,
         files: list[tuple[str, Path]],
         merge_strategies_by_file: dict[str, str] | None = None,
+        stub_files: set[str] | None = None,
     ) -> None:
-        """Add or update manifest entries for many installed files in one save."""
+        """Add or update manifest entries for many installed files in one save.
+
+        When ``stub_files`` is provided, every file_rel listed in the set is
+        persisted with ``stub: true`` in the manifest entry. Callers compute
+        the set from the package manifest's ``engine_provided_skills`` and
+        ``engine_provided_instructions`` fields.
+        """
         entries = self.load()
         replacements = {file_rel for file_rel, _ in files}
         entries = [
@@ -1557,6 +1590,7 @@ class ManifestManager:
         ]
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         files_by_rel = dict(files)
+        stub_lookup = stub_files or set()
         for file_rel, file_abs in files:
             requested_strategy = None
             if merge_strategies_by_file is not None:
@@ -1574,6 +1608,7 @@ class ManifestManager:
                         package,
                         requested_strategy,
                     ),
+                    stub=file_rel in stub_lookup,
                 )
             )
         self._sync_entries_for_files(entries, files_by_rel)
@@ -1746,8 +1781,9 @@ class ManifestManager:
         file_abs: Path,
         installed_at: str,
         merge_strategy: str,
+        stub: bool = False,
     ) -> dict[str, Any]:
-        return {
+        entry: dict[str, Any] = {
             "file": file_rel,
             "package": package,
             "package_version": package_version,
@@ -1755,6 +1791,9 @@ class ManifestManager:
             "sha256": self._sha256(file_abs),
             "scf_merge_strategy": self._normalize_merge_strategy(merge_strategy),
         }
+        if stub:
+            entry["stub"] = True
+        return entry
 
     def _sync_entries_for_files(
         self,
@@ -2423,6 +2462,41 @@ class SparkFrameworkEngine:
                 if ff.name.lower().removesuffix(".instructions") == query:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Instruction '{name}' not found. Use instructions://list."
+
+        # ---- v2.4.0: engine-hosted skills and instructions ----
+        engine_inventory = EngineInventory()
+
+        @self._mcp.resource("engine-skills://list")
+        async def resource_engine_skills_list() -> str:
+            return _fmt_list(engine_inventory.list_skills(), "SCF Engine-Hosted Skills")
+
+        @self._mcp.resource("engine-skills://{name}")
+        async def resource_engine_skill_by_name(name: str) -> str:
+            query = name.lower().removesuffix(".skill")
+            for ff in engine_inventory.list_skills():
+                if ff.name.lower().removesuffix(".skill") == query:
+                    return ff.path.read_text(encoding="utf-8", errors="replace")
+            return (
+                f"Engine skill '{name}' not found. "
+                "Use engine-skills://list to see available engine-hosted skills."
+            )
+
+        @self._mcp.resource("engine-instructions://list")
+        async def resource_engine_instructions_list() -> str:
+            return _fmt_list(
+                engine_inventory.list_instructions(), "SCF Engine-Hosted Instructions"
+            )
+
+        @self._mcp.resource("engine-instructions://{name}")
+        async def resource_engine_instruction_by_name(name: str) -> str:
+            query = name.lower().removesuffix(".instructions")
+            for ff in engine_inventory.list_instructions():
+                if ff.name.lower().removesuffix(".instructions") == query:
+                    return ff.path.read_text(encoding="utf-8", errors="replace")
+            return (
+                f"Engine instruction '{name}' not found. "
+                "Use engine-instructions://list."
+            )
 
         @self._mcp.resource("prompts://list")
         async def resource_prompts_list() -> str:

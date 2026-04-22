@@ -2,11 +2,11 @@
 applyTo: "**"
 name: spark-assistant-guide
 spark: true
-scf_owner: "spark-framework-engine"
-scf_version: "2.3.2"
+scf_owner: "spark-base"
+scf_version: "1.2.0"
 scf_file_role: "instruction"
 scf_merge_strategy: "replace"
-scf_merge_priority: 0
+scf_merge_priority: 10
 scf_protected: false
 version: 1.1.0
 ---
