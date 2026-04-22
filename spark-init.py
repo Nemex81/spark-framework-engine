@@ -734,9 +734,13 @@ class _BootstrapInstaller:
         request = urllib.request.Request(url, headers={"User-Agent": "spark-init"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-                return response.read().decode("utf-8")
+                raw_bytes = response.read()
         except (urllib.error.URLError, OSError) as exc:
             raise _BootstrapError(f"Download fallito da {url}: {exc}") from exc
+        try:
+            return raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise _BootstrapError(f"Payload remoto non UTF-8 da {url}: {exc}") from exc
 
     def _build_raw_url(self, repo_url: str, file_path: str) -> str:
         """Convert a GitHub repository URL to the corresponding raw main URL."""

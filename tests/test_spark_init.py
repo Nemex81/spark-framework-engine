@@ -371,6 +371,72 @@ def test_bootstrap_installer_uses_cache_when_registry_fetch_fails(
     assert "Fetch registry fallita" in capsys.readouterr().err
 
 
+def test_bootstrap_installer_fetch_json_accepts_utf8_bom(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    class _FakeResponse:
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self._payload
+
+    def _fake_urlopen(request: object, timeout: int = 30) -> _FakeResponse:
+        del request, timeout
+        return _FakeResponse(b"\xef\xbb\xbf{\"version\": \"1.3.0\"}")
+
+    monkeypatch.setattr(_MODULE.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = installer._fetch_json("https://example.invalid/package-manifest.json")
+
+    assert payload == {"version": "1.3.0"}
+
+
+def test_bootstrap_installer_fetch_raw_text_rejects_invalid_utf8(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "workspace"
+    engine_root = tmp_path / "engine"
+    project_root.mkdir()
+    engine_root.mkdir()
+
+    installer = _MODULE._BootstrapInstaller(project_root, engine_root)
+
+    class _FakeResponse:
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"\xff\xfe\x00\x00not-utf8"
+
+    def _fake_urlopen(request: object, timeout: int = 30) -> _FakeResponse:
+        del request, timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(_MODULE.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(_MODULE._BootstrapError, match="Payload remoto non UTF-8"):
+        installer._fetch_raw_text("https://example.invalid/bad.txt")
+
+
 def test_bootstrap_installer_installs_spark_base_and_updates_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
