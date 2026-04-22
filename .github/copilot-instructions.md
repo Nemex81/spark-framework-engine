@@ -6,11 +6,11 @@
 
 <!-- Le tue istruzioni custom personali vanno QUI, sopra i blocchi SCF -->
 
-<!-- SCF:BEGIN:spark-framework-engine@2.3.1 -->
+<!-- SCF:BEGIN:spark-framework-engine@2.3.2 -->
 ---
 spark: true
 scf_owner: "spark-framework-engine"
-scf_version: "2.3.1"
+scf_version: "2.3.2"
 scf_file_role: "config"
 scf_merge_strategy: "merge_sections"
 scf_merge_priority: 0

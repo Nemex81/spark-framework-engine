@@ -4,7 +4,7 @@ name: scf-migrate-workspace
 description: Guida la migrazione di un workspace SCF legacy con conferma esplicita prima di modificare file protetti.
 spark: true
 scf_owner: "spark-framework-engine"
-scf_version: "2.3.1"
+scf_version: "2.3.2"
 scf_file_role: "prompt"
 scf_merge_strategy: "replace"
 scf_merge_priority: 0

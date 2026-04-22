@@ -3,7 +3,7 @@ name: scf-package-management
 description: Flusso operativo riutilizzabile per installare, aggiornare, rimuovere e verificare pacchetti SCF nel workspace utente.
 spark: true
 scf_owner: "spark-framework-engine"
-scf_version: "2.3.1"
+scf_version: "2.3.2"
 scf_file_role: "skill"
 scf_merge_strategy: "replace"
 scf_merge_priority: 0
