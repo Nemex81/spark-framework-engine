@@ -27,7 +27,11 @@ def _mock_bootstrap_remote(
         files = {
             ".github/AGENTS.md": "agents-index\n",
             ".github/project-profile.md": "initialized: true\n",
+            ".github/agents/spark-assistant.agent.md": "assistant\n",
             ".github/agents/spark-guide.agent.md": "guide\n",
+            ".github/instructions/spark-assistant-guide.instructions.md": "assistant guide\n",
+            ".github/prompts/scf-migrate-workspace.prompt.md": "migrate workspace\n",
+            ".github/prompts/scf-update-policy.prompt.md": "update policy\n",
         }
 
     registry_payload = {
@@ -80,6 +84,58 @@ def test_build_workspace_template_returns_empty_settings_and_root_mcp(tmp_path: 
     assert "mcp" in workspace_data
     assert "servers" in workspace_data["mcp"]
     assert workspace_data["mcp"]["servers"][_MODULE.SERVER_ID]["args"] == [str(engine_script)]
+
+
+def test_ensure_engine_runtime_creates_venv_and_installs_mcp_when_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine_root = tmp_path / "engine"
+    engine_root.mkdir()
+    venv_python = _MODULE._engine_venv_python(engine_root)
+    commands: list[tuple[list[str], str]] = []
+
+    monkeypatch.setattr(_MODULE, "_resolve_bootstrap_python", lambda: ["python3"])
+    monkeypatch.setattr(_MODULE, "_log", lambda _level, _message: None)
+
+    def _fake_run_checked_command(args: list[str], description: str) -> None:
+        commands.append((args, description))
+        if args[:3] == ["python3", "-m", "venv"]:
+            venv_python.parent.mkdir(parents=True, exist_ok=True)
+            venv_python.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(_MODULE, "_run_checked_command", _fake_run_checked_command)
+    monkeypatch.setattr(_MODULE, "_venv_has_mcp", lambda _path: False)
+
+    resolved_python = _MODULE._ensure_engine_runtime(engine_root)
+
+    assert resolved_python == venv_python
+    assert commands == [
+        (["python3", "-m", "venv", str(engine_root / ".venv")], "Creazione virtualenv locale SPARK"),
+        ([str(venv_python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"], "Aggiornamento pip nel runtime locale SPARK"),
+        ([str(venv_python), "-m", "pip", "install", "--quiet", "--upgrade", "mcp"], "Installazione dipendenza mcp nel runtime locale SPARK"),
+    ]
+
+
+def test_ensure_engine_runtime_reuses_ready_venv_without_reinstall(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine_root = tmp_path / "engine"
+    venv_python = _MODULE._engine_venv_python(engine_root)
+    venv_python.parent.mkdir(parents=True, exist_ok=True)
+    venv_python.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(_MODULE, "_venv_has_mcp", lambda _path: True)
+    monkeypatch.setattr(
+        _MODULE,
+        "_run_checked_command",
+        lambda _args, _description: (_ for _ in ()).throw(AssertionError("unexpected install")),
+    )
+
+    resolved_python = _MODULE._ensure_engine_runtime(engine_root)
+
+    assert resolved_python == venv_python
 
 
 def test_update_existing_workspace_moves_legacy_settings_mcp_to_root_and_preserves_other_keys(
@@ -562,6 +618,11 @@ def test_main_prompts_for_conflict_mode_and_retries_bootstrap(
     monkeypatch.chdir(project_root)
     monkeypatch.setattr(_MODULE, "_configure_stdio", lambda: None)
     monkeypatch.setattr(_MODULE, "_log", lambda _level, _message: None)
+    monkeypatch.setattr(
+        _MODULE,
+        "_ensure_engine_runtime",
+        lambda _engine_root: _MODULE._engine_venv_python(tmp_path / "engine"),
+    )
     monkeypatch.setattr(_MODULE, "_workspace_candidates", lambda _project_root: [])
     monkeypatch.setattr(
         _MODULE,

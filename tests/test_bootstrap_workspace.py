@@ -220,6 +220,20 @@ class TestBootstrapWorkspace(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
+            spark_base_files = [
+                ".github/agents/spark-assistant.agent.md",
+                ".github/agents/spark-guide.agent.md",
+                ".github/instructions/spark-assistant-guide.instructions.md",
+                ".github/prompts/scf-migrate-workspace.prompt.md",
+                ".github/prompts/scf-update-policy.prompt.md",
+            ]
+            remote_contents = {
+                ".github/agents/spark-assistant.agent.md": "base assistant",
+                ".github/agents/spark-guide.agent.md": "base guide",
+                ".github/instructions/spark-assistant-guide.instructions.md": "base assistant guide",
+                ".github/prompts/scf-migrate-workspace.prompt.md": "base migrate prompt",
+                ".github/prompts/scf-update-policy.prompt.md": "base update policy prompt",
+            }
 
             with (
                 patch.object(
@@ -245,23 +259,31 @@ class TestBootstrapWorkspace(unittest.TestCase):
                         "dependencies": [],
                         "conflicts": [],
                         "file_ownership_policy": "error",
-                        "files": [".github/agents/spark-guide.agent.md"],
+                        "files": spark_base_files,
                     },
                 ),
-                patch.object(_module.RegistryClient, "fetch_raw_file", return_value="base guide"),
+                patch.object(
+                    _module.RegistryClient,
+                    "fetch_raw_file",
+                    side_effect=lambda raw_url: remote_contents[raw_url.split("/main/", 1)[1]],
+                ),
             ):
                 result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True, conflict_mode="manual"))
 
             manifest = ManifestManager(workspace_root / ".github")
-            guide_path = workspace_root / ".github" / "agents" / "spark-guide.agent.md"
 
             self.assertTrue(result["success"])
             self.assertTrue(result["install_base_requested"])
             self.assertEqual(result["conflict_mode"], "manual")
             self.assertEqual(result["status"], "bootstrapped_and_installed")
             self.assertTrue(result["base_install"]["success"])
-            self.assertEqual(guide_path.read_text(encoding="utf-8"), "base guide")
-            self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
+            self.assertCountEqual(result["base_install"]["adopted_bootstrap_files"], spark_base_files)
+
+            for file_path, expected_content in remote_contents.items():
+                relative_path = file_path.removeprefix(".github/")
+                workspace_file = workspace_root / file_path
+                self.assertEqual(workspace_file.read_text(encoding="utf-8"), expected_content)
+                self.assertEqual(manifest.get_file_owners(relative_path), ["spark-base"])
 
     def test_bootstrap_extended_creates_policy_then_requires_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

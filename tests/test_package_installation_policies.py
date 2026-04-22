@@ -383,22 +383,33 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertFalse(result["success"])
             self.assertEqual(result["required_engine_version"], "9.9.9")
 
-    def test_scf_install_package_adopts_bootstrap_owned_spark_guide_for_spark_base(self) -> None:
+    def test_scf_install_package_adopts_bootstrap_owned_spark_assets_for_spark_base(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             github_root = workspace_root / ".github"
-            guide_file = github_root / "agents" / "spark-guide.agent.md"
-            guide_file.parent.mkdir(parents=True)
-            guide_file.write_text("bootstrap guide", encoding="utf-8")
+            bootstrap_assets = {
+                "agents/spark-assistant.agent.md": "bootstrap assistant",
+                "agents/spark-guide.agent.md": "bootstrap guide",
+                "instructions/spark-assistant-guide.instructions.md": "bootstrap assistant guide",
+                "prompts/scf-migrate-workspace.prompt.md": "bootstrap migrate prompt",
+                "prompts/scf-update-policy.prompt.md": "bootstrap update policy prompt",
+            }
+            remote_assets = {
+                "agents/spark-assistant.agent.md": "base assistant",
+                "agents/spark-guide.agent.md": "base guide",
+                "instructions/spark-assistant-guide.instructions.md": "base assistant guide",
+                "prompts/scf-migrate-workspace.prompt.md": "base migrate prompt",
+                "prompts/scf-update-policy.prompt.md": "base update policy prompt",
+            }
+            for relative_path, content in bootstrap_assets.items():
+                asset_path = github_root / relative_path
+                asset_path.parent.mkdir(parents=True, exist_ok=True)
+                asset_path.write_text(content, encoding="utf-8")
             manifest = ManifestManager(github_root)
             manifest.save(
                 [
-                    self._entry(
-                        "agents/spark-guide.agent.md",
-                        "scf-engine-bootstrap",
-                        "bootstrap guide",
-                        "2.0.0",
-                    )
+                    self._entry(relative_path, "scf-engine-bootstrap", content, "2.0.0")
+                    for relative_path, content in bootstrap_assets.items()
                 ]
             )
 
@@ -420,17 +431,26 @@ class TestPackageInstallationPolicies(unittest.TestCase):
                         "dependencies": [],
                         "conflicts": [],
                         "file_ownership_policy": "error",
-                        "files": [".github/agents/spark-guide.agent.md"],
+                        "files": [f".github/{relative_path}" for relative_path in bootstrap_assets],
                     },
                 ),
-                patch.object(RegistryClient, "fetch_raw_file", return_value="base guide"),
+                patch.object(
+                    RegistryClient,
+                    "fetch_raw_file",
+                    side_effect=lambda raw_url: remote_assets[raw_url.split("/main/.github/", 1)[1]],
+                ),
             ):
                 result = asyncio.run(install_package("spark-base"))
 
             self.assertTrue(result["success"])
-            self.assertEqual(result["adopted_bootstrap_files"], [".github/agents/spark-guide.agent.md"])
-            self.assertEqual(guide_file.read_text(encoding="utf-8"), "base guide")
-            self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
+            self.assertCountEqual(
+                result["adopted_bootstrap_files"],
+                [f".github/{relative_path}" for relative_path in bootstrap_assets],
+            )
+            for relative_path, content in remote_assets.items():
+                asset_path = github_root / relative_path
+                self.assertEqual(asset_path.read_text(encoding="utf-8"), content)
+                self.assertEqual(manifest.get_file_owners(relative_path), ["spark-base"])
 
     def test_scf_install_package_aborts_on_untracked_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

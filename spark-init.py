@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import difflib
 import json
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -21,6 +22,9 @@ MANIFEST_REL = Path(".github/.scf-manifest.json")
 MANIFEST_SCHEMA_VERSION = "1.0"
 SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {"1.0", "2.0"}
 SPARK_BASE_ID = "spark-base"
+MINIMUM_PYTHON_VERSION = (3, 10)
+ENGINE_VENV_REL = Path(".venv")
+MCP_PACKAGE = "mcp"
 _BOOTSTRAP_SUPPORTED_CONFLICT_MODES = {"abort", "replace", "preserve", "integrate"}
 
 
@@ -49,13 +53,144 @@ def _log(level: str, message: str) -> None:
     print(f"[SPARK-INIT][{level}] {message}", file=sys.stderr)
 
 
+def _engine_venv_python(engine_root: Path) -> Path:
+    """Return the expected Python executable inside the engine-local virtualenv."""
+    if sys.platform == "win32":
+        return engine_root / ENGINE_VENV_REL / "Scripts" / "python.exe"
+    return engine_root / ENGINE_VENV_REL / "bin" / "python"
+
+
+def _python_version_supported(major: int, minor: int) -> bool:
+    """Return True when one interpreter satisfies the minimum supported version."""
+    return (major, minor) >= MINIMUM_PYTHON_VERSION
+
+
+def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run one command and capture UTF-8 output for diagnostics."""
+    return subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+
+def _run_checked_command(args: list[str], description: str) -> None:
+    """Run one command and raise a bootstrap error on failure."""
+    result = _run_command(args)
+    if result.returncode == 0:
+        return
+    detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+    raise _BootstrapError(f"{description} fallito: {detail}")
+
+
+def _command_succeeds(args: list[str]) -> bool:
+    """Return True when the command exits successfully."""
+    try:
+        return _run_command(args).returncode == 0
+    except OSError:
+        return False
+
+
+def _python_command_supports_minimum_version(command: list[str]) -> bool:
+    """Return True when one Python command exists and supports the minimum version."""
+    try:
+        result = _run_command(
+            [
+                *command,
+                "-c",
+                "import sys; print(sys.version_info.major, sys.version_info.minor)",
+            ]
+        )
+    except OSError:
+        return False
+    if result.returncode != 0:
+        return False
+    parts = result.stdout.strip().split()
+    if len(parts) < 2:
+        return False
+    try:
+        major = int(parts[0])
+        minor = int(parts[1])
+    except ValueError:
+        return False
+    return _python_version_supported(major, minor)
+
+
+def _resolve_bootstrap_python() -> list[str]:
+    """Resolve one Python command suitable to create the engine-local virtualenv."""
+    if sys.executable and _python_version_supported(sys.version_info.major, sys.version_info.minor):
+        return [sys.executable]
+
+    candidates: list[list[str]] = []
+    if sys.platform == "win32":
+        candidates.append(["py", "-3"])
+    candidates.extend([["python3"], ["python"]])
+
+    for candidate in candidates:
+        if _python_command_supports_minimum_version(candidate):
+            return candidate
+
+    min_major, min_minor = MINIMUM_PYTHON_VERSION
+    raise _BootstrapError(
+        f"Python {min_major}.{min_minor}+ richiesto per creare il runtime locale di SPARK."
+    )
+
+
+def _venv_has_mcp(venv_python: Path) -> bool:
+    """Return True when the engine-local virtualenv already provides the mcp package."""
+    if not venv_python.is_file():
+        return False
+    return _command_succeeds(
+        [
+            str(venv_python),
+            "-c",
+            (
+                "import importlib.util, sys; "
+                f"sys.exit(0 if importlib.util.find_spec('{MCP_PACKAGE}') else 1)"
+            ),
+        ]
+    )
+
+
+def _ensure_engine_runtime(engine_root: Path) -> Path:
+    """Create and prepare the engine-local virtualenv when it is missing or incomplete."""
+    venv_dir = engine_root / ENGINE_VENV_REL
+    venv_python = _engine_venv_python(engine_root)
+
+    if not venv_python.is_file():
+        bootstrap_python = _resolve_bootstrap_python()
+        _log("INFO", f"Runtime locale assente; creo la virtualenv in {venv_dir}")
+        _run_checked_command(
+            [*bootstrap_python, "-m", "venv", str(venv_dir)],
+            "Creazione virtualenv locale SPARK",
+        )
+
+    if not venv_python.is_file():
+        raise _BootstrapError(
+            f"Virtualenv locale creata ma interprete non trovato in {venv_python}"
+        )
+
+    if not _venv_has_mcp(venv_python):
+        _log("INFO", "Dipendenza 'mcp' assente nel runtime locale; installazione in corso.")
+        _run_checked_command(
+            [str(venv_python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"],
+            "Aggiornamento pip nel runtime locale SPARK",
+        )
+        _run_checked_command(
+            [str(venv_python), "-m", "pip", "install", "--quiet", "--upgrade", MCP_PACKAGE],
+            "Installazione dipendenza mcp nel runtime locale SPARK",
+        )
+
+    return venv_python
+
+
 def _build_server_config(project_root: Path, engine_script: Path) -> dict[str, Any]:
     """Build the MCP server configuration for the current project."""
     engine_root = engine_script.parent
-    if sys.platform == "win32":
-        python_cmd = engine_root / ".venv" / "Scripts" / "python.exe"
-    else:
-        python_cmd = engine_root / ".venv" / "bin" / "python"
+    python_cmd = _engine_venv_python(engine_root)
     return {
         "type": "stdio",
         "command": str(python_cmd),
@@ -654,6 +789,12 @@ def main() -> int:
 
     if not engine_script.is_file():
         _log("ERROR", f"Server non trovato: {engine_script}")
+        return 1
+
+    try:
+        _ensure_engine_runtime(engine_root)
+    except _BootstrapError as exc:
+        _log("ERROR", str(exc))
         return 1
 
     workspace_candidates = _workspace_candidates(project_root)

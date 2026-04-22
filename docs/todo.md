@@ -1,5 +1,9 @@
 # Todo Coordinator — SCF 3-Way Merge Implementation
 
+## Manutenzione bootstrap standalone
+
+- 2026-04-22: aggiunto fallback per creare `.venv` e installare `mcp` direttamente da `spark-init.py` quando il runtime locale del repo engine non esiste ancora.
+
 Funzione: coordinare lo stato delle fasi implementative e linkare i file todo specifici.
 
 Fasi e stato (coordinatore):

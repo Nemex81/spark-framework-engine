@@ -74,9 +74,12 @@ Se preferisci configurare senza gli script di setup:
 git clone https://github.com/Nemex81/spark-framework-engine
 cd spark-framework-engine
 
-# 2. Installa la dipendenza
-pip install mcp
+# 2. Avvia l'inizializzazione dal tuo progetto con Python 3.10+
+python /percorso/al/repo/spark-framework-engine/spark-init.py
 ```
+
+Se `.venv` non esiste ancora nel repo engine, `spark-init.py` la crea al volo e installa
+automaticamente `mcp` nel runtime locale prima di scrivere la configurazione MCP.
 
 ## Primo avvio (manuale)
 
@@ -91,6 +94,9 @@ pip install mcp
 
   Se il tuo progetto e il repo engine non sono allo stesso livello, usa il path
   assoluto al file `spark-init.py`.
+
+  Se il repo engine non ha ancora `.venv`, lo script prepara automaticamente il
+  runtime locale richiesto dal server SPARK usando l'interprete Python con cui lo avvii.
 
 - Lo script configura in autonomia il progetto utente:
 
