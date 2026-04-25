@@ -1,15 +1,6 @@
 ---
-scf_protected: false
-scf_file_role: "instruction"
-name: model-policy
-applyTo: "**"
-scf_merge_strategy: "replace"
-scf_version: "1.2.0"
-package: scf-master-codecrafter
-scf_merge_priority: 10
-scf_owner: "spark-base"
 spark: true
-version: 1.0.0
+applyTo: .github/**
 ---
 
 # Model Policy
@@ -19,3 +10,75 @@ version: 1.0.0
 - Se esistono piu approcci validi, dichiara il trade-off principale.
 - Le modifiche multi-file richiedono piano o checklist condivisa.
 - Gli agenti dispatcher non implementano direttamente: instradano o fanno fallback.
+# Model Policy — Framework Copilot
+Questa istruzione è attiva automaticamente su tutti i file `.github/`.
+Consultala quando ti viene chiesto quale modello usare per un dato agente
+o tipo di task, o quando devi valutare la coerenza di una configurazione.
+
+## Assegnazioni agenti
+
+Nota: il fallback è espresso come secondo elemento dell'array `model`
+nel frontmatter degli agenti, non come chiave separata.
+
+Nota operativa: questa tabella descrive i valori da usare nel frontmatter
+degli agenti del framework quando serve una configurazione validator-safe.
+Non coincide necessariamente con tutti i modelli effettivamente disponibili
+nell'ambiente Copilot dell'utente. In particolare, `Raptor mini` puo essere
+disponibile e usato operativamente anche quando la sua forma canonica non e
+verificata o non viene accettata dal validator del frontmatter.
+
+| Agente | model (array ordinato) |
+|--------|-------------------------|
+| Agent-Orchestrator | ['GPT-5.4 (copilot)', 'Claude Opus 4.6 (copilot)'] |
+| Agent-Analyze | ['Claude Sonnet 4.6 (copilot)', 'GPT-5.4 (copilot)'] |
+| code-Agent-Design | ['Claude Opus 4.6 (copilot)', 'GPT-5.4 (copilot)'] |
+| Agent-Plan | ['Claude Sonnet 4.6 (copilot)', 'GPT-5.4 (copilot)'] |
+| code-Agent-Code | ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-Codex (copilot)'] |
+| Agent-Validate | ['GPT-5.3-Codex (copilot)', 'Claude Sonnet 4.6 (copilot)'] |
+| Agent-Docs | ['GPT-5 mini (copilot)'] |
+| Agent-Release | ['GPT-5 mini (copilot)'] |
+| Agent-FrameworkDocs | ['Claude Sonnet 4.6 (copilot)', 'GPT-5 mini (copilot)'] |
+| Agent-Git | ['GPT-5 mini (copilot)', 'GPT-5.3-Codex (copilot)'] |
+| code-Agent-CodeRouter | ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-Codex (copilot)'] |
+| code-Agent-CodeUI | ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-Codex (copilot)'] |
+
+## Criteri di selezione per tipo di task
+
+Nota: i nomi modello qui sotto usano il formato breve per leggibilità.
+Il formato completo usato nel frontmatter degli agenti è `Nome Modello (copilot)`.
+
+- **Reasoning architetturale e decisioni E2E**: gpt-5.4 o claude-opus-4.6
+- **Analisi codebase, design e planning strutturato**: claude-sonnet-4.6
+- **Coding generale e review**: claude-sonnet-4.6
+- **Task agentic puro, test, coverage, refactor pipeline**: gpt-5.3-codex
+- **Task meccanici, formali, ripetitivi**: gpt-5-mini o raptor-mini
+- **Contenere il consumo premium**: gpt-5-mini (0x), raptor-mini (0x),
+  gpt-5.4 (1x), claude-sonnet-4.6 (1x), claude-opus-4.6 (3x)
+
+## Modelli da evitare come base per nuove regole
+
+I seguenti modelli sono in deprecazione o legacy:
+gpt-4o, gpt-4.1, gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini,
+gpt-5.1-codex-max, gemini-3-pro
+
+## Fallback ufficiali per modelli deprecati
+
+- gpt-4o → gpt-5-mini
+- gpt-4.1 → gpt-5-mini
+- gemini-3-pro → gemini-3.1-pro
+- gpt-5.1* → gpt-5.3-codex
+- claude-sonnet-4 → claude-sonnet-4.6
+- claude-opus-4.5 → claude-opus-4.6
+
+## Modelli riconosciuti (forme canoniche)
+
+Per evitare falsi positivi del validator, dichiariamo esplicitamente le forme canoniche riconosciute per i modelli usati nel framework. Aggiungi qui nuovi modelli quando servono.
+
+Questa lista rappresenta le forme documentate o gia validate nel contesto del
+framework. Non prova da sola che ogni forma elencata sia sempre accettata in
+ogni build del validator di VS Code/Copilot.
+
+- GPT-5 mini (copilot)
+- Raptor mini (copilot)
+- gpt-5-mini
+- raptor-mini

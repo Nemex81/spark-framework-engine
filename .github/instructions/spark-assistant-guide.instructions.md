@@ -1,13 +1,7 @@
 ---
-applyTo: "**"
-name: spark-assistant-guide
 spark: true
-scf_owner: "spark-base"
-scf_version: "1.2.0"
-scf_file_role: "instruction"
-scf_merge_strategy: "replace"
-scf_merge_priority: 10
-scf_protected: false
+applyTo: .github/**
+name: spark-assistant-guide
 version: 1.1.0
 ---
 
@@ -60,3 +54,5 @@ Questa instruction definisce il comportamento operativo di `spark-assistant` nel
 - Se il registry non e raggiungibile ma esiste cache locale, il motore puo continuare a restituire dati dal catalogo senza errore esplicito.
 	- Se `scf_list_available_packages` o `scf_get_package_info` continuano a restituire dati, trattali come risultati utilizzabili ma non dichiararli "aggiornati in tempo reale".
 	- Se invece il catalogo torna vuoto o un manifest remoto non e recuperabile, spiega che il motore non ha abbastanza dati affidabili per procedere e ferma le operazioni distruttive.
+	- per installazione: `scf_list_available_packages` -> `scf_get_package_info(package_id)` -> `scf_install_package(package_id)`
+	- per aggiornamento: `scf_check_updates` o `scf_update_packages` -> `scf_apply_updates(package_id | None)` solo se l'utente vuole applicare davvero il piano

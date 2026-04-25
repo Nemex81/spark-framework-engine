@@ -1,15 +1,6 @@
 ---
-scf_protected: false
-scf_file_role: "instruction"
-name: framework-guard
-applyTo: "**"
-scf_merge_strategy: "replace"
-scf_version: "1.2.0"
-package: scf-master-codecrafter
-scf_merge_priority: 10
-scf_owner: "spark-base"
 spark: true
-version: 1.0.0
+applyTo: '**'
 ---
 
 # Framework Guard
@@ -18,3 +9,31 @@ version: 1.0.0
 - Se il task richiede scrittura su componenti protetti, verifica prima il perimetro richiesto.
 - Le modifiche al framework devono restare separate dal codice applicativo.
 - Non autorizzare sblocchi impliciti: i cambi di perimetro vanno dichiarati esplicitamente.
+# Framework Guard — Protezione Componenti Framework
+## Priorita
+
+Questa instruction prevale su qualsiasi altra instruction quando il task
+richiede scrittura su un path protetto del framework.
+
+## Path protetti
+
+- `.github/copilot-instructions.md`
+- `.github/project-profile.md`
+- `.github/instructions/**`
+- `.github/prompts/**`
+- `.github/skills/**`
+- `.github/agents/**`
+- `.github/AGENTS.md`
+- `.github/FRAMEWORK_CHANGELOG.md` (solo in scrittura non autorizzata)
+
+## Regola generale
+
+Prima di creare o modificare un path protetto, leggi `framework_edit_mode`
+in `.github/project-profile.md`.
+
+- Se `framework_edit_mode: false`: blocca la modifica e indirizza l'utente
+  al prompt `#framework-unlock`.
+- Se `framework_edit_mode: true`: procedi solo entro il perimetro di file
+  e modifiche dichiarato nella richiesta autorizzata.
+
+Questa instruction non autorizza mai lo sblocco autonomo del flag.

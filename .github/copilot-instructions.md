@@ -1,3 +1,13 @@
+---
+spark: true
+scf_file_role: "config"
+scf_version: "1.4.0"
+scf_merge_strategy: "merge_sections"
+scf_protected: false
+scf_owner: "spark-base"
+scf_merge_priority: 10
+---
+
 <!-- SCF:HEADER generato da SPARK Framework Engine -->
 <!-- NON modificare i marker SCF. Il contenuto tra i marker è gestito dal sistema. -->
 <!-- Il testo fuori dai marker è tuo: SPARK non lo tocca mai in nessuna modalità. -->
@@ -196,3 +206,11 @@ Questo pacchetto aggiunge al framework le regole operative e gli agenti Python-s
 - Mantieni type hints, docstring, `pathlib.Path`, pytest e gestione esplicita delle eccezioni.
 - Nei test privilegia fixture pytest, isolamento dei casi e mock limitati alle dipendenze esterne.
 <!-- SCF:END:scf-pycode-crafter -->
+# Copilot Instructions — SPARK Base Package
+Questo layer richiede `spark-framework-engine >= 2.4.0`; i tool e le resource runtime seguenti sono stati introdotti a partire da `1.5.0`:
+Nota cross-layer: alcuni agenti con prefisso `code-` (ad es. `code-Agent-Code`,
+`code-Agent-CodeRouter`, `code-Agent-CodeUI`, `code-Agent-Design`) sono forniti
+dal pacchetto `scf-master-codecrafter`. In un workspace dove `scf-master-codecrafter`
+non è installato, i riferimenti a questi agenti saranno link morti — questo è il
+comportamento atteso per agenti di layer superiore. Per comportamenti runtime
+corretti, installa `scf-master-codecrafter` o aggiorna i riferimenti locali.

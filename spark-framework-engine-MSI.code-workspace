@@ -1,34 +1,34 @@
 {
-	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "../scf-registry"
-		},
-		{
-			"path": "../scf-master-codecrafter"
-		},
-		{
-			"path": "../scf-pycode-crafter"
-		},
-		{
-			"path": "../spark-base"
-		}
-	],
-	"settings": {},
-	"mcp": {
-		"servers": {
-			"sparkFrameworkEngine": {
-				"type": "stdio",
-				"command": "C:\\Users\\nemex\\OneDrive\\Documenti\\GitHub\\spark-framework-engine\\.venv\\Scripts\\python.exe",
-				"args": [
-					"C:\\Users\\nemex\\OneDrive\\Documenti\\GitHub\\spark-framework-engine\\spark-framework-engine.py"
-				],
-				"env": {
-					"WORKSPACE_FOLDER": "C:\\Users\\nemex\\OneDrive\\Documenti\\GitHub\\spark-framework-engine"
-				}
-			}
-		}
-	}
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "../scf-registry"
+    },
+    {
+      "path": "../scf-master-codecrafter"
+    },
+    {
+      "path": "../scf-pycode-crafter"
+    },
+    {
+      "path": "../spark-base"
+    }
+  ],
+  "settings": {},
+  "mcp": {
+    "servers": {
+      "sparkFrameworkEngine": {
+        "type": "stdio",
+        "command": "C:\\Users\\nemex\\OneDrive\\Documenti\\GitHub\\spark-framework-engine\\.venv\\Scripts\\python.exe",
+        "args": [
+          "C:\\Users\\nemex\\OneDrive\\Documenti\\GitHub\\spark-framework-engine\\spark-framework-engine.py"
+        ],
+        "env": {
+          "WORKSPACE_FOLDER": "C:\\Users\\nemex\\OneDrive\\Documenti\\GitHub\\spark-framework-engine"
+        }
+      }
+    }
+  }
 }
