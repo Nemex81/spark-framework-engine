@@ -13,18 +13,8 @@ scf_merge_priority: 10
 ## Base Agents (spark-base)
 
 - spark-assistant — executor — workspace entrypoint, onboarding, package lifecycle, diagnostics
+- spark-engine-maintainer — executor — manutenzione engine, diagnostica e operazioni di mantenimento framework
 - spark-guide — executor — user entrypoint, framework orientation, routing to spark-assistant
-- Agent-Orchestrator — executor — orchestration, workflow, runtime-state
-- Agent-Git — executor — git, commit, push, merge, tag proposal
-- Agent-Helper — executor — framework-help, discovery, routing hints
-- Agent-Release — executor — release-coordination, semver, packaging guidance
-- Agent-FrameworkDocs — executor — framework-docs, changelog, AGENTS index
-- Agent-Welcome — executor — setup, project-profile, onboarding
-- Agent-Research — support/internal — fallback research, unknown-stack briefing
-- Agent-Analyze — dispatcher — analyze
-- Agent-Plan — dispatcher — plan
-- Agent-Docs — dispatcher — docs
-- Agent-Validate — dispatcher — validate
 
 ## Plugin Agents
 
@@ -51,14 +41,4 @@ I tool seguenti sono disponibili e operativi nel motore corrente (v2.4.0).
 
 ## Agenti di Supporto Interno
 
-Questi agenti non fanno parte del workflow principale ANALYZE→RELEASE.
-Vengono invocati automaticamente da altri agenti in condizioni specifiche.
-L'utente non li chiama direttamente.
-
-### Agent-Research
-
-- **Ruolo**: fallback per linguaggi senza plugin SCF specializzato
-- **Visibilità**: internal
-- **Invocato da**: Agent-Analyze, Agent-Plan, Agent-Docs, Agent-Orchestrator, Agent-Validate
-- **Produce**: context brief in `.github/runtime/research-cache/{language}-{task-type}.md`
-- **Limite**: non sostituisce un plugin testato — fallback trasparente dichiarato
+Al momento non sono presenti agenti di supporto interno aggiuntivi oltre ai tre agenti SCF-native elencati sopra.
