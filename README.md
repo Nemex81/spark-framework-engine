@@ -325,6 +325,11 @@ gli 9 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
 Se il workspace e gia bootstrap-pato ma manca qualche asset base, il tool copia
 solo i file mancanti.
 
+Il bootstrap non copia il file assemblato `.github/copilot-instructions.md` del motore.
+Quel file arriva nel workspace solo tramite installazione o update dei pacchetti
+SCF che contribuiscono sezioni `merge_sections`; il blocco interno
+`spark-framework-engine` resta quindi confinato al repository del motore.
+
 Con `scf_bootstrap_workspace(install_base=True, conflict_mode=..., update_mode=...)` il motore puo
 anche installare `spark-base` usando il normale preflight del registry e del manifest.
 Se `spark-base` e gia installato, il passo viene saltato senza reinstallazione.
@@ -334,6 +339,10 @@ Se il workspace ha gia una policy esplicita, oppure il caller passa `update_mode
 esteso costruisce anche il `diff_summary` di `spark-base`, verifica `github_write_authorized`
 in `.github/runtime/orchestrator-state.json` e puo' richiedere prima l'autorizzazione o la
 configurazione iniziale della policy.
+
+Se `install_base=True`, l'eventuale creazione o aggiornamento di `.github/copilot-instructions.md`
+avviene nel flusso di installazione del pacchetto tramite merge delle sezioni distribuite dal package,
+non tramite copia del file assemblato del motore.
 
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,

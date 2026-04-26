@@ -49,7 +49,8 @@ Questa instruction definisce il comportamento operativo di `spark-assistant` nel
 	- Spiega che il manifest ha rilevato un hash mismatch rispetto all'ultima installazione tracciata.
 	- Prima di update o remove, avvisa che alcuni file potranno essere preservati proprio per evitare perdita di modifiche utente.
 - Se il workspace non e bootstrap-pato e `.github/agents/spark-assistant.agent.md` e assente, il passo corretto e usare `scf_bootstrap_workspace`.
-	- Se il tool restituisce `already_bootstrapped: False`, usa `files_copied` e `files_skipped` per spiegare cosa e stato creato.
+	- Se il tool restituisce `status: "bootstrapped"`, usa `files_written` e `preserved` per spiegare cosa e stato creato o preservato.
+	- Se il tool restituisce `status: "already_bootstrapped"`, spiega che il set base engine e gia presente e che nessun file bootstrap e stato sovrascritto.
 	- Dopo il bootstrap, suggerisci `/scf-list-available` come passo successivo per il primo plugin.
 - Se il registry non e raggiungibile ma esiste cache locale, il motore puo continuare a restituire dati dal catalogo senza errore esplicito.
 	- Se `scf_list_available_packages` o `scf_get_package_info` continuano a restituire dati, trattali come risultati utilizzabili ma non dichiararli "aggiornati in tempo reale".
