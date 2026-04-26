@@ -76,11 +76,11 @@ Per richieste user-facing o di orientamento operativo sul framework, usa invece 
 - I file condivisi con `scf_merge_strategy: merge_sections` devono passare dal percorso canonico `_scf_section_merge()`; i file `user_protected` non vanno sovrascritti implicitamente.
 - Le scritture sotto `.github/` dipendono dallo stato sessione `github_write_authorized` in `.github/runtime/orchestrator-state.json`.
 <!-- SCF:END:spark-framework-engine -->
-<!-- SCF:BEGIN:spark-base@1.4.0 -->
+<!-- SCF:BEGIN:spark-base@1.5.0 -->
 ---
 spark: true
 scf_file_role: "config"
-scf_version: "1.4.0"
+scf_version: "1.5.0"
 scf_merge_strategy: "merge_sections"
 scf_protected: false
 scf_owner: "spark-base"
@@ -99,9 +99,11 @@ riutilizzabili da tutti i plugin linguaggio-specifici.
 
 - Leggi sempre `.github/project-profile.md` prima di assumere stack o architettura.
 - Usa `.github/AGENTS.md` come indice canonico degli agenti installati.
-- Se una capability richiesta non e coperta da plugin attivi, delega ad Agent-Research.
+- Se una capability richiesta non è coperta da plugin attivi, usa `scf://agents-index`
+	per verificare gli agenti disponibili, poi delega all'agente ricerca installato.
 - Non modificare `.github/runtime/` tramite sistemi di manifest o ownership package.
-- Per operazioni git, usa Agent-Git o proponi i comandi senza eseguirli direttamente.
+- Per operazioni git, proponi i comandi senza eseguirli direttamente;
+	delega all'agente git installato tramite `scf://agents-index`.
 - Le capability language-specific devono essere fornite dai plugin installati sopra `spark-base`.
 
 ## Runtime MCP richiesto
@@ -212,11 +214,11 @@ Il testo fuori dai marker è dello sviluppatore: il motore non lo tocca mai.
 Non scrivere mai direttamente dentro un blocco di un altro owner.
 Non generare blocchi SCF a mano: usa i tool engine sopra.
 <!-- SCF:END:spark-base -->
-<!-- SCF:BEGIN:scf-master-codecrafter@2.1.0 -->
+<!-- SCF:BEGIN:scf-master-codecrafter@2.3.0 -->
 ---
 spark: true
 scf_file_role: "config"
-scf_version: "2.1.0"
+scf_version: "2.3.0"
 scf_merge_strategy: "merge_sections"
 scf_protected: false
 scf_owner: "scf-master-codecrafter"
@@ -227,22 +229,27 @@ scf_merge_priority: 20
 
 ## Contesto
 
-Questo pacchetto fornisce il layer master del framework SCF.
-Definisce agenti trasversali, dispatcher, skill comuni e regole operative
-riutilizzabili da tutti i plugin linguaggio-specifici.
+Questo pacchetto fornisce il layer master programmatico del framework SCF.
+Definisce gli agenti esclusivi di implementazione, design e routing del layer
+master, insieme a skill contestuali e regole operative riutilizzabili dai
+plugin linguaggio-specifici sopra `spark-base`.
 
 ## Regole base
 
 - Leggi sempre `.github/project-profile.md` prima di assumere stack o architettura.
 - Usa `.github/AGENTS.md` come indice canonico degli agenti installati.
-- Se una capability richiesta non e coperta da plugin attivi, delega ad Agent-Research.
+- Se una capability richiesta non è coperta da plugin attivi, usa `scf://agents-index`
+	per verificare gli agenti disponibili, poi delega all'agente ricerca installato.
 - Non modificare `.github/runtime/` tramite sistemi di manifest o ownership package.
-- Per operazioni git, usa Agent-Git o proponi i comandi senza eseguirli direttamente.
+- Per operazioni git, proponi i comandi senza eseguirli direttamente;
+	delega all'agente git installato tramite `scf://agents-index`.
 - Per task su codice Python, test Python o contesto MCP, applica anche `.github/instructions/python.instructions.md`, `.github/instructions/tests.instructions.md` e `.github/instructions/mcp-context.instructions.md` quando pertinenti.
+
+Queste instruction Python sono disponibili solo se il pacchetto `scf-pycode-crafter` e installato nel workspace.
 
 ## Runtime MCP richiesto
 
-Questo layer richiede `spark-framework-engine >= 2.1.0`; i tool e le resource runtime seguenti sono stati introdotti a partire da `1.5.0`:
+Questo layer richiede `spark-framework-engine >= 2.4.0`; i tool e le resource runtime seguenti sono stati introdotti a partire da `1.5.0`:
 - `scf_get_runtime_state()`
 - `scf_update_runtime_state(patch)`
 - `scf://runtime-state`
@@ -258,9 +265,16 @@ Quando il task tocca tool MCP o codice engine, mantieni separati `stdout` e `std
 
 ## Routing degli agenti
 
-- Agenti executor master: orchestrazione, git, release, framework docs, onboarding, ricerca.
-- Agenti dispatcher master: analyze, design, plan, docs, code-ui, code-router.
-- Agenti plugin: dichiarano `plugin`, `capabilities`, `languages` e vengono scoperti via `AGENTS-{plugin-id}.md`.
+- Agenti condivisi da `spark-base`: scoperti tramite `scf://agents-index`.
+	Coprono orchestrazione, git, release, framework docs, onboarding, ricerca,
+	analyze, plan, docs e validate.
+- Agente executor master: `code-Agent-Code` — implementazione codice.
+- Agenti dispatcher master: `code-Agent-Design`, `code-Agent-CodeUI`, `code-Agent-CodeRouter`.
+- Agenti plugin (language-specific): dichiarano `plugin`, `capabilities`, `languages`
+	e vengono scoperti via `AGENTS-{plugin-id}.md` o tramite `scf://agents-index`.
+
+Per verificare quali agenti sono effettivamente installati nel workspace corrente:
+→ resource `scf://agents-index`
 
 ## Output
 
@@ -268,23 +282,66 @@ Quando il task tocca tool MCP o codice engine, mantieni separati `stdout` e `std
 - Usa il prefisso `ERRORE:` per blocchi critici.
 - Preferisci report brevi con cosa cambia, perche e impatto operativo.
 <!-- SCF:END:scf-master-codecrafter -->
-<!-- SCF:BEGIN:scf-pycode-crafter@2.0.1 -->
+<!-- SCF:BEGIN:scf-pycode-crafter@2.1.0 -->
 ---
 spark: true
 scf_file_role: "config"
-scf_version: "2.0.1"
+scf_version: "2.1.0"
 scf_merge_strategy: "merge_sections"
 scf_protected: false
 scf_owner: "scf-pycode-crafter"
 scf_merge_priority: 30
 ---
-## Istruzioni SCF Python CodeCrafter
+# Copilot Instructions — SCF Python CodeCrafter
 
-Questo pacchetto aggiunge al framework le regole operative e gli agenti Python-specifici.
+## Contesto
+
+Questo pacchetto aggiunge al framework SPARK il layer Python-specifico.
+Definisce agenti dedicati, instruction file e regole operative per sviluppo,
+test e review di codice Python. Richiede `spark-base` e `scf-master-codecrafter`
+come prerequisiti.
+
+## Runtime MCP richiesto
+
+Questo layer richiede `spark-framework-engine >= 2.4.0`.
+Instruction file attivate automaticamente:
+- `python.instructions.md` — attiva su `*.py`
+- `tests.instructions.md` — attiva su `tests/**/*.py`
+- `mcp-context.instructions.md` — attiva quando il task tocca codice engine MCP
+
+## Regole operative Python
 
 - Usa gli agenti `py-Agent-*` per analisi, design, code, plan e validate su task Python.
 - Applica sempre `.github/instructions/python.instructions.md` per file `*.py`.
 - Applica anche `.github/instructions/tests.instructions.md` quando lavori in `tests/`.
-- Mantieni type hints, docstring, `pathlib.Path`, pytest e gestione esplicita delle eccezioni.
-- Nei test privilegia fixture pytest, isolamento dei casi e mock limitati alle dipendenze esterne.
+- Mantieni type hints, docstring Google-style, `pathlib.Path`, pytest
+	e gestione esplicita delle eccezioni.
+- Nei test privilegia fixture pytest, isolamento dei casi e mock
+	limitati alle dipendenze esterne.
+- Quando il task tocca codice MCP (tool FastMCP, resource, decorator),
+	applica `.github/instructions/mcp-context.instructions.md`.
+
+## Routing degli agenti
+
+- `py-Agent-Analyze` — analisi codice Python esistente.
+- `py-Agent-Design` — progettazione strutture e architettura Python.
+- `py-Agent-Code` — implementazione e refactoring codice Python.
+- `py-Agent-Plan` — pianificazione task Python con TODO strutturato.
+- `py-Agent-Validate` — review, lint e verifica standard.
+
+Per verificare quali agenti py-* sono installati:
+→ resource `scf://agents-index`
+
+## Ownership e Update Policy
+
+- Questo blocco viene integrato nel workspace tramite `merge_sections`.
+- Non trattarlo come file single-owner sostitutivo.
+- Le scritture sotto `.github/` richiedono `github_write_authorized: true`
+	nel runtime state; usa `scf_get_runtime_state()` per verificare.
+
+## Output
+
+- Mantieni output testuale navigabile e NVDA-friendly.
+- Usa il prefisso `ERRORE:` per blocchi critici.
+- Preferisci report brevi con cosa cambia, perche e impatto operativo.
 <!-- SCF:END:scf-pycode-crafter -->
