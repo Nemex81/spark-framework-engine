@@ -2402,7 +2402,7 @@ class SparkFrameworkEngine:
         self._inventory = inventory
 
     def register_resources(self) -> None:
-        """Register all 14 MCP resources.
+        """Register all MCP resources.
 
         Portability note: MCP Prompts are intentionally not registered here.
         VS Code handles .github/prompts/ natively as slash commands; alternative
@@ -2412,6 +2412,11 @@ class SparkFrameworkEngine:
         inventory = self._inventory
         ctx = self._ctx
         manifest = ManifestManager(ctx.github_root)
+        resource_uris: list[str] = []
+
+        def _register_resource(uri: str) -> Any:
+            resource_uris.append(uri)
+            return self._mcp.resource(uri)
 
         def _fmt_list(items: list[FrameworkFile], title: str) -> str:
             if not items:
@@ -2428,22 +2433,22 @@ class SparkFrameworkEngine:
                 lines.append(f"{key}: {val}")
             return "\n".join(lines)
 
-        @self._mcp.resource("agents://list")
+        @_register_resource("agents://list")
         async def resource_agents_list() -> str:
             return _fmt_list(inventory.list_agents(), "SCF Agents")
 
-        @self._mcp.resource("agents://{name}")
+        @_register_resource("agents://{name}")
         async def resource_agent_by_name(name: str) -> str:
             for ff in inventory.list_agents():
                 if ff.name.lower() == name.lower():
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Agent '{name}' not found. Use agents://list to see available agents."
 
-        @self._mcp.resource("skills://list")
+        @_register_resource("skills://list")
         async def resource_skills_list() -> str:
             return _fmt_list(inventory.list_skills(), "SCF Skills")
 
-        @self._mcp.resource("skills://{name}")
+        @_register_resource("skills://{name}")
         async def resource_skill_by_name(name: str) -> str:
             query = name.lower().removesuffix(".skill")
             for ff in inventory.list_skills():
@@ -2451,11 +2456,11 @@ class SparkFrameworkEngine:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Skill '{name}' not found. Use skills://list to see available skills."
 
-        @self._mcp.resource("instructions://list")
+        @_register_resource("instructions://list")
         async def resource_instructions_list() -> str:
             return _fmt_list(inventory.list_instructions(), "SCF Instructions")
 
-        @self._mcp.resource("instructions://{name}")
+        @_register_resource("instructions://{name}")
         async def resource_instruction_by_name(name: str) -> str:
             query = name.lower().removesuffix(".instructions")
             for ff in inventory.list_instructions():
@@ -2466,11 +2471,11 @@ class SparkFrameworkEngine:
         # ---- v2.4.0: engine-hosted skills and instructions ----
         engine_inventory = EngineInventory()
 
-        @self._mcp.resource("engine-skills://list")
+        @_register_resource("engine-skills://list")
         async def resource_engine_skills_list() -> str:
             return _fmt_list(engine_inventory.list_skills(), "SCF Engine-Hosted Skills")
 
-        @self._mcp.resource("engine-skills://{name}")
+        @_register_resource("engine-skills://{name}")
         async def resource_engine_skill_by_name(name: str) -> str:
             query = name.lower().removesuffix(".skill")
             for ff in engine_inventory.list_skills():
@@ -2481,13 +2486,13 @@ class SparkFrameworkEngine:
                 "Use engine-skills://list to see available engine-hosted skills."
             )
 
-        @self._mcp.resource("engine-instructions://list")
+        @_register_resource("engine-instructions://list")
         async def resource_engine_instructions_list() -> str:
             return _fmt_list(
                 engine_inventory.list_instructions(), "SCF Engine-Hosted Instructions"
             )
 
-        @self._mcp.resource("engine-instructions://{name}")
+        @_register_resource("engine-instructions://{name}")
         async def resource_engine_instruction_by_name(name: str) -> str:
             query = name.lower().removesuffix(".instructions")
             for ff in engine_inventory.list_instructions():
@@ -2498,11 +2503,11 @@ class SparkFrameworkEngine:
                 "Use engine-instructions://list."
             )
 
-        @self._mcp.resource("prompts://list")
+        @_register_resource("prompts://list")
         async def resource_prompts_list() -> str:
             return _fmt_list(inventory.list_prompts(), "SCF Prompts")
 
-        @self._mcp.resource("prompts://{name}")
+        @_register_resource("prompts://{name}")
         async def resource_prompt_by_name(name: str) -> str:
             query = name.lower().removesuffix(".prompt")
             for ff in inventory.list_prompts():
@@ -2510,12 +2515,12 @@ class SparkFrameworkEngine:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Prompt '{name}' not found. Use prompts://list."
 
-        @self._mcp.resource("scf://global-instructions")
+        @_register_resource("scf://global-instructions")
         async def resource_global_instructions() -> str:
             ff = inventory.get_global_instructions()
             return ff.path.read_text(encoding="utf-8", errors="replace") if ff else "copilot-instructions.md not found."
 
-        @self._mcp.resource("scf://project-profile")
+        @_register_resource("scf://project-profile")
         async def resource_project_profile() -> str:
             ff = inventory.get_project_profile()
             if ff is None:
@@ -2525,12 +2530,12 @@ class SparkFrameworkEngine:
                 return "# WARNING: project not initialized (initialized: false)\nRun #project-setup to configure this workspace.\n\n" + content
             return content
 
-        @self._mcp.resource("scf://model-policy")
+        @_register_resource("scf://model-policy")
         async def resource_model_policy() -> str:
             ff = inventory.get_model_policy()
             return ff.path.read_text(encoding="utf-8", errors="replace") if ff else "model-policy.instructions.md not found."
 
-        @self._mcp.resource("scf://agents-index")
+        @_register_resource("scf://agents-index")
         async def resource_agents_index() -> str:
             indexes = inventory.list_agents_indexes()
             if not indexes:
@@ -2540,7 +2545,7 @@ class SparkFrameworkEngine:
                 for ff in indexes
             )
 
-        @self._mcp.resource("scf://framework-version")
+        @_register_resource("scf://framework-version")
         async def resource_framework_version() -> str:
             installed_versions = manifest.get_installed_versions()
             lines = [
@@ -2555,33 +2560,38 @@ class SparkFrameworkEngine:
                 lines.append("- none")
             return "\n".join(lines)
 
-        @self._mcp.resource("scf://workspace-info")
+        @_register_resource("scf://workspace-info")
         async def resource_workspace_info_res() -> str:
             info = build_workspace_info(ctx, inventory)
             return _fmt_workspace_info(info)
 
-        @self._mcp.resource("scf://runtime-state")
+        @_register_resource("scf://runtime-state")
         async def resource_runtime_state() -> str:
             """Stato runtime orchestratore come JSON formattato."""
             state = inventory.get_orchestrator_state()
             return json.dumps(state, indent=2, ensure_ascii=False)
 
-        _log.info("Resources registered: 4 list + 4 template + 7 scf:// singletons (15 total)")
+        _log.info("[SPARK-ENGINE][INFO] Resources registrate: %d", len(resource_uris))
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all 35 MCP tools."""
+        """Register all MCP tools."""
         inventory = self._inventory
+        tool_names: list[str] = []
+
+        def _register_tool(name: str) -> Any:
+            tool_names.append(name)
+            return self._mcp.tool()
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
             return {"name": ff.name, "path": str(ff.path), "category": ff.category, "summary": ff.summary, "metadata": ff.metadata}
 
-        @self._mcp.tool()
+        @_register_tool("scf_list_agents")
         async def scf_list_agents() -> dict[str, Any]:
             """Return all discovered SCF agents with name, path and summary."""
             items = inventory.list_agents()
             return {"count": len(items), "agents": [_ff_to_dict(ff) for ff in items]}
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_agent")
         async def scf_get_agent(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF agent by name."""
             for ff in inventory.list_agents():
@@ -2589,15 +2599,19 @@ class SparkFrameworkEngine:
                     result = _ff_to_dict(ff)
                     result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
                     return result
-            return {"error": f"Agent '{name}' not found.", "available": [ff.name for ff in inventory.list_agents()]}
+            return {
+                "success": False,
+                "error": f"Agent '{name}' not found.",
+                "available": [ff.name for ff in inventory.list_agents()],
+            }
 
-        @self._mcp.tool()
+        @_register_tool("scf_list_skills")
         async def scf_list_skills() -> dict[str, Any]:
             """Return all discovered SCF skills with name, path and summary."""
             items = inventory.list_skills()
             return {"count": len(items), "skills": [_ff_to_dict(ff) for ff in items]}
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_skill")
         async def scf_get_skill(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF skill by name."""
             query = name.lower().removesuffix(".skill")
@@ -2606,15 +2620,19 @@ class SparkFrameworkEngine:
                     result = _ff_to_dict(ff)
                     result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
                     return result
-            return {"error": f"Skill '{name}' not found.", "available": [ff.name for ff in inventory.list_skills()]}
+            return {
+                "success": False,
+                "error": f"Skill '{name}' not found.",
+                "available": [ff.name for ff in inventory.list_skills()],
+            }
 
-        @self._mcp.tool()
+        @_register_tool("scf_list_instructions")
         async def scf_list_instructions() -> dict[str, Any]:
             """Return all discovered SCF instruction files with name, path and summary."""
             items = inventory.list_instructions()
             return {"count": len(items), "instructions": [_ff_to_dict(ff) for ff in items]}
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_instruction")
         async def scf_get_instruction(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF instruction by name."""
             query = name.lower().removesuffix(".instructions")
@@ -2623,15 +2641,19 @@ class SparkFrameworkEngine:
                     result = _ff_to_dict(ff)
                     result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
                     return result
-            return {"error": f"Instruction '{name}' not found.", "available": [ff.name for ff in inventory.list_instructions()]}
+            return {
+                "success": False,
+                "error": f"Instruction '{name}' not found.",
+                "available": [ff.name for ff in inventory.list_instructions()],
+            }
 
-        @self._mcp.tool()
+        @_register_tool("scf_list_prompts")
         async def scf_list_prompts() -> dict[str, Any]:
             """Return all SCF prompt files. Read-only — slash commands are handled natively by VS Code."""
             items = inventory.list_prompts()
             return {"count": len(items), "prompts": [_ff_to_dict(ff) for ff in items]}
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_prompt")
         async def scf_get_prompt(name: str) -> dict[str, Any]:
             """Return full content of a SCF prompt file by stem name."""
             query = name.lower().removesuffix(".prompt")
@@ -2640,14 +2662,18 @@ class SparkFrameworkEngine:
                     result = _ff_to_dict(ff)
                     result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
                     return result
-            return {"error": f"Prompt '{name}' not found.", "available": [ff.name for ff in inventory.list_prompts()]}
+            return {
+                "success": False,
+                "error": f"Prompt '{name}' not found.",
+                "available": [ff.name for ff in inventory.list_prompts()],
+            }
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_project_profile")
         async def scf_get_project_profile() -> dict[str, Any]:
             """Return project-profile.md content, metadata and initialized state."""
             ff = inventory.get_project_profile()
             if ff is None:
-                return {"error": "project-profile.md not found in .github/."}
+                return {"success": False, "error": "project-profile.md not found in .github/."}
             result = _ff_to_dict(ff)
             result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
             result["initialized"] = bool(ff.metadata.get("initialized", False))
@@ -2655,27 +2681,30 @@ class SparkFrameworkEngine:
                 result["warning"] = "Project not initialized. Run #project-setup to configure this workspace."
             return result
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_global_instructions")
         async def scf_get_global_instructions() -> dict[str, Any]:
             """Return copilot-instructions.md content and metadata."""
             ff = inventory.get_global_instructions()
             if ff is None:
-                return {"error": "copilot-instructions.md not found in .github/."}
+                return {"success": False, "error": "copilot-instructions.md not found in .github/."}
             result = _ff_to_dict(ff)
             result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
             return result
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_model_policy")
         async def scf_get_model_policy() -> dict[str, Any]:
             """Return model-policy.instructions.md content and metadata."""
             ff = inventory.get_model_policy()
             if ff is None:
-                return {"error": "model-policy.instructions.md not found in .github/instructions/."}
+                return {
+                    "success": False,
+                    "error": "model-policy.instructions.md not found in .github/instructions/.",
+                }
             result = _ff_to_dict(ff)
             result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
             return result
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_framework_version")
         async def scf_get_framework_version() -> dict[str, Any]:
             """Return the engine version and installed SCF package versions."""
             return {
@@ -2683,7 +2712,7 @@ class SparkFrameworkEngine:
                 "packages": manifest.get_installed_versions(),
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_workspace_info")
         async def scf_get_workspace_info() -> dict[str, Any]:
             """Return workspace paths, initialization state and SCF asset counts."""
             return build_workspace_info(self._ctx, inventory)
@@ -2878,7 +2907,7 @@ class SparkFrameworkEngine:
                 "resolution_status": "auto_resolved",
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_list_available_packages")
         async def scf_list_available_packages() -> dict[str, Any]:
             """List all packages currently available in the public SCF registry."""
             try:
@@ -2891,7 +2920,7 @@ class SparkFrameworkEngine:
                 "packages": [_build_registry_package_summary(p) for p in packages],
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_package_info")
         async def scf_get_package_info(package_id: str) -> dict[str, Any]:
             """Return detailed information for a package, including file manifest stats."""
             try:
@@ -3570,7 +3599,7 @@ class SparkFrameworkEngine:
                 "can_install_with_replace": len(ownership_issues) == 0,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_list_installed_packages")
         async def scf_list_installed_packages() -> dict[str, Any]:
             """List packages currently installed in the active workspace."""
             entries = manifest.load()
@@ -3595,7 +3624,7 @@ class SparkFrameworkEngine:
             packages = sorted(grouped.values(), key=lambda x: str(x["package"]))
             return {"count": len(packages), "packages": packages}
 
-        @self._mcp.tool()
+        @_register_tool("scf_install_package")
         async def scf_install_package(
             package_id: str,
             conflict_mode: str = "abort",
@@ -4345,7 +4374,7 @@ class SparkFrameworkEngine:
                 if item.get("status") == "update_available"
             ]
 
-        @self._mcp.tool()
+        @_register_tool("scf_check_updates")
         async def scf_check_updates() -> dict[str, Any]:
             """Return only the installed SCF packages that have an update available."""
             report = _plan_package_updates()
@@ -4358,7 +4387,7 @@ class SparkFrameworkEngine:
                 "updates": updates,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_update_package")
         async def scf_update_package(
             package_id: str,
             conflict_mode: str = "abort",
@@ -4728,12 +4757,12 @@ class SparkFrameworkEngine:
                 },
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_update_packages")
         async def scf_update_packages() -> dict[str, Any]:
             """Check installed SCF packages for updates and build an ordered update preview."""
             return _plan_package_updates()
 
-        @self._mcp.tool()
+        @_register_tool("scf_apply_updates")
         async def scf_apply_updates(
             package_id: str | None = None,
             conflict_mode: str = "abort",
@@ -4836,7 +4865,7 @@ class SparkFrameworkEngine:
                 "conflict_mode": conflict_mode,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_plan_install")
         async def scf_plan_install(package_id: str) -> dict[str, Any]:
             """Return a dry-run install plan for one SCF package without modifying the workspace."""
             install_context = _get_package_install_context(package_id)
@@ -4912,7 +4941,7 @@ class SparkFrameworkEngine:
                 "dependencies": dependencies,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_remove_package")
         async def scf_remove_package(package_id: str) -> dict[str, Any]:
             """Remove an installed SCF package from the workspace.
 
@@ -4938,12 +4967,13 @@ class SparkFrameworkEngine:
                 "deleted_snapshots": deleted_snapshots,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_package_changelog")
         async def scf_get_package_changelog(package_id: str) -> dict[str, Any]:
             """Return the changelog content for one installed SCF package."""
             content = inventory.get_package_changelog(package_id)
             if content is None:
                 return {
+                    "success": False,
                     "error": f"Changelog not found for package '{package_id}'.",
                     "package": package_id,
                 }
@@ -4955,7 +4985,7 @@ class SparkFrameworkEngine:
                 "version": _extract_version_from_changelog(changelog_path),
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_verify_workspace")
         async def scf_verify_workspace() -> dict[str, Any]:
             """Verify runtime manifest integrity against files currently present in .github/."""
             report = manifest.verify_integrity()
@@ -4965,7 +4995,7 @@ class SparkFrameworkEngine:
             report["summary"] = summary
             return report
 
-        @self._mcp.tool()
+        @_register_tool("scf_verify_system")
         async def scf_verify_system() -> dict[str, Any]:
             """Verifica la coerenza cross-component tra motore, pacchetti e registry."""
             issues: list[dict[str, Any]] = []
@@ -5031,24 +5061,29 @@ class SparkFrameworkEngine:
                 "is_coherent": len(issues) == 0,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_runtime_state")
         async def scf_get_runtime_state() -> dict[str, Any]:
             """Leggi lo stato runtime dell'orchestratore dal workspace corrente."""
             return inventory.get_orchestrator_state()
 
-        @self._mcp.tool()
+        @_register_tool("scf_update_runtime_state")
         async def scf_update_runtime_state(patch: dict[str, Any]) -> dict[str, Any]:
             """Aggiorna selettivamente lo stato runtime dell'orchestratore nel workspace."""
             return inventory.set_orchestrator_state(patch)
 
-        @self._mcp.tool()
+        @_register_tool("scf_bootstrap_workspace")
         async def scf_bootstrap_workspace(
             install_base: bool = False,
             conflict_mode: str = "abort",
             update_mode: str = "",
             migrate_copilot_instructions: bool = False,
         ) -> dict[str, Any]:
-            """Bootstrap the base SPARK assets into this workspace and optionally install spark-base."""
+            """Bootstrap the base SPARK assets into this workspace and optionally install spark-base.
+
+            Returns a status-oriented payload with fields such as `status`,
+            `files_written`, `preserved` and `note`, plus optional install and
+            authorization metadata for extended flows.
+            """
             if install_base and conflict_mode not in _SUPPORTED_CONFLICT_MODES:
                 return {
                     "success": False,
@@ -5391,8 +5426,9 @@ class SparkFrameworkEngine:
                     dest_path.write_bytes(source_path.read_bytes())
                     written_paths.append(dest_path)
                     files_written.append(rel_path)
-                    sys.stderr.write(
-                        f"[SPARK-ENGINE][INFO] Bootstrapped: {dest_path.relative_to(workspace_github_root).as_posix()}\n"
+                    _log.info(
+                        "[SPARK-ENGINE][INFO] Bootstrapped: %s",
+                        dest_path.relative_to(workspace_github_root).as_posix(),
                     )
             except OSError as exc:
                 rollback_errors: list[str] = []
@@ -5447,7 +5483,7 @@ class SparkFrameworkEngine:
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
             })
 
-        @self._mcp.tool()
+        @_register_tool("scf_resolve_conflict_ai")
         async def scf_resolve_conflict_ai(session_id: str, conflict_id: str) -> dict[str, Any]:
             """Proponi una risoluzione automatica conservativa per un conflitto di merge."""
             session = sessions.load_active_session(session_id)
@@ -5489,7 +5525,7 @@ class SparkFrameworkEngine:
                 "reason": resolution.get("reason"),
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_approve_conflict")
         async def scf_approve_conflict(session_id: str, conflict_id: str) -> dict[str, Any]:
             """Approva e scrivi nel workspace una proposta gia' validata per un conflitto."""
             session = sessions.load_active_session(session_id)
@@ -5569,7 +5605,7 @@ class SparkFrameworkEngine:
                 "remaining_conflicts": _count_remaining_conflicts(session),
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_reject_conflict")
         async def scf_reject_conflict(session_id: str, conflict_id: str) -> dict[str, Any]:
             """Rifiuta una proposta e mantiene il file in fallback manuale con marker."""
             session = sessions.load_active_session(session_id)
@@ -5620,7 +5656,7 @@ class SparkFrameworkEngine:
                 "remaining_conflicts": _count_remaining_conflicts(session),
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_finalize_update")
         async def scf_finalize_update(session_id: str) -> dict[str, Any]:
             """Finalize a manual merge session after the user resolves all conflict markers."""
             session = sessions.load_active_session(session_id)
@@ -5708,7 +5744,7 @@ class SparkFrameworkEngine:
                 "validator_results": validator_results_map,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_get_update_policy")
         async def scf_get_update_policy() -> dict[str, Any]:
             """Return the workspace update policy used for SCF file updates."""
             payload, source = _read_update_policy_payload(self._ctx.github_root)
@@ -5719,7 +5755,7 @@ class SparkFrameworkEngine:
                 "source": source,
             }
 
-        @self._mcp.tool()
+        @_register_tool("scf_set_update_policy")
         async def scf_set_update_policy(
             auto_update: bool,
             default_mode: str | None = None,
@@ -5799,7 +5835,7 @@ class SparkFrameworkEngine:
                 "source": source,
             }
 
-        _log.info("Tools registered: 35 total")
+        _log.info("[SPARK-ENGINE][INFO] Tools registrati: %d", len(tool_names))
 
 
 # ---------------------------------------------------------------------------
