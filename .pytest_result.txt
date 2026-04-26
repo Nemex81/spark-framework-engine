@@ -1,3 +1,0 @@
-FAILED tests/test_package_installation_policies.py::TestPackageInstallationPolicies::test_scf_install_package_aborts_on_untracked_existing_file
-FAILED tests/test_update_planner.py::TestUpdatePlanner::test_update_package_surfaces_preflight_conflicts
-2 failed, 23 passed in 0.66s
