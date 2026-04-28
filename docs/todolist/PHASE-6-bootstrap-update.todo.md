@@ -79,6 +79,13 @@
 
 ## Note tecniche
 
+- Workaround v3.0 per `scf_update_profile` (rinviato a v3.1):
+  l'utente che modifica manualmente `project-profile.md` deve
+  eseguire `scf_bootstrap_workspace` per propagare le modifiche
+  agli asset derivati (AGENTS.md, .clinerules, ecc.). Documentare
+  in MIGRATION-GUIDE-v3.md e nel template di `project-profile.md`
+  con un commento in testa al file.
+
 - AGENTS.md esistente nell'engine `.github/AGENTS.md` non va
   toccato (è asset engine, non workspace).
 - Il safe-merge deve usare lo stesso pattern di

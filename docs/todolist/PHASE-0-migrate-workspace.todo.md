@@ -29,6 +29,12 @@
               `apply(workspace, plan, snapshot_id) -> dict`.
       Usa `SnapshotManager` per registrare snapshot pre-esecuzione.
 
+## CHECKPOINT OBBLIGATORIO — prima del task 0.3
+
+- [ ] STOP: non procedere con task 0.3 senza conferma esplicita di Nemex.
+      Motivo: il task modifica spark-framework-engine.py (file protetto).
+      Invia summary di 0.1 e 0.2 completati e attendi risposta.
+
 - [ ] 0.3 Registrare tool `scf_migrate_workspace`
       File: `spark-framework-engine.py`
       Punto di inserimento: dopo `scf_bootstrap_workspace`
