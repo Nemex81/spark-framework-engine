@@ -1,4 +1,57 @@
-# Todo Coordinator — SCF 3-Way Merge Implementation
+# SPARK Refactoring — TODO Coordinatore
+
+- Sessione attiva: Implementazione v3.0.0 (Dual-Client Architecture)
+- Ultimo aggiornamento: 2026-04-28
+- Documenti collegati:
+  - `docs/SPARK-REFACTORING-DESIGN-v1.2.md` (patch v1.2.1 applicata)
+  - `docs/VALIDATION-REPORT.md`
+  - `docs/SPARK-IMPLEMENTATION-PLAN.md`
+
+## Stato Sessione Corrente (v3.0.0)
+
+- Fase attiva: FASE 0 — `scf_migrate_workspace`
+- Prossima fase: FASE 1 — Schema manifest v3.0
+- Validazione architetturale: PASS (1 ciclo correttivo, patch v1.2.1)
+
+## Fasi Completate (v3.0.0)
+
+- (vuoto — inizio implementazione)
+
+## Fasi in Corso (v3.0.0)
+
+- [ ] FASE 0 → [PHASE-0-migrate-workspace.todo.md](todolist/PHASE-0-migrate-workspace.todo.md)
+
+## Fasi in Attesa (v3.0.0)
+
+- [ ] FASE 1 → [PHASE-1-manifest-schema.todo.md](todolist/PHASE-1-manifest-schema.todo.md)
+- [ ] FASE 2 → [PHASE-2-resource-store-registry.todo.md](todolist/PHASE-2-resource-store-registry.todo.md)
+- [ ] FASE 3 → [PHASE-3-new-tools.todo.md](todolist/PHASE-3-new-tools.todo.md)
+- [ ] FASE 4 → [PHASE-4-fastmcp-decorators.todo.md](todolist/PHASE-4-fastmcp-decorators.todo.md)
+- [ ] FASE 5 → [PHASE-5-workspace-locator-cache.todo.md](todolist/PHASE-5-workspace-locator-cache.todo.md)
+- [ ] FASE 6 → [PHASE-6-bootstrap-update.todo.md](todolist/PHASE-6-bootstrap-update.todo.md)
+- [ ] FASE 7 → [PHASE-7-manifest-manager-smoketest.todo.md](todolist/PHASE-7-manifest-manager-smoketest.todo.md)
+- [ ] FASE 8 → [PHASE-8-deploy-migration.todo.md](todolist/PHASE-8-deploy-migration.todo.md)
+
+## Blocchi e Decisioni Aperte
+
+- Nessuno. Decisioni autonome registrate nel patch v1.2.1:
+  - `scf_update_profile` rimandato a v3.1 (fuori scope v3.0).
+  - `engine-skills://` e `engine-instructions://` mantenuti come
+    alias retrocompatibili fino a v4.0.
+  - `engine-manifest.json` e `spark-welcome` deliverable Fase 1.
+
+## Note di Sessione (v3.0.0)
+
+- Tool count reale engine v2.4.0: 35 (post-validazione).
+- Pattern decorator dinamici già presente in v2.4.0
+  (`_register_resource` riga 2417).
+- `MergeSessionManager` e `SnapshotManager` riusati per
+  override-aware update e migrazione reversibile.
+- Smoke test Copilot in Fase 7 è gating per Fase 8.
+
+---
+
+# Storico — Todo Coordinator SCF 3-Way Merge Implementation
 
 ## Manutenzione bootstrap standalone
 
