@@ -20,7 +20,7 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
@@ -772,6 +772,27 @@ def _is_engine_version_compatible(current_version: str, minimum_version: str) ->
     if current is None or minimum is None:
         return False
     return current >= minimum
+
+
+# v3 install threshold: pacchetti che dichiarano min_engine_version >= 3.0.0
+# usano lo store centralizzato + McpResourceRegistry.
+_V3_LIFECYCLE_MIN_ENGINE_VERSION: tuple[int, int, int] = (3, 0, 0)
+
+
+def _is_v3_package(pkg_manifest: Mapping[str, Any]) -> bool:
+    """Return True quando il pacchetto richiede il lifecycle v3 (store-based).
+
+    Un pacchetto è considerato v3 se ``min_engine_version >= 3.0.0`` nel
+    suo ``package-manifest.json``. Pacchetti con versione minore o assente
+    ricadono sul flusso v2 di copia file in workspace/.github/.
+    """
+    raw = str(pkg_manifest.get("min_engine_version", "")).strip()
+    if not raw:
+        return False
+    parsed = _parse_semver_triplet(raw)
+    if parsed is None:
+        return False
+    return parsed >= _V3_LIFECYCLE_MIN_ENGINE_VERSION
 
 
 def _resolve_dependency_update_order(
@@ -1799,6 +1820,11 @@ class ManifestManager:
             if entry.get("package") != package:
                 remaining.append(entry)
                 continue
+            # Le entry v3_store sono sentinelle che puntano allo store engine:
+            # nessun file workspace da rimuovere, quindi le scartiamo
+            # silenziosamente lasciando lo store al chiamante v3.
+            if str(entry.get("installation_mode", "")).strip() == "v3_store":
+                continue
             file_path = self._github_root / entry["file"]
             shared_with_other_packages = any(
                 other_entry.get("package") != package and other_entry.get("file") == entry.get("file")
@@ -1962,6 +1988,9 @@ class ManifestManager:
             file_rel = str(entry.get("file", "")).strip()
             package_id = str(entry.get("package", "")).strip()
             if not file_rel:
+                continue
+            # v3_store entries puntano allo store engine, non a file workspace.
+            if str(entry.get("installation_mode", "")).strip() == "v3_store":
                 continue
             tracked_files.add(file_rel)
             entries_by_file.setdefault(file_rel, []).append(entry)
@@ -3372,8 +3401,205 @@ def _apply_phase6_assets(
 
 
 # ---------------------------------------------------------------------------
+# v3 package lifecycle helpers — install / update / remove store-based
+# ---------------------------------------------------------------------------
+
+
+_V3_STORE_INSTALLATION_MODE: str = "v3_store"
+
+
+def _v3_store_sentinel_file(package_id: str) -> str:
+    """Path sentinella usato come ``file`` nelle entry v3_store del manifest.
+
+    Volutamente non corrispondente a un path reale sotto ``workspace/.github/``
+    affinché ``ManifestManager.get_file_owners`` e simili non lo confondano
+    con un file workspace tracciato.
+    """
+    return f"__store__/{package_id}"
+
+
+def _build_package_raw_url_base(repo_url: str) -> str:
+    """Trasforma ``https://github.com/<owner>/<repo>`` in URL raw branch main."""
+    if not repo_url.startswith("https://github.com/"):
+        raise ValueError(
+            f"Unsupported repo URL: {repo_url!r}. Only github.com URLs supported."
+        )
+    return (
+        repo_url.replace("https://github.com/", "https://raw.githubusercontent.com/")
+        + "/main/"
+    )
+
+
+def _install_package_v3_into_store(
+    engine_root: Path,
+    package_id: str,
+    pkg: Mapping[str, Any],
+    pkg_manifest: Mapping[str, Any],
+    fetch_raw_file: Callable[[str], str],
+) -> dict[str, Any]:
+    """Scarica i file del pacchetto v3 dentro ``engine_dir/packages/{pkg_id}/``.
+
+    Args:
+        engine_root: directory di base dell'engine.
+        package_id: ID del pacchetto.
+        pkg: entry del registry (deve contenere ``repo_url``).
+        pkg_manifest: package-manifest.json scaricato.
+        fetch_raw_file: callable che accetta un URL raw e ritorna il contenuto.
+
+    Returns:
+        ``{"success": bool, "store_path": str, "files": [...], "errors": [...]}``.
+        Se ``success`` è False non viene scritto alcun file (cleanup automatico).
+    """
+    store = PackageResourceStore(engine_root)
+    package_root = (store.packages_root / package_id).resolve()
+    github_root = package_root / ".github"
+    files: list[str] = list(pkg_manifest.get("files", []) or [])
+    if not files:
+        return {
+            "success": False,
+            "store_path": str(package_root),
+            "files": [],
+            "errors": [f"package '{package_id}' declares no files"],
+        }
+    try:
+        base_raw_url = _build_package_raw_url_base(str(pkg["repo_url"]))
+    except ValueError as exc:
+        return {
+            "success": False,
+            "store_path": str(package_root),
+            "files": [],
+            "errors": [str(exc)],
+        }
+
+    written: list[tuple[Path, str]] = []
+    errors: list[str] = []
+    for file_path in files:
+        rel = file_path.removeprefix(".github/")
+        # Rifiutiamo path con risalita per evitare scritture fuori dallo store.
+        if ".." in Path(rel).parts:
+            errors.append(f"unsafe path: {file_path}")
+            continue
+        try:
+            content = fetch_raw_file(base_raw_url + file_path)
+        except (urllib.error.URLError, OSError) as exc:
+            errors.append(f"{file_path}: {exc}")
+            continue
+        written.append((github_root / rel, content))
+
+    if errors:
+        return {
+            "success": False,
+            "store_path": str(package_root),
+            "files": [],
+            "errors": errors,
+        }
+
+    # Scrittura atomica della directory: prima creiamo, poi popoliamo.
+    package_root.mkdir(parents=True, exist_ok=True)
+    github_root.mkdir(parents=True, exist_ok=True)
+    persisted: list[str] = []
+    try:
+        for dest, content in written:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(content, encoding="utf-8")
+            persisted.append(str(dest.relative_to(package_root)))
+        manifest_path = package_root / "package-manifest.json"
+        manifest_path.write_text(
+            json.dumps(dict(pkg_manifest), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        return {
+            "success": False,
+            "store_path": str(package_root),
+            "files": persisted,
+            "errors": [f"write failure: {exc}"],
+        }
+    return {
+        "success": True,
+        "store_path": str(package_root),
+        "files": sorted(persisted),
+        "errors": [],
+    }
+
+
+def _remove_package_v3_from_store(engine_root: Path, package_id: str) -> dict[str, Any]:
+    """Rimuove l'intera directory ``engine_dir/packages/{pkg_id}/`` dallo store."""
+    store = PackageResourceStore(engine_root)
+    package_root = (store.packages_root / package_id).resolve()
+    if not package_root.is_dir():
+        return {"removed": False, "store_path": str(package_root)}
+    # Verifica difensiva che il path sia effettivamente sotto packages_root.
+    try:
+        package_root.relative_to(store.packages_root.resolve())
+    except ValueError:
+        return {
+            "removed": False,
+            "store_path": str(package_root),
+            "error": "store path escapes packages root",
+        }
+    try:
+        shutil.rmtree(package_root)
+    except OSError as exc:
+        return {
+            "removed": False,
+            "store_path": str(package_root),
+            "error": str(exc),
+        }
+    return {"removed": True, "store_path": str(package_root)}
+
+
+def _list_orphan_overrides_for_package(
+    registry: "McpResourceRegistry",
+    package_id: str,
+) -> list[dict[str, Any]]:
+    """Lista override workspace appartenenti al pacchetto ``package_id``.
+
+    Usato come warning quando un pacchetto v3 viene rimosso ma l'utente
+    ha override personalizzati per quelle stesse risorse.
+    """
+    orphans: list[dict[str, Any]] = []
+    for uri in registry.list_all():
+        meta = registry.get_metadata(uri) or {}
+        if str(meta.get("package", "")).strip() != package_id:
+            continue
+        if meta.get("override") is None:
+            continue
+        orphans.append(
+            {
+                "uri": uri,
+                "type": meta.get("resource_type"),
+                "path": meta.get("override"),
+            }
+        )
+    return orphans
+
+
+def _v3_overrides_blocking_update(
+    registry: "McpResourceRegistry",
+    package_id: str,
+    pkg_manifest: Mapping[str, Any],
+) -> list[str]:
+    """Lista URI del pacchetto con override workspace attivo (skip su update)."""
+    blocked: list[str] = []
+    resources = pkg_manifest.get("mcp_resources") or {}
+    if not isinstance(resources, Mapping):
+        return blocked
+    for resource_type in _RESOURCE_TYPES:
+        names = resources.get(resource_type) or []
+        if not isinstance(names, list):
+            continue
+        for name in names:
+            uri = McpResourceRegistry.make_uri(resource_type, str(name))
+            if registry.has_override(uri):
+                blocked.append(uri)
+    return sorted(blocked)
+
+
+# ---------------------------------------------------------------------------
 # PackageResourceStore (v3.0) — deposito centralizzato file di pacchetto
 # ---------------------------------------------------------------------------
+
 
 _RESOURCE_TYPES: tuple[str, ...] = ("agents", "prompts", "skills", "instructions")
 
@@ -3592,6 +3818,32 @@ class McpResourceRegistry:
         entry["override"] = None
         return True
 
+    def unregister(self, uri: str) -> bool:
+        """Rimuove completamente l'entry (engine + override) per ``uri``.
+
+        Usato dal lifecycle v3 quando un pacchetto viene rimosso dallo store.
+        Non tocca il filesystem. Ritorna ``True`` se l'entry esisteva.
+        """
+        if uri in self._entries:
+            del self._entries[uri]
+            return True
+        return False
+
+    def unregister_package(self, package_id: str) -> list[str]:
+        """Rimuove tutte le entry il cui ``package`` corrisponde a ``package_id``.
+
+        Ritorna la lista degli URI rimossi (ordinata).
+        """
+        # Raccogliamo gli URI per evitare di mutare il dict durante l'iterazione.
+        to_drop = sorted(
+            uri
+            for uri, entry in self._entries.items()
+            if str(entry.get("package", "")).strip() == package_id
+        )
+        for uri in to_drop:
+            del self._entries[uri]
+        return to_drop
+
     def resolve(self, uri: str) -> Path | None:
         """Ritorna il path effettivo: override se presente, altrimenti engine."""
         entry = self._entries.get(uri)
@@ -3655,6 +3907,325 @@ class SparkFrameworkEngine:
         self._inventory = inventory
         # v3.0: traccia URI alias deprecati gia' loggati per evitare spam.
         self._logged_alias_uris: set[str] = set()
+
+    # ------------------------------------------------------------------
+    # v3 lifecycle methods (install / update / remove store-based)
+    # ------------------------------------------------------------------
+
+    def _v3_runtime_state(self) -> tuple[ManifestManager, "McpResourceRegistry", Path]:
+        """Comodità: ritorna (manifest, registry, engine_root) del contesto attivo."""
+        manifest = ManifestManager(self._ctx.github_root)
+        registry = self._inventory.mcp_registry
+        if registry is None:
+            # Inizializzazione lazy in caso il registry non sia stato popolato.
+            registry = self._inventory.populate_mcp_registry(
+                EngineInventory().engine_manifest, {}
+            )
+        return manifest, registry, self._ctx.engine_root
+
+    def _is_github_write_authorized_v3(self) -> bool:
+        """Legge ``github_write_authorized`` dallo state file dell'orchestrator.
+
+        Wrapper minimale per i metodi v3 che vivono fuori dalla closure
+        ``register_tools`` dove la stessa logica è già inline.
+        """
+        state_path = (
+            self._ctx.github_root / "runtime" / "orchestrator-state.json"
+        )
+        if not state_path.is_file():
+            return False
+        try:
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return bool(payload.get("github_write_authorized", False))
+
+    def _v3_repopulate_registry(self) -> None:
+        """Ricostruisce il registry MCP dopo install/remove/update v3."""
+        engine_manifest = EngineInventory().engine_manifest
+        manifest = ManifestManager(self._ctx.github_root)
+        store = PackageResourceStore(self._ctx.engine_root)
+        installed = manifest.get_installed_versions()
+        package_manifests: dict[str, dict[str, Any]] = {}
+        for pkg_id in installed:
+            pkg_manifest_path = store.packages_root / pkg_id / "package-manifest.json"
+            if pkg_manifest_path.is_file():
+                try:
+                    package_manifests[pkg_id] = json.loads(
+                        pkg_manifest_path.read_text(encoding="utf-8")
+                    )
+                except (OSError, json.JSONDecodeError) as exc:
+                    _log.warning(
+                        "[SPARK-ENGINE][WARNING] Cannot reload manifest for %s: %s",
+                        pkg_id,
+                        exc,
+                    )
+        self._inventory.populate_mcp_registry(engine_manifest, package_manifests)
+
+    async def _install_package_v3(
+        self,
+        package_id: str,
+        pkg: Mapping[str, Any],
+        pkg_manifest: Mapping[str, Any],
+        pkg_version: str,
+        min_engine_version: str,
+        dependencies: list[str],
+        conflict_mode: str,
+        build_install_result: Callable[..., dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Install a v3 package into the engine store and update workspace manifest.
+
+        Args:
+            package_id: ID del pacchetto.
+            pkg: entry registry (con repo_url).
+            pkg_manifest: manifest scaricato.
+            pkg_version: versione risolta.
+            min_engine_version: versione minima dichiarata.
+            dependencies: dipendenze già validate.
+            conflict_mode: modalità conflitti propagata dal chiamante.
+            build_install_result: factory per result dict consistenti.
+
+        Returns:
+            Dict MCP-friendly con ``success`` + ``installation_mode == "v3_store"``.
+            Idempotente: re-install della stessa versione = no-op success.
+        """
+        if not self._is_github_write_authorized_v3():
+            return build_install_result(
+                False,
+                error="Writing under .github/ is not authorized in this workspace.",
+                package=package_id,
+                version=pkg_version,
+            )
+
+        manifest, registry, engine_root = self._v3_runtime_state()
+        store = PackageResourceStore(engine_root)
+        existing_entries = manifest.load()
+        # Cerchiamo entry sentinella v3_store esistente per detection idempotenza.
+        existing_v3_entry = next(
+            (
+                e
+                for e in existing_entries
+                if str(e.get("installation_mode", "")).strip() == "v3_store"
+                and str(e.get("package", "")).strip() == package_id
+            ),
+            None,
+        )
+        if (
+            existing_v3_entry is not None
+            and str(existing_v3_entry.get("package_version", "")).strip() == pkg_version
+            and (store.packages_root / package_id / "package-manifest.json").is_file()
+        ):
+            _log.info(
+                "[SPARK-ENGINE][INFO] Package %s@%s already installed (v3_store).",
+                package_id,
+                pkg_version,
+            )
+            return build_install_result(
+                True,
+                package=package_id,
+                version=pkg_version,
+                installation_mode="v3_store",
+                store_path=str(store.packages_root / package_id),
+                files_installed=list(existing_v3_entry.get("files", []) or []),
+                idempotent=True,
+                message=f"Package {package_id}@{pkg_version} already installed.",
+            )
+
+        # Scarichiamo i file nello store. In caso di errore non scriviamo nulla.
+        store_result = _install_package_v3_into_store(
+            engine_root=engine_root,
+            package_id=package_id,
+            pkg=pkg,
+            pkg_manifest=pkg_manifest,
+            fetch_raw_file=RegistryClient(self._ctx.github_root).fetch_raw_file,
+        )
+        if not store_result["success"]:
+            return build_install_result(
+                False,
+                error="Cannot fetch v3 package files: " + "; ".join(store_result["errors"]),
+                package=package_id,
+                version=pkg_version,
+                installation_mode="v3_store",
+                store_path=store_result.get("store_path"),
+            )
+
+        # Aggiorniamo il manifest workspace con la sola entry sentinella v3_store.
+        new_entries = [
+            e
+            for e in existing_entries
+            if not (
+                str(e.get("installation_mode", "")).strip() == "v3_store"
+                and str(e.get("package", "")).strip() == package_id
+            )
+        ]
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_entries.append(
+            {
+                "file": _v3_store_sentinel_file(package_id),
+                "package": package_id,
+                "package_version": pkg_version,
+                "min_engine_version": min_engine_version,
+                "installed_at": now,
+                "installation_mode": "v3_store",
+                "store_path": store_result["store_path"],
+                "files": store_result["files"],
+                "dependencies": list(dependencies),
+            }
+        )
+        manifest.save(new_entries)
+
+        # Re-popoliamo il registry MCP per esporre subito le risorse
+        # del pacchetto appena installato (idempotente).
+        self._v3_repopulate_registry()
+
+        # Rigeneriamo gli asset Phase 6 (AGENTS.md, AGENTS-{pkg}.md, ecc.).
+        try:
+            installed_ids = list(manifest.get_installed_versions().keys())
+            phase6_report = _apply_phase6_assets(
+                self._ctx.workspace_root,
+                self._ctx.engine_root,
+                installed_ids,
+                github_write_authorized=True,
+            )
+        except OSError as exc:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] Phase 6 regeneration after v3 install failed: %s",
+                exc,
+            )
+            phase6_report = {"error": str(exc)}
+
+        return build_install_result(
+            True,
+            package=package_id,
+            version=pkg_version,
+            installation_mode="v3_store",
+            store_path=store_result["store_path"],
+            files_installed=store_result["files"],
+            phase6_report=phase6_report,
+            conflict_mode=conflict_mode,
+        )
+
+    async def _remove_package_v3(
+        self,
+        package_id: str,
+        manifest: ManifestManager,
+        v3_entry: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Rimuove un pacchetto v3 dallo store + manifest + registry.
+
+        Args:
+            package_id: ID del pacchetto.
+            manifest: ManifestManager attivo.
+            v3_entry: entry sentinella v3_store letta dal manifest.
+
+        Returns:
+            Dict con ``success``, ``removed_files``, ``orphan_overrides``,
+            ``store_path`` e report Phase 6.
+        """
+        registry = self._inventory.mcp_registry
+        # Lista override orfani PRIMA di toccare il registry, così possiamo
+        # restituire all'utente i path pertinenti.
+        orphan_overrides = _list_orphan_overrides_for_package(registry, package_id)
+
+        # Rimuoviamo dallo store fisico.
+        store_result = _remove_package_v3_from_store(self._ctx.engine_root, package_id)
+
+        # Rimuoviamo manualmente la sola entry v3 dal manifest (le legacy
+        # remain intoccate nel caso esistessero, ma per v3 puro non esistono).
+        entries = manifest.load()
+        remaining = [
+            e
+            for e in entries
+            if not (
+                str(e.get("installation_mode", "")).strip() == "v3_store"
+                and str(e.get("package", "")).strip() == package_id
+            )
+        ]
+        manifest.save(remaining)
+
+        # Deregistra le URI del pacchetto dal registry MCP.
+        unregistered = registry.unregister_package(package_id)
+
+        # Re-popoliamo per garantire stato consistente con altri pacchetti.
+        self._v3_repopulate_registry()
+
+        # Phase 6 regen senza il pacchetto.
+        installed_ids = list(manifest.get_installed_versions().keys())
+        try:
+            phase6_report = _apply_phase6_assets(
+                self._ctx.workspace_root,
+                self._ctx.engine_root,
+                installed_ids,
+                github_write_authorized=self._is_github_write_authorized_v3(),
+            )
+        except OSError as exc:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] Phase 6 regeneration after v3 remove failed: %s",
+                exc,
+            )
+            phase6_report = {"error": str(exc)}
+
+        return {
+            "success": True,
+            "package": package_id,
+            "installation_mode": "v3_store",
+            "store_path": store_result.get("store_path"),
+            "store_removed": store_result.get("removed", False),
+            "files_removed_from_manifest": list(v3_entry.get("files", []) or []),
+            "registry_uris_unregistered": unregistered,
+            "orphan_overrides": orphan_overrides,
+            "phase6_report": phase6_report,
+        }
+
+    async def _update_package_v3(
+        self,
+        package_id: str,
+        pkg: Mapping[str, Any],
+        pkg_manifest: Mapping[str, Any],
+        pkg_version: str,
+        min_engine_version: str,
+        dependencies: list[str],
+        conflict_mode: str,
+        build_install_result: Callable[..., dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Aggiorna un pacchetto v3 nello store, preservando gli override workspace.
+
+        Args:
+            stessi argomenti di ``_install_package_v3``.
+
+        Returns:
+            Dict con ``success``, ``override_blocked`` (lista URI risorse non
+            sovrascritte) e ``files_updated``.
+        """
+        registry = self._inventory.mcp_registry
+        # Re-popoliamo per allineare il registry con eventuali override
+        # workspace creati dopo l'install (necessario per has_override()).
+        self._v3_repopulate_registry()
+        registry = self._inventory.mcp_registry
+        # Risorse con override attivo: NON le sovrascriveremo nello store?
+        # NOTA: nello v3 store le risorse del pacchetto sono "canoniche".
+        # L'override workspace ha priorità di lettura via McpResourceRegistry,
+        # quindi anche aggiornando lo store l'utente continua a vedere il
+        # proprio override. Mantenere lo store aggiornato è corretto e
+        # raccomandato. Riportiamo comunque all'utente la lista override
+        # bloccanti come informazione diagnostica.
+        override_blocked = _v3_overrides_blocking_update(registry, package_id, pkg_manifest)
+
+        # Riusiamo il path di install (idempotente: se versione uguale → no-op).
+        result = await self._install_package_v3(
+            package_id=package_id,
+            pkg=pkg,
+            pkg_manifest=pkg_manifest,
+            pkg_version=pkg_version,
+            min_engine_version=min_engine_version,
+            dependencies=dependencies,
+            conflict_mode=conflict_mode,
+            build_install_result=build_install_result,
+        )
+        if isinstance(result, dict):
+            result["override_blocked"] = override_blocked
+            result["update_mode"] = "v3_store"
+        return result
 
     def register_resources(self) -> None:
         """Register all MCP resources.
@@ -5213,6 +5784,27 @@ class SparkFrameworkEngine:
                     installed_packages=installed_versions,
                 )
 
+            # Branch v3 lifecycle: pacchetti che dichiarano min_engine_version
+            # >= 3.0.0 vengono installati nello store engine, non in workspace.
+            if _is_v3_package(pkg_manifest):
+                return await self._install_package_v3(
+                    package_id=package_id,
+                    pkg=pkg,
+                    pkg_manifest=pkg_manifest,
+                    pkg_version=pkg_version,
+                    min_engine_version=min_engine_version,
+                    dependencies=install_context["dependencies"],
+                    conflict_mode=conflict_mode,
+                    build_install_result=_build_install_result,
+                )
+            # Pacchetti legacy (< 3.0.0): warning su stderr e flusso v2 invariato.
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] Package %s declares min_engine_version=%s; "
+                "using legacy v2 file-copy install flow.",
+                package_id,
+                min_engine_version or "<unspecified>",
+            )
+
             try:
                 classification_report = _classify_install_files(
                     package_id,
@@ -5936,6 +6528,53 @@ class SparkFrameworkEngine:
                 }
 
             version_from = installed_versions[package_id]
+            # Branch v3: rileviamo subito se il pacchetto installato è v3_store
+            # e in tal caso instradiamo allo handler dedicato senza passare
+            # per il plan v2 (che assume scritture in workspace/.github/).
+            existing_entries = manifest.load()
+            v3_entry = next(
+                (
+                    e
+                    for e in existing_entries
+                    if str(e.get("installation_mode", "")).strip() == "v3_store"
+                    and str(e.get("package", "")).strip() == package_id
+                ),
+                None,
+            )
+            if v3_entry is not None:
+                install_context = _get_package_install_context(package_id)
+                if install_context.get("success") is False:
+                    return install_context
+                pkg_manifest_remote = install_context["pkg_manifest"]
+                if not _is_v3_package(pkg_manifest_remote):
+                    return {
+                        "success": False,
+                        "package": package_id,
+                        "error": (
+                            f"Package '{package_id}' is locally installed as v3_store "
+                            "but the registry version declares min_engine_version<3.0.0. "
+                            "Mixed flows are not supported."
+                        ),
+                    }
+                v3_result = await self._update_package_v3(
+                    package_id=package_id,
+                    pkg=install_context["pkg"],
+                    pkg_manifest=pkg_manifest_remote,
+                    pkg_version=install_context["pkg_version"],
+                    min_engine_version=install_context["min_engine_version"],
+                    dependencies=install_context["dependencies"],
+                    conflict_mode=conflict_mode,
+                    build_install_result=_build_install_result,
+                )
+                if isinstance(v3_result, dict):
+                    v3_result.setdefault("version_from", version_from)
+                    v3_result.setdefault("version_to", install_context["pkg_version"])
+                    v3_result.setdefault(
+                        "already_up_to_date",
+                        bool(v3_result.get("idempotent", False)),
+                    )
+                return v3_result
+
             migration_state = _detect_workspace_migration_state()
             if (
                 migration_state["legacy_workspace"]
@@ -6461,6 +7100,30 @@ class SparkFrameworkEngine:
                     ),
                     "package": package_id,
                 }
+            # Branch v3: se l'entry installation_mode è v3_store usiamo
+            # il path dedicato che pulisce store + registry + manifest.
+            existing_entries = manifest.load()
+            v3_entry = next(
+                (
+                    e
+                    for e in existing_entries
+                    if str(e.get("installation_mode", "")).strip() == "v3_store"
+                    and str(e.get("package", "")).strip() == package_id
+                ),
+                None,
+            )
+            if v3_entry is not None:
+                v3_result = await self._remove_package_v3(
+                    package_id=package_id,
+                    manifest=manifest,
+                    v3_entry=v3_entry,
+                )
+                # Cleanup snapshot legacy se presenti (es. ex pacchetti v2).
+                deleted_snapshots = snapshots.delete_package_snapshots(package_id)
+                if isinstance(v3_result, dict):
+                    v3_result["deleted_snapshots"] = deleted_snapshots
+                    v3_result.setdefault("preserved_user_modified", [])
+                return v3_result
             preserved = manifest.remove_package(package_id)
             deleted_snapshots = snapshots.delete_package_snapshots(package_id)
             return {

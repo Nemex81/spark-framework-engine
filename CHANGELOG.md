@@ -6,6 +6,37 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **v3-aware package lifecycle (Fase 9).** I tool `scf_install_package`,
+  `scf_update_package` e `scf_remove_package` ora rilevano i pacchetti
+  v3 (con `min_engine_version >= 3.0.0`) e li installano nel store
+  centralizzato `engine_dir/packages/{pkg_id}/.github/` invece che in
+  `workspace/.github/`. La install registra una entry sentinella
+  `installation_mode: "v3_store"` nel manifest workspace e popola
+  `McpResourceRegistry` live; remove deregistra le URI e cancella lo
+  store ma preserva sempre gli override workspace; update riusa la
+  install idempotente e segnala via `override_blocked` quali risorse
+  hanno un override workspace attivo.
+- Nuovi helper interni `_is_v3_package()`, `_install_package_v3_into_store()`,
+  `_remove_package_v3_from_store()`, `_list_orphan_overrides_for_package()`,
+  `_v3_overrides_blocking_update()`, `McpResourceRegistry.unregister()` e
+  `McpResourceRegistry.unregister_package()`.
+- Nuova suite test `tests/test_package_lifecycle_v3.py` (10 test) che
+  copre install/update/remove v3 + retrocompat v2.
+
+### Changed
+
+- `ManifestManager.verify_integrity()` e `ManifestManager.remove_package()`
+  ora ignorano le entry sentinella v3 (`installation_mode == "v3_store"`),
+  evitando lookup falliti su path workspace.
+- I pacchetti legacy con `min_engine_version < 3.0.0` continuano a usare
+  il flusso v2 (copia file in workspace) con un warning su stderr.
+
+---
+
 ## [3.0.0] - 2026-04-28
 
 ### Added

@@ -9,11 +9,10 @@
 
 ## Stato Sessione Corrente (v3.0.0)
 
-- Fase attiva: **TUTTE LE FASI 0-8 COMPLETATE** — 2026-04-28
-- Engine bumped a 3.0.0; suite test 272 passed.
-- Smoke test manuali Copilot DEFERRED a `docs/SMOKE-TEST-COPILOT-v3.md`
-  (richiedono UI Copilot, non eseguibili da agente automatico).
-- Tag git proposto (NON eseguito): `git tag -a v3.0.0 -m "..."`
+- Fase attiva: **FASE 9** — Ciclo install/update/remove v3-aware
+- Fasi 0-8: completate il 2026-04-28 (272 test verdi).
+- Smoke test manuali Copilot DEFERRED a `docs/SMOKE-TEST-COPILOT-v3.md`.
+- Fase 9 → [PHASE-9-package-lifecycle-v3.todo.md](todolist/PHASE-9-package-lifecycle-v3.todo.md)
 
 ## Fasi Completate (v3.0.0)
 
@@ -29,7 +28,7 @@
 
 ## Fasi in Corso (v3.0.0)
 
-- (nessuna)
+- [ ] FASE 9 → [PHASE-9-package-lifecycle-v3.todo.md](todolist/PHASE-9-package-lifecycle-v3.todo.md)
 
 ## Fasi in Attesa (v3.0.0)
 
