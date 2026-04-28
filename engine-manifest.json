@@ -1,0 +1,88 @@
+{
+  "schema_version": "3.0",
+  "package": "spark-framework-engine",
+  "version": "3.0.0",
+  "display_name": "SPARK Framework Engine",
+  "description": "Motore MCP universale del SPARK Code Framework. Espone risorse engine-proprie (agenti onboarding/maintenance, instruction MCP-only) non appartenenti a nessun pacchetto installato.",
+  "author": "Nemex81",
+  "min_engine_version": "3.0.0",
+  "workspace_files": [
+    ".github/instructions/framework-guard.instructions.md",
+    ".github/instructions/personality.instructions.md",
+    ".github/instructions/verbosity.instructions.md",
+    ".github/instructions/workflow-standard.instructions.md",
+    ".github/instructions/git-policy.instructions.md",
+    ".github/instructions/model-policy.instructions.md"
+  ],
+  "mcp_resources": {
+    "agents": [
+      "spark-assistant",
+      "spark-engine-maintainer",
+      "spark-guide",
+      "spark-welcome"
+    ],
+    "instructions": [
+      "spark-assistant-guide",
+      "spark-engine-maintenance",
+      "project-reset"
+    ],
+    "prompts": [],
+    "skills": []
+  },
+  "files_metadata": [
+    {
+      "path": ".github/instructions/framework-guard.instructions.md",
+      "scf_owner": "spark-framework-engine",
+      "scf_version": "engine-managed",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 0,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/personality.instructions.md",
+      "scf_owner": "spark-framework-engine",
+      "scf_version": "engine-managed",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 0,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/verbosity.instructions.md",
+      "scf_owner": "spark-framework-engine",
+      "scf_version": "engine-managed",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 0,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/workflow-standard.instructions.md",
+      "scf_owner": "spark-framework-engine",
+      "scf_version": "engine-managed",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 0,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/git-policy.instructions.md",
+      "scf_owner": "spark-framework-engine",
+      "scf_version": "engine-managed",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 0,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/model-policy.instructions.md",
+      "scf_owner": "spark-framework-engine",
+      "scf_version": "engine-managed",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 0,
+      "scf_protected": false
+    }
+  ]
+}

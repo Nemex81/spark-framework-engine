@@ -8,16 +8,16 @@ _CHANGELOG = Path(__file__).parent.parent / "CHANGELOG.md"
 
 def test_tool_counter_consistency():
     """
-    Conta i decorator @self._mcp.tool( nel sorgente via regex,
+    Conta i decorator @_register_tool( nel sorgente via regex,
     estrae il valore nel commento Tools (N) e nel log Tools registered: N total,
     e asserisce che i tre numeri coincidano.
 
-    NOTA: il pattern usa @self._mcp.tool( senza la parentesi chiusa
-    per catturare sia @self._mcp.tool() che @self._mcp.tool(name="...").
+    NOTA: a partire da v3.0 il pattern di registrazione tool usa
+    l'helper @_register_tool("name") invece di @self._mcp.tool diretto.
     """
     source = _SOURCE.read_text(encoding="utf-8")
 
-    actual = len(re.findall(r"@self\._mcp\.tool\(", source))
+    actual = len(re.findall(r"@_register_tool\(", source))
 
     comment_match = re.search(r"Tools \((\d+)\)", source)
     log_match = re.search(r"Tools registered: (\d+) total", source)

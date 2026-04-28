@@ -8,13 +8,13 @@
 
 ## Prerequisiti
 
-- [ ] Fase 1 completata
-- [ ] `engine-manifest.json` presente e validato
-- [ ] Tutti i package-manifest a schema 3.0
+- [x] Fase 1 completata
+- [x] `engine-manifest.json` presente e validato
+- [x] Tutti i package-manifest a schema 3.0
 
 ## Task
 
-- [ ] 2.1 Implementare `PackageResourceStore`
+- [x] 2.1 Implementare `PackageResourceStore`
       File: `spark-framework-engine.py`
       Punto di inserimento: dopo `RegistryClient` (riga 2277),
       prima di `class SparkFrameworkEngine` (riga 2389).
@@ -25,7 +25,7 @@
               `has_workspace_override(workspace, type, name) -> bool`.
       Path base: `engine_dir/packages/{package_id}/.github/{type}/`.
 
-- [ ] 2.2 Implementare `McpResourceRegistry`
+- [x] 2.2 Implementare `McpResourceRegistry`
       File: `spark-framework-engine.py`
       Punto di inserimento: subito dopo `PackageResourceStore`.
       Struttura interna: dict URI → {engine: Path, override: Path | None,
@@ -37,43 +37,43 @@
               `list_by_type(resource_type) -> list[str]`,
               `has_override(uri) -> bool`.
 
-- [ ] 2.3 Estendere `FrameworkInventory.__init__` per popolare
+- [x] 2.3 Estendere `FrameworkInventory.__init__` per popolare
       `McpResourceRegistry` al boot
       File: `spark-framework-engine.py`
       Riga partenza: 1144.
       Logica: itera engine-manifest + package manifests, per ogni
       risorsa chiama `registry.register(uri, path, package, type)`.
 
-- [ ] 2.4 Aggiungere scan di `.github/overrides/` in
+- [x] 2.4 Aggiungere scan di `.github/overrides/` in
       `FrameworkInventory`
       File: `spark-framework-engine.py`
       Logica: dopo registrazione engine + pacchetti, scan
       `workspace/.github/overrides/{type}/*.md` e chiama
       `registry.register_override(uri, path)`.
 
-- [ ] 2.5 Test PackageResourceStore
+- [x] 2.5 Test PackageResourceStore
       File: `tests/test_resource_store.py`
       Casi: resolve corretto, list_resources, integrity check con
       file modificato.
 
-- [ ] 2.6 Test McpResourceRegistry
+- [x] 2.6 Test McpResourceRegistry
       File: `tests/test_resource_registry.py`
       Casi: register + resolve, override priority, has_override,
       list_by_type, resolve_engine.
 
-- [ ] 2.7 Test integrazione FrameworkInventory boot
+- [x] 2.7 Test integrazione FrameworkInventory boot
       File: `tests/test_engine_inventory.py` (estendere)
       Verifica registry popolata correttamente con
       engine-manifest + 3 pacchetti.
 
 ## Test di accettazione
 
-- [ ] `PackageResourceStore.resolve("scf-master-codecrafter",
+- [x] `PackageResourceStore.resolve("scf-master-codecrafter",
       "agents", "code-Agent-Code")` ritorna Path esistente.
-- [ ] `McpResourceRegistry.resolve("agents://code-Agent-Code")`
+- [x] `McpResourceRegistry.resolve("agents://code-Agent-Code")`
       ritorna engine path se nessun override.
-- [ ] Dopo `register_override`, `resolve` ritorna override path.
-- [ ] `verify_integrity` rileva SHA mismatch su file modificato.
+- [x] Dopo `register_override`, `resolve` ritorna override path.
+- [x] `verify_integrity` rileva SHA mismatch su file modificato.
 
 ## Note tecniche
 

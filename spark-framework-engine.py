@@ -15,14 +15,16 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import urllib.error
 import urllib.request
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, ClassVar
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -458,6 +460,83 @@ def _write_update_policy_payload(github_root: Path, payload: dict[str, Any]) -> 
 class WorkspaceLocator:
     """Resolve the active workspace using env, local config and SCF markers."""
 
+    OVERRIDE_RESOURCE_TYPES: ClassVar[tuple[str, ...]] = (
+        "agents",
+        "prompts",
+        "skills",
+        "instructions",
+    )
+
+    @staticmethod
+    def get_engine_cache_dir(engine_dir: Path) -> Path:
+        """Return a writable cache directory for the engine.
+
+        Prefer ``engine_dir/cache/``; fall back to a per-user location
+        (``%APPDATA%\\spark-engine\\cache`` on Windows, ``~/.cache/spark-engine``
+        otherwise) when the engine directory is not writable.
+        Creates the directory if missing.
+        """
+        primary = engine_dir / "cache"
+        try:
+            primary.mkdir(parents=True, exist_ok=True)
+            probe = primary / ".write-probe"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            return primary
+        except OSError:
+            _log.warning(
+                "Engine cache dir not writable (%s); using per-user fallback",
+                primary,
+            )
+
+        if os.name == "nt":
+            base_str = os.environ.get("APPDATA") or os.path.expanduser("~")
+            fallback = Path(base_str) / "spark-engine" / "cache"
+        else:
+            fallback = Path(os.path.expanduser("~/.cache/spark-engine"))
+
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+    @staticmethod
+    def get_override_dir(
+        workspace: Path,
+        resource_type: str,
+        github_write_authorized: bool = True,
+    ) -> Path:
+        """Return ``workspace/.github/overrides/{resource_type}/``.
+
+        Creates the directory only when ``github_write_authorized`` is True.
+        Raises ValueError on unknown resource types.
+        """
+        if resource_type not in WorkspaceLocator.OVERRIDE_RESOURCE_TYPES:
+            raise ValueError(
+                f"Unknown override resource type: {resource_type!r}"
+            )
+        target = workspace / ".github" / "overrides" / resource_type
+        if github_write_authorized:
+            target.mkdir(parents=True, exist_ok=True)
+        return target
+
+    @staticmethod
+    def _parse_workspace_flag(argv: list[str] | None = None) -> str | None:
+        """Return the value of ``--workspace`` from argv if present.
+
+        Accepts ``--workspace VALUE`` or ``--workspace=VALUE``.
+        """
+        args = list(sys.argv[1:] if argv is None else argv)
+        i = 0
+        while i < len(args):
+            token = args[i]
+            if token == "--workspace":
+                if i + 1 < len(args):
+                    return args[i + 1]
+                return None
+            if token.startswith("--workspace="):
+                return token.split("=", 1)[1]
+            i += 1
+        return None
+
     _SCF_MARKER_FILES: tuple[str, ...] = (
         "project-profile.md",
         "copilot-instructions.md",
@@ -513,8 +592,23 @@ class WorkspaceLocator:
         return None
 
     def resolve(self) -> WorkspaceContext:
-        workspace_root_str: str | None = os.environ.get("WORKSPACE_FOLDER")
         workspace_root: Path | None = None
+
+        cli_value = self._parse_workspace_flag()
+        if cli_value:
+            cli_candidate = Path(cli_value).expanduser().resolve()
+            if not cli_candidate.is_dir():
+                _log.warning(
+                    "Ignoring --workspace because it is not a directory: %s",
+                    cli_candidate,
+                )
+            else:
+                workspace_root = cli_candidate
+                _log.info("Workspace resolved via --workspace: %s", workspace_root)
+
+        workspace_root_str: str | None = (
+            None if workspace_root is not None else os.environ.get("WORKSPACE_FOLDER")
+        )
 
         if workspace_root_str:
             candidate = Path(workspace_root_str).expanduser().resolve()
@@ -1146,6 +1240,144 @@ class FrameworkInventory:
 
     def __init__(self, context: WorkspaceContext) -> None:
         self._ctx = context
+        # mcp_registry / resource_store sono popolati on-demand da
+        # populate_mcp_registry(); rimangono None fino a quel momento per
+        # mantenere il costo del costruttore minimo (compatibilità v2.x).
+        self.mcp_registry: McpResourceRegistry | None = None
+        self.resource_store: PackageResourceStore | None = None
+
+    def populate_mcp_registry(
+        self,
+        engine_manifest: Mapping[str, Any] | None = None,
+        package_manifests: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> "McpResourceRegistry":
+        """Costruisce e popola ``self.mcp_registry`` con risorse engine + pacchetti.
+
+        Parametri:
+            engine_manifest: contenuto di ``engine-manifest.json`` (engine root).
+            package_manifests: dict ``{package_id: manifest_dict}`` per i
+                pacchetti i cui file vivono nel deposito centralizzato
+                ``engine_dir/packages/{pkg}/.github/...``.
+
+        Dopo aver registrato le risorse engine+pacchetti, esegue uno scan
+        di ``workspace/.github/overrides/{type}/`` e applica gli override
+        trovati al registry.
+        """
+        registry = McpResourceRegistry()
+        store = PackageResourceStore(self._ctx.engine_root)
+        self.mcp_registry = registry
+        self.resource_store = store
+
+        # 1) Risorse engine-proprie (engine-manifest.json)
+        if engine_manifest:
+            self._register_engine_resources(registry, engine_manifest)
+
+        # 2) Risorse dei pacchetti (deposito centralizzato)
+        if package_manifests:
+            for package_id, manifest in package_manifests.items():
+                self._register_package_resources(
+                    registry, store, package_id, manifest
+                )
+
+        # 3) Override del workspace
+        self._scan_workspace_overrides(registry)
+
+        return registry
+
+    def _register_engine_resources(
+        self,
+        registry: "McpResourceRegistry",
+        engine_manifest: Mapping[str, Any],
+    ) -> None:
+        engine_root = self._ctx.engine_root
+        resources = engine_manifest.get("mcp_resources") or {}
+        if not isinstance(resources, Mapping):
+            return
+        package_id = str(engine_manifest.get("package", "spark-framework-engine"))
+        for resource_type in _RESOURCE_TYPES:
+            names = resources.get(resource_type) or []
+            if not isinstance(names, list):
+                continue
+            for name in names:
+                path = self._find_engine_resource_path(
+                    engine_root, resource_type, str(name)
+                )
+                if path is None:
+                    continue
+                uri = McpResourceRegistry.make_uri(resource_type, str(name))
+                registry.register(uri, path, package_id, resource_type)
+
+    def _find_engine_resource_path(
+        self, engine_root: Path, resource_type: str, name: str
+    ) -> Path | None:
+        base = engine_root / ".github" / resource_type
+        if not base.is_dir():
+            return None
+        for candidate in _resource_filename_candidates(resource_type, name):
+            target = base / candidate
+            if target.is_file():
+                return target.resolve()
+        return None
+
+    def _register_package_resources(
+        self,
+        registry: "McpResourceRegistry",
+        store: "PackageResourceStore",
+        package_id: str,
+        manifest: Mapping[str, Any],
+    ) -> None:
+        resources = manifest.get("mcp_resources") or {}
+        if not isinstance(resources, Mapping):
+            return
+        for resource_type in _RESOURCE_TYPES:
+            names = resources.get(resource_type) or []
+            if not isinstance(names, list):
+                continue
+            for name in names:
+                path = store.resolve(package_id, resource_type, str(name))
+                if path is None:
+                    continue
+                uri = McpResourceRegistry.make_uri(resource_type, str(name))
+                registry.register(uri, path, package_id, resource_type)
+
+    def _scan_workspace_overrides(self, registry: "McpResourceRegistry") -> None:
+        overrides_root = self._ctx.github_root / "overrides"
+        if not overrides_root.is_dir():
+            return
+        for resource_type in _RESOURCE_TYPES:
+            type_dir = overrides_root / resource_type
+            if not type_dir.is_dir():
+                continue
+            for child in type_dir.iterdir():
+                name = self._override_name_from_path(resource_type, child)
+                if name is None:
+                    continue
+                uri = McpResourceRegistry.make_uri(resource_type, name)
+                registry.register_override(uri, child)
+
+    @staticmethod
+    def _override_name_from_path(resource_type: str, path: Path) -> str | None:
+        if resource_type == "agents":
+            if path.is_file() and path.name.endswith(".agent.md"):
+                return path.name[: -len(".agent.md")]
+            if path.is_file() and path.name.endswith(".md"):
+                return path.name[: -len(".md")]
+            return None
+        if resource_type == "prompts":
+            if path.is_file() and path.name.endswith(".prompt.md"):
+                return path.name[: -len(".prompt.md")]
+            return None
+        if resource_type == "instructions":
+            if path.is_file() and path.name.endswith(".instructions.md"):
+                return path.name[: -len(".instructions.md")]
+            return None
+        if resource_type == "skills":
+            if path.is_file() and path.name.endswith(".skill.md"):
+                return path.name[: -len(".skill.md")]
+            if path.is_dir() and (path / "SKILL.md").is_file():
+                return path.name
+            return None
+        return None
 
     def _build_framework_file(self, path: Path, category: str) -> FrameworkFile:
         name = path.stem
@@ -1313,7 +1545,15 @@ class EngineInventory(FrameworkInventory):
     resource URIs (``engine-skills://``, ``engine-instructions://``). Unlike
     :class:`FrameworkInventory`, this inventory does NOT read from the user
     workspace: it reads from ``Path(__file__).resolve().parent / ".github"``.
+
+    Starting with engine v3.0 it also loads ``engine-manifest.json`` from the
+    engine root (next to ``spark-framework-engine.py``) and exposes its
+    contents via :attr:`engine_manifest`. The manifest declares the engine's
+    own ``workspace_files`` (Copilot-loaded instructions) and ``mcp_resources``
+    (MCP-only agents/instructions/prompts/skills owned by the engine itself).
     """
+
+    ENGINE_MANIFEST_FILENAME: ClassVar[str] = "engine-manifest.json"
 
     def __init__(self) -> None:  # noqa: D401 - simple override
         engine_root = Path(__file__).resolve().parent
@@ -1324,6 +1564,53 @@ class EngineInventory(FrameworkInventory):
             engine_root=engine_root,
         )
         super().__init__(synthetic_ctx)
+        self.engine_manifest: dict[str, Any] = self._load_engine_manifest(engine_root)
+
+    def _load_engine_manifest(self, engine_root: Path) -> dict[str, Any]:
+        """Load ``engine-manifest.json`` from the engine root.
+
+        Returns an empty dict (with a logged warning) when the file is
+        missing or unreadable, so the engine can still boot during the
+        v2.x → v3.0 migration window.
+        """
+        manifest_path = engine_root / self.ENGINE_MANIFEST_FILENAME
+        if not manifest_path.is_file():
+            _log.warning(
+                "engine-manifest.json non trovato in %s — fallback a manifest vuoto",
+                engine_root,
+            )
+            return {}
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            _log.warning(
+                "Impossibile leggere engine-manifest.json (%s): %s",
+                manifest_path, exc,
+            )
+            return {}
+        if not isinstance(data, dict):
+            _log.warning(
+                "engine-manifest.json non è un oggetto JSON: %s",
+                type(data).__name__,
+            )
+            return {}
+        return data
+
+    def get_engine_workspace_files(self) -> list[str]:
+        """Return the list of engine-owned workspace files (Copilot-loaded)."""
+        files = self.engine_manifest.get("workspace_files", [])
+        return [str(f) for f in files] if isinstance(files, list) else []
+
+    def get_engine_mcp_resources(self) -> dict[str, list[str]]:
+        """Return the engine-owned MCP resource lists by type."""
+        resources = self.engine_manifest.get("mcp_resources", {})
+        if not isinstance(resources, dict):
+            return {"agents": [], "instructions": [], "prompts": [], "skills": []}
+        out: dict[str, list[str]] = {}
+        for key in ("agents", "instructions", "prompts", "skills"):
+            value = resources.get(key, [])
+            out[key] = [str(v) for v in value] if isinstance(value, list) else []
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -1835,6 +2122,75 @@ class ManifestManager:
             if str(entry.get("package", "")).strip()
         )
 
+    # ------------------------------------------------------------------
+    # Override management (v3.0)
+    # ------------------------------------------------------------------
+
+    def _override_path(self, resource_type: str, name: str) -> Path:
+        from_map = {
+            "agents": f"{name}.agent.md",
+            "prompts": f"{name}.prompt.md",
+            "instructions": f"{name}.instructions.md",
+            "skills": f"{name}.skill.md",
+        }
+        filename = from_map.get(resource_type)
+        if filename is None:
+            raise ValueError(f"Tipo risorsa non supportato: {resource_type}")
+        return self._github_root / "overrides" / resource_type / filename
+
+    def write_override(
+        self,
+        resource_type: str,
+        name: str,
+        content: str,
+    ) -> Path:
+        """Scrive un override workspace e registra l'entry nel manifest.
+
+        Lancia ``ValueError`` se ``resource_type`` non e' supportato.
+        Lancia ``OSError`` se la scrittura fallisce.
+        """
+        target = self._override_path(resource_type, name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        rel = target.relative_to(self._github_root).as_posix()
+        sha = _sha256_text(content)
+        entries = self.load()
+        entries = [e for e in entries if e.get("file") != rel]
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        entries.append({
+            "file": rel,
+            "package": "__workspace_override__",
+            "package_version": "0.0.0",
+            "installed_at": now,
+            "sha256": sha,
+            "scf_merge_strategy": "single_owner",
+            "scf_owner": "__workspace_override__",
+            "override_type": resource_type,
+            "override_name": name,
+        })
+        self.save(entries)
+        return target
+
+    def drop_override(self, resource_type: str, name: str) -> bool:
+        """Rimuove un override workspace e relativa entry manifest.
+
+        Ritorna ``True`` se il file e' stato rimosso, ``False`` se assente.
+        """
+        target = self._override_path(resource_type, name)
+        rel = target.relative_to(self._github_root).as_posix()
+        existed = target.is_file()
+        if existed:
+            try:
+                target.unlink()
+            except OSError as exc:
+                _log.warning("Impossibile rimuovere override %s: %s", target, exc)
+                raise
+        entries = self.load()
+        new_entries = [e for e in entries if e.get("file") != rel]
+        if len(new_entries) != len(entries):
+            self.save(new_entries)
+        return existed
+
 
 class SnapshotManager:
     """Manage UTF-8 BASE snapshots stored under .github/runtime/snapshots/."""
@@ -2282,10 +2638,21 @@ class RegistryClient:
     no silent attempt is ever made on private raw URLs.
     """
 
-    def __init__(self, github_root: Path, registry_url: str = _REGISTRY_URL) -> None:
+    def __init__(
+        self,
+        github_root: Path,
+        registry_url: str = _REGISTRY_URL,
+        cache_path: Path | None = None,
+    ) -> None:
         self._github_root = github_root
         self._registry_url = registry_url
-        self._cache_path = github_root / _REGISTRY_CACHE_FILENAME
+        # v3.0: prefer engine-central cache when caller supplies one.
+        # Legacy default kept for back-compat with v2.x callers and tests.
+        self._cache_path = (
+            cache_path
+            if cache_path is not None
+            else github_root / _REGISTRY_CACHE_FILENAME
+        )
 
     def fetch(self) -> dict[str, Any]:
         """Return registry data, falling back to cache on network failure.
@@ -2382,7 +2749,528 @@ class RegistryClient:
 
 
 # ---------------------------------------------------------------------------
-# SparkFrameworkEngine — Resources (15) and Tools (35)
+# Migration v2.x -> v3.0 helpers (Phase 0 - scf_migrate_workspace)
+# ---------------------------------------------------------------------------
+
+
+_V2_MIGRATION_KEEP_DIRS: tuple[str, ...] = (
+    "instructions",
+    "runtime",
+)
+_V2_MIGRATION_KEEP_FILES: tuple[str, ...] = (
+    "copilot-instructions.md",
+    "project-profile.md",
+    ".scf-manifest.json",
+    "AGENTS.md",  # legacy index, kept invariata in v3.0 baseline
+)
+_V2_MIGRATION_OVERRIDE_DIRS: tuple[str, ...] = (
+    "agents",
+    "prompts",
+    "skills",
+)
+_V2_MIGRATION_DELETE_FILES: tuple[str, ...] = (
+    ".scf-registry-cache.json",
+)
+_V2_MIGRATION_DELETE_PATTERNS: tuple[str, ...] = (
+    "AGENTS-",  # AGENTS-{plugin}.md generated files
+    "FRAMEWORK_CHANGELOG.md",
+)
+
+
+def _classify_v2_workspace_file(rel_path: Path) -> str:
+    """Classify a workspace file under .github/ for migration to v3.0 schema.
+
+    Args:
+        rel_path: Path relative to the workspace `.github/` directory.
+
+    Returns:
+        One of: "keep", "move_to_override", "delete", "untouched".
+    """
+    parts = rel_path.parts
+    if not parts:
+        return "untouched"
+
+    name = parts[-1]
+    top = parts[0]
+
+    if top in _V2_MIGRATION_KEEP_DIRS:
+        return "keep"
+    if name in _V2_MIGRATION_KEEP_FILES and len(parts) == 1:
+        return "keep"
+
+    if top in _V2_MIGRATION_OVERRIDE_DIRS:
+        return "move_to_override"
+
+    if name in _V2_MIGRATION_DELETE_FILES and len(parts) == 1:
+        return "delete"
+    for pattern in _V2_MIGRATION_DELETE_PATTERNS:
+        if name.startswith(pattern):
+            return "delete"
+
+    return "untouched"
+
+
+@dataclass(frozen=True)
+class MigrationPlan:
+    """Outcome of MigrationPlanner.analyze() — pure data, no side effects."""
+
+    keep: tuple[str, ...]
+    move_to_override: tuple[tuple[str, str], ...]
+    delete: tuple[str, ...]
+    untouched: tuple[str, ...]
+    cache_relocate: tuple[str, str] | None  # (src_abs, dst_abs) or None
+
+    def is_empty(self) -> bool:
+        """Return True if the plan has no actions to execute."""
+        return (
+            not self.move_to_override
+            and not self.delete
+            and self.cache_relocate is None
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Render the plan as a JSON-serialisable dict for tool responses."""
+        return {
+            "keep": list(self.keep),
+            "move_to_override": [
+                {"from": src, "to": dst} for src, dst in self.move_to_override
+            ],
+            "delete": list(self.delete),
+            "untouched": list(self.untouched),
+            "cache_relocate": (
+                {"from": self.cache_relocate[0], "to": self.cache_relocate[1]}
+                if self.cache_relocate is not None
+                else None
+            ),
+        }
+
+
+class MigrationPlanner:
+    """Plan and execute v2.x -> v3.0 workspace migration with rollback support."""
+
+    def __init__(self, workspace_root: Path, engine_cache_dir: Path | None = None) -> None:
+        self._workspace_root = workspace_root
+        self._github_root = workspace_root / ".github"
+        self._engine_cache_dir = engine_cache_dir
+
+    def analyze(self) -> MigrationPlan:
+        """Scan the workspace and build a migration plan without writing anything."""
+        if not self._github_root.is_dir():
+            return MigrationPlan(
+                keep=(),
+                move_to_override=(),
+                delete=(),
+                untouched=(),
+                cache_relocate=None,
+            )
+
+        keep: list[str] = []
+        move: list[tuple[str, str]] = []
+        delete: list[str] = []
+        untouched: list[str] = []
+
+        for entry in sorted(self._github_root.rglob("*")):
+            if not entry.is_file():
+                continue
+            try:
+                rel = entry.relative_to(self._github_root)
+            except ValueError:
+                continue
+            # skip files already inside overrides/
+            if rel.parts and rel.parts[0] == "overrides":
+                untouched.append(str(rel.as_posix()))
+                continue
+            classification = _classify_v2_workspace_file(rel)
+            rel_str = rel.as_posix()
+            if classification == "keep":
+                keep.append(rel_str)
+            elif classification == "move_to_override":
+                # map agents/X.agent.md -> overrides/agents/X.agent.md
+                target = Path("overrides") / rel
+                move.append((rel_str, target.as_posix()))
+            elif classification == "delete":
+                delete.append(rel_str)
+            else:
+                untouched.append(rel_str)
+
+        cache_relocate = self._plan_cache_relocate()
+
+        return MigrationPlan(
+            keep=tuple(keep),
+            move_to_override=tuple(move),
+            delete=tuple(delete),
+            untouched=tuple(untouched),
+            cache_relocate=cache_relocate,
+        )
+
+    def _plan_cache_relocate(self) -> tuple[str, str] | None:
+        """Plan the relocation of .scf-registry-cache.json into engine cache dir."""
+        legacy = self._workspace_root / ".scf-registry-cache.json"
+        if not legacy.is_file():
+            return None
+        if self._engine_cache_dir is None:
+            return None
+        target = self._engine_cache_dir / "registry-cache.json"
+        return (str(legacy), str(target))
+
+    def apply(self, plan: MigrationPlan) -> dict[str, Any]:
+        """Execute the migration plan with backup-based rollback on error.
+
+        Returns a dict with `executed`, `errors`, `rolled_back`, `backup_dir`.
+        """
+        if plan.is_empty():
+            return {
+                "executed": [],
+                "errors": [],
+                "rolled_back": False,
+                "backup_dir": None,
+            }
+
+        backup_dir = self._create_backup()
+        executed: list[str] = []
+        errors: list[str] = []
+
+        try:
+            # 1. Move v2 files into overrides/
+            for src_rel, dst_rel in plan.move_to_override:
+                src = self._github_root / src_rel
+                dst = self._github_root / dst_rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                src.replace(dst)
+                executed.append(f"moved: {src_rel} -> {dst_rel}")
+
+            # 2. Delete v2 generated files
+            for rel in plan.delete:
+                target = self._github_root / rel
+                if target.is_file():
+                    target.unlink()
+                    executed.append(f"deleted: {rel}")
+
+            # 3. Relocate registry cache (best effort)
+            if plan.cache_relocate is not None:
+                src_str, dst_str = plan.cache_relocate
+                src = Path(src_str)
+                dst = Path(dst_str)
+                try:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    dst.write_bytes(src.read_bytes())
+                    src.unlink()
+                    executed.append(f"cache: {src_str} -> {dst_str}")
+                except OSError as exc:
+                    _log.warning(
+                        "[SPARK-ENGINE][WARNING] cache relocate best-effort failed: %s",
+                        exc,
+                    )
+                    errors.append(f"cache_relocate_failed: {exc}")
+
+        except OSError as exc:
+            _log.error(
+                "[SPARK-ENGINE][ERROR] migration apply failed: %s; rolling back",
+                exc,
+            )
+            errors.append(str(exc))
+            self._rollback(backup_dir)
+            return {
+                "executed": executed,
+                "errors": errors,
+                "rolled_back": True,
+                "backup_dir": str(backup_dir),
+            }
+
+        return {
+            "executed": executed,
+            "errors": errors,
+            "rolled_back": False,
+            "backup_dir": str(backup_dir),
+        }
+
+    def _create_backup(self) -> Path:
+        """Create a timestamped backup of .github/ for rollback purposes."""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        backup_dir = self._workspace_root / f".github.migrate-backup-{timestamp}"
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
+        shutil.copytree(self._github_root, backup_dir)
+        return backup_dir
+
+    def _rollback(self, backup_dir: Path) -> None:
+        """Restore .github/ from backup_dir after a failed apply."""
+        if not backup_dir.is_dir():
+            _log.error(
+                "[SPARK-ENGINE][ERROR] rollback: backup dir missing %s",
+                backup_dir,
+            )
+            return
+        if self._github_root.exists():
+            shutil.rmtree(self._github_root)
+        shutil.copytree(backup_dir, self._github_root)
+
+
+# ---------------------------------------------------------------------------
+# PackageResourceStore (v3.0) — deposito centralizzato file di pacchetto
+# ---------------------------------------------------------------------------
+
+_RESOURCE_TYPES: tuple[str, ...] = ("agents", "prompts", "skills", "instructions")
+
+
+def _resource_filename_candidates(resource_type: str, name: str) -> tuple[str, ...]:
+    """Convenzioni di naming accettate per ciascun tipo risorsa."""
+    if resource_type == "agents":
+        return (f"{name}.agent.md", f"{name}.md")
+    if resource_type == "prompts":
+        return (f"{name}.prompt.md",)
+    if resource_type == "instructions":
+        return (f"{name}.instructions.md",)
+    if resource_type == "skills":
+        # Skill con file flat (.skill.md) oppure cartella con SKILL.md
+        return (f"{name}.skill.md", f"{name}/SKILL.md")
+    return (f"{name}.md",)
+
+
+class PackageResourceStore:
+    """Gestisce il deposito centralizzato dei file di pacchetto nell'engine.
+
+    Path base: ``engine_dir / "packages" / {package_id} / ".github" / {type}``.
+
+    Lo store è una classe puramente filesystem: non parla con MCP, non legge
+    manifest. È pensata per essere consultata da
+    :class:`McpResourceRegistry` e dai tool ``scf_read_resource`` /
+    ``scf_override_resource`` introdotti in Fase 3.
+
+    Durante la transizione v2.x → v3.0 il deposito può non essere popolato:
+    in tal caso :meth:`resolve` ritorna ``None`` e :meth:`list_resources`
+    ritorna lista vuota senza sollevare eccezioni.
+    """
+
+    PACKAGES_DIRNAME: ClassVar[str] = "packages"
+    OVERRIDE_DIRNAME: ClassVar[str] = "overrides"
+
+    def __init__(self, engine_dir: Path) -> None:
+        self._engine_dir: Path = Path(engine_dir).resolve()
+        self._packages_root: Path = self._engine_dir / self.PACKAGES_DIRNAME
+
+    @property
+    def engine_dir(self) -> Path:
+        return self._engine_dir
+
+    @property
+    def packages_root(self) -> Path:
+        return self._packages_root
+
+    def package_dir(self, package_id: str) -> Path:
+        """Ritorna la directory di base del pacchetto nello store."""
+        return self._packages_root / package_id / ".github"
+
+    def resolve(self, package_id: str, resource_type: str, name: str) -> Path | None:
+        """Risolve ``(package_id, type, name)`` al path fisico se presente."""
+        if resource_type not in _RESOURCE_TYPES:
+            return None
+        base = self.package_dir(package_id) / resource_type
+        if not base.is_dir():
+            return None
+        for candidate in _resource_filename_candidates(resource_type, name):
+            candidate_path = base / candidate
+            if candidate_path.is_file():
+                return candidate_path.resolve()
+        return None
+
+    def list_resources(self, package_id: str, resource_type: str) -> list[str]:
+        """Elenca i nomi (senza estensione) delle risorse di un pacchetto."""
+        if resource_type not in _RESOURCE_TYPES:
+            return []
+        base = self.package_dir(package_id) / resource_type
+        if not base.is_dir():
+            return []
+        names: set[str] = set()
+        if resource_type == "agents":
+            for child in base.iterdir():
+                if child.is_file() and child.name.endswith(".agent.md"):
+                    names.add(child.name[: -len(".agent.md")])
+                elif child.is_file() and child.name.endswith(".md"):
+                    names.add(child.name[: -len(".md")])
+        elif resource_type == "prompts":
+            for child in base.iterdir():
+                if child.is_file() and child.name.endswith(".prompt.md"):
+                    names.add(child.name[: -len(".prompt.md")])
+        elif resource_type == "instructions":
+            for child in base.iterdir():
+                if child.is_file() and child.name.endswith(".instructions.md"):
+                    names.add(child.name[: -len(".instructions.md")])
+        elif resource_type == "skills":
+            for child in base.iterdir():
+                if child.is_file() and child.name.endswith(".skill.md"):
+                    names.add(child.name[: -len(".skill.md")])
+                elif child.is_dir() and (child / "SKILL.md").is_file():
+                    names.add(child.name)
+        return sorted(names)
+
+    def verify_integrity(self, package_id: str) -> dict[str, Any]:
+        """Verifica integrità SHA-256 dei file del pacchetto.
+
+        Confronta l'hash effettivo dei file sul filesystem con quello
+        registrato nel ``package-manifest.json`` del pacchetto (se presente).
+        Ritorna ``{"package": ..., "ok": bool, "mismatches": [...]}``.
+        """
+        manifest_path = self.package_dir(package_id) / ".." / "package-manifest.json"
+        manifest_path = manifest_path.resolve()
+        if not manifest_path.is_file():
+            return {"package": package_id, "ok": False, "error": "manifest not found"}
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            return {"package": package_id, "ok": False, "error": str(exc)}
+        files_metadata = manifest.get("files_metadata") or []
+        mismatches: list[dict[str, Any]] = []
+        pkg_root = self.package_dir(package_id).parent
+        for entry in files_metadata:
+            rel = entry.get("path") if isinstance(entry, Mapping) else None
+            expected = entry.get("sha256") if isinstance(entry, Mapping) else None
+            if not rel or not expected:
+                continue
+            target = pkg_root / rel
+            if not target.is_file():
+                mismatches.append({"path": rel, "reason": "missing"})
+                continue
+            actual = hashlib.sha256(target.read_bytes()).hexdigest()
+            if actual != expected:
+                mismatches.append(
+                    {"path": rel, "expected": expected, "actual": actual}
+                )
+        return {
+            "package": package_id,
+            "ok": not mismatches,
+            "mismatches": mismatches,
+        }
+
+    def has_workspace_override(
+        self,
+        workspace_github_root: Path,
+        resource_type: str,
+        name: str,
+    ) -> bool:
+        """True se esiste un override per ``(type, name)`` nel workspace."""
+        if resource_type not in _RESOURCE_TYPES:
+            return False
+        override_dir = (
+            Path(workspace_github_root).resolve()
+            / self.OVERRIDE_DIRNAME
+            / resource_type
+        )
+        if not override_dir.is_dir():
+            return False
+        for candidate in _resource_filename_candidates(resource_type, name):
+            if (override_dir / candidate).is_file():
+                return True
+        return False
+
+
+# ---------------------------------------------------------------------------
+# McpResourceRegistry (v3.0) — indice URI -> (engine_path, override_path)
+# ---------------------------------------------------------------------------
+
+
+class McpResourceRegistry:
+    """Indice in-memory delle risorse MCP esposte dall'engine.
+
+    Popolata al boot da :class:`FrameworkInventory` a partire da
+    ``engine-manifest.json`` e dai ``package-manifest.json`` dei pacchetti
+    installati (in modalità v3.0) o dei pacchetti workspace (in modalità di
+    transizione v2.x).
+
+    Risoluzione con priorità: ``override`` > ``engine``. Se non esiste
+    override, :meth:`resolve` ritorna il path engine. :meth:`resolve_engine`
+    ignora sempre l'override.
+    """
+
+    def __init__(self) -> None:
+        self._entries: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def make_uri(resource_type: str, name: str) -> str:
+        return f"{resource_type}://{name}"
+
+    def register(
+        self,
+        uri: str,
+        engine_path: Path,
+        package: str,
+        resource_type: str,
+    ) -> None:
+        """Registra (o sovrascrive) un'entry engine-side."""
+        existing = self._entries.get(uri, {})
+        self._entries[uri] = {
+            "engine": Path(engine_path).resolve(),
+            "override": existing.get("override"),
+            "package": package,
+            "resource_type": resource_type,
+        }
+
+    def register_override(self, uri: str, override_path: Path) -> None:
+        """Associa un workspace-override a un URI già registrato.
+
+        Se l'URI non è ancora registrato, l'override viene comunque tracciato
+        con engine_path=None (caso di override orfano post-rimozione pacchetto).
+        """
+        existing = self._entries.get(uri, {})
+        self._entries[uri] = {
+            "engine": existing.get("engine"),
+            "override": Path(override_path).resolve(),
+            "package": existing.get("package", "<unknown>"),
+            "resource_type": existing.get("resource_type", uri.split("://", 1)[0]),
+        }
+
+    def drop_override(self, uri: str) -> bool:
+        """Rimuove il riferimento all'override (non tocca il filesystem)."""
+        entry = self._entries.get(uri)
+        if not entry or entry.get("override") is None:
+            return False
+        entry["override"] = None
+        return True
+
+    def resolve(self, uri: str) -> Path | None:
+        """Ritorna il path effettivo: override se presente, altrimenti engine."""
+        entry = self._entries.get(uri)
+        if entry is None:
+            return None
+        return entry.get("override") or entry.get("engine")
+
+    def resolve_engine(self, uri: str) -> Path | None:
+        """Ritorna sempre la versione canonica engine (mai l'override)."""
+        entry = self._entries.get(uri)
+        if entry is None:
+            return None
+        return entry.get("engine")
+
+    def has_override(self, uri: str) -> bool:
+        entry = self._entries.get(uri)
+        return bool(entry and entry.get("override"))
+
+    def list_by_type(self, resource_type: str) -> list[str]:
+        """Elenca gli URI registrati per un tipo di risorsa."""
+        return sorted(
+            uri
+            for uri, entry in self._entries.items()
+            if entry.get("resource_type") == resource_type
+        )
+
+    def list_all(self) -> list[str]:
+        return sorted(self._entries.keys())
+
+    def get_metadata(self, uri: str) -> dict[str, Any] | None:
+        entry = self._entries.get(uri)
+        if entry is None:
+            return None
+        return {
+            "uri": uri,
+            "engine": str(entry["engine"]) if entry.get("engine") else None,
+            "override": str(entry["override"]) if entry.get("override") else None,
+            "package": entry.get("package"),
+            "resource_type": entry.get("resource_type"),
+        }
+
+
+# ---------------------------------------------------------------------------
+# SparkFrameworkEngine — Resources (15) and Tools (40)
 # ---------------------------------------------------------------------------
 
 
@@ -2400,6 +3288,8 @@ class SparkFrameworkEngine:
         self._mcp = mcp
         self._ctx = context
         self._inventory = inventory
+        # v3.0: traccia URI alias deprecati gia' loggati per evitare spam.
+        self._logged_alias_uris: set[str] = set()
 
     def register_resources(self) -> None:
         """Register all MCP resources.
@@ -2437,8 +3327,33 @@ class SparkFrameworkEngine:
         async def resource_agents_list() -> str:
             return _fmt_list(inventory.list_agents(), "SCF Agents")
 
+        # v3.0: helper di lettura via registry con fallback all'inventory locale.
+        def _registry_read(resource_type: str, name: str) -> str | None:
+            registry = inventory.mcp_registry
+            if registry is None:
+                return None
+            uri = McpResourceRegistry.make_uri(resource_type, name)
+            target = registry.resolve(uri)
+            if target is None or not target.is_file():
+                # Fallback case-insensitive sui nomi registrati.
+                lower = name.lower()
+                for candidate_uri in registry.list_by_type(resource_type):
+                    _, _, candidate_name = candidate_uri.partition("://")
+                    if candidate_name.lower() == lower:
+                        target = registry.resolve(candidate_uri)
+                        break
+            if target is None or not target.is_file():
+                return None
+            try:
+                return target.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return None
+
         @_register_resource("agents://{name}")
         async def resource_agent_by_name(name: str) -> str:
+            content = _registry_read("agents", name)
+            if content is not None:
+                return content
             for ff in inventory.list_agents():
                 if ff.name.lower() == name.lower():
                     return ff.path.read_text(encoding="utf-8", errors="replace")
@@ -2450,9 +3365,13 @@ class SparkFrameworkEngine:
 
         @_register_resource("skills://{name}")
         async def resource_skill_by_name(name: str) -> str:
-            query = name.lower().removesuffix(".skill")
+            query = name.removesuffix(".skill")
+            content = _registry_read("skills", query)
+            if content is not None:
+                return content
+            qlow = query.lower()
             for ff in inventory.list_skills():
-                if ff.name.lower().removesuffix(".skill") == query:
+                if ff.name.lower().removesuffix(".skill") == qlow:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Skill '{name}' not found. Use skills://list to see available skills."
 
@@ -2462,14 +3381,29 @@ class SparkFrameworkEngine:
 
         @_register_resource("instructions://{name}")
         async def resource_instruction_by_name(name: str) -> str:
-            query = name.lower().removesuffix(".instructions")
+            query = name.removesuffix(".instructions")
+            content = _registry_read("instructions", query)
+            if content is not None:
+                return content
+            qlow = query.lower()
             for ff in inventory.list_instructions():
-                if ff.name.lower().removesuffix(".instructions") == query:
+                if ff.name.lower().removesuffix(".instructions") == qlow:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Instruction '{name}' not found. Use instructions://list."
 
         # ---- v2.4.0: engine-hosted skills and instructions ----
         engine_inventory = EngineInventory()
+
+        def _log_alias_once(alias_uri: str, canonical_uri: str) -> None:
+            if alias_uri in self._logged_alias_uris:
+                return
+            self._logged_alias_uris.add(alias_uri)
+            _log.warning(
+                "[SPARK-ENGINE][WARN] URI deprecato %s -> usare %s. "
+                "Alias rimosso in v4.0.",
+                alias_uri,
+                canonical_uri,
+            )
 
         @_register_resource("engine-skills://list")
         async def resource_engine_skills_list() -> str:
@@ -2477,14 +3411,8 @@ class SparkFrameworkEngine:
 
         @_register_resource("engine-skills://{name}")
         async def resource_engine_skill_by_name(name: str) -> str:
-            query = name.lower().removesuffix(".skill")
-            for ff in engine_inventory.list_skills():
-                if ff.name.lower().removesuffix(".skill") == query:
-                    return ff.path.read_text(encoding="utf-8", errors="replace")
-            return (
-                f"Engine skill '{name}' not found. "
-                "Use engine-skills://list to see available engine-hosted skills."
-            )
+            _log_alias_once(f"engine-skills://{name}", f"skills://{name}")
+            return await resource_skill_by_name(name)
 
         @_register_resource("engine-instructions://list")
         async def resource_engine_instructions_list() -> str:
@@ -2494,14 +3422,10 @@ class SparkFrameworkEngine:
 
         @_register_resource("engine-instructions://{name}")
         async def resource_engine_instruction_by_name(name: str) -> str:
-            query = name.lower().removesuffix(".instructions")
-            for ff in engine_inventory.list_instructions():
-                if ff.name.lower().removesuffix(".instructions") == query:
-                    return ff.path.read_text(encoding="utf-8", errors="replace")
-            return (
-                f"Engine instruction '{name}' not found. "
-                "Use engine-instructions://list."
+            _log_alias_once(
+                f"engine-instructions://{name}", f"instructions://{name}"
             )
+            return await resource_instruction_by_name(name)
 
         @_register_resource("prompts://list")
         async def resource_prompts_list() -> str:
@@ -2509,9 +3433,13 @@ class SparkFrameworkEngine:
 
         @_register_resource("prompts://{name}")
         async def resource_prompt_by_name(name: str) -> str:
-            query = name.lower().removesuffix(".prompt")
+            query = name.removesuffix(".prompt")
+            content = _registry_read("prompts", query)
+            if content is not None:
+                return content
+            qlow = query.lower()
             for ff in inventory.list_prompts():
-                if ff.name.lower().removesuffix(".prompt") == query:
+                if ff.name.lower().removesuffix(".prompt") == qlow:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Prompt '{name}' not found. Use prompts://list."
 
@@ -2584,6 +3512,216 @@ class SparkFrameworkEngine:
 
         def _ff_to_dict(ff: FrameworkFile) -> dict[str, Any]:
             return {"name": ff.name, "path": str(ff.path), "category": ff.category, "summary": ff.summary, "metadata": ff.metadata}
+
+        # ------------------------------------------------------------------
+        # v3.0 Override tools (scf_list_overrides, scf_read_resource,
+        # scf_override_resource, scf_drop_override)
+        # ------------------------------------------------------------------
+
+        def _parse_resource_uri(uri: str) -> tuple[str, str] | None:
+            if not isinstance(uri, str) or "://" not in uri:
+                return None
+            scheme, _, name = uri.partition("://")
+            if scheme not in _RESOURCE_TYPES:
+                return None
+            if not name:
+                return None
+            return scheme, name
+
+        def _ensure_registry() -> McpResourceRegistry:
+            if inventory.mcp_registry is None:
+                # Boot tardivo: popola con engine-manifest se possibile.
+                try:
+                    engine_manifest = EngineInventory().engine_manifest
+                except Exception:  # pragma: no cover - difensivo
+                    engine_manifest = {}
+                inventory.populate_mcp_registry(engine_manifest=engine_manifest)
+            assert inventory.mcp_registry is not None  # noqa: S101
+            return inventory.mcp_registry
+
+        @_register_tool("scf_list_overrides")
+        async def scf_list_overrides(
+            resource_type: str | None = None,
+        ) -> dict[str, Any]:
+            """Lista override workspace registrati nel McpResourceRegistry.
+
+            Args:
+                resource_type: filtro opzionale (agents|prompts|skills|instructions).
+            """
+            registry = _ensure_registry()
+            if resource_type is not None and resource_type not in _RESOURCE_TYPES:
+                return {
+                    "success": False,
+                    "error": f"resource_type non valido: {resource_type}",
+                    "supported": list(_RESOURCE_TYPES),
+                }
+            items: list[dict[str, Any]] = []
+            for uri in registry.list_all():
+                if not registry.has_override(uri):
+                    continue
+                meta = registry.get_metadata(uri) or {}
+                rtype = str(meta.get("resource_type", ""))
+                if resource_type is not None and rtype != resource_type:
+                    continue
+                override_path = meta.get("override")
+                sha = ""
+                if override_path:
+                    try:
+                        sha = _sha256_text(
+                            Path(override_path).read_text(encoding="utf-8")
+                        )
+                    except OSError:
+                        sha = ""
+                _, _, name = uri.partition("://")
+                items.append({
+                    "uri": uri,
+                    "type": rtype,
+                    "name": name,
+                    "path": str(override_path) if override_path else None,
+                    "sha256": sha,
+                })
+            return {"count": len(items), "items": items}
+
+        @_register_tool("scf_read_resource")
+        async def scf_read_resource(
+            uri: str, source: str = "auto"
+        ) -> dict[str, Any]:
+            """Legge il contenuto di una risorsa MCP (engine o override).
+
+            Args:
+                uri: URI nel formato ``{type}://{name}``.
+                source: ``auto`` (override > engine), ``engine``, ``override``.
+            """
+            parsed = _parse_resource_uri(uri)
+            if parsed is None:
+                return {
+                    "success": False,
+                    "error": f"URI non valido: {uri}",
+                }
+            if source not in ("auto", "engine", "override"):
+                return {
+                    "success": False,
+                    "error": f"source non valido: {source}",
+                }
+            registry = _ensure_registry()
+            target: Path | None
+            actual_source: str
+            if source == "engine":
+                target = registry.resolve_engine(uri)
+                actual_source = "engine"
+            elif source == "override":
+                if not registry.has_override(uri):
+                    return {
+                        "success": False,
+                        "error": f"Override non presente per {uri}",
+                    }
+                meta = registry.get_metadata(uri) or {}
+                ov = meta.get("override")
+                target = Path(ov) if ov else None
+                actual_source = "override"
+            else:  # auto
+                target = registry.resolve(uri)
+                actual_source = "override" if registry.has_override(uri) else "engine"
+            if target is None or not target.is_file():
+                return {
+                    "success": False,
+                    "error": f"Risorsa non trovata: {uri} (source={source})",
+                }
+            try:
+                content = target.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return {
+                    "success": False,
+                    "error": f"Errore lettura {target}: {exc}",
+                }
+            return {
+                "success": True,
+                "uri": uri,
+                "source": actual_source,
+                "path": str(target),
+                "content": content,
+            }
+
+        @_register_tool("scf_override_resource")
+        async def scf_override_resource(
+            uri: str, content: str
+        ) -> dict[str, Any]:
+            """Crea/aggiorna un override workspace per la risorsa indicata.
+
+            Args:
+                uri: URI nel formato ``{type}://{name}``.
+                content: nuovo contenuto del file di override.
+            """
+            parsed = _parse_resource_uri(uri)
+            if parsed is None:
+                return {
+                    "success": False,
+                    "error": f"URI non valido: {uri}",
+                }
+            resource_type, name = parsed
+            registry = _ensure_registry()
+            if registry.resolve_engine(uri) is None and not registry.has_override(uri):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Risorsa {uri} non registrata: l'override richiede una "
+                        "risorsa engine o un override preesistente."
+                    ),
+                }
+            orchestrator_state = inventory.get_orchestrator_state()
+            if not bool(orchestrator_state.get("github_write_authorized", False)):
+                return {
+                    "success": False,
+                    "error": "github_write_authorized=False: scrittura su .github/ non autorizzata.",
+                    "authorization_required": True,
+                }
+            manifest_mgr = ManifestManager(self._ctx.github_root)
+            try:
+                target = manifest_mgr.write_override(resource_type, name, content)
+            except (ValueError, OSError) as exc:
+                return {"success": False, "error": str(exc)}
+            registry.register_override(uri, target)
+            return {
+                "success": True,
+                "uri": uri,
+                "path": str(target),
+                "sha256": _sha256_text(content),
+            }
+
+        @_register_tool("scf_drop_override")
+        async def scf_drop_override(uri: str) -> dict[str, Any]:
+            """Rimuove un override workspace e deregistra dal registry.
+
+            Args:
+                uri: URI nel formato ``{type}://{name}``.
+            """
+            parsed = _parse_resource_uri(uri)
+            if parsed is None:
+                return {
+                    "success": False,
+                    "error": f"URI non valido: {uri}",
+                }
+            resource_type, name = parsed
+            registry = _ensure_registry()
+            if not registry.has_override(uri):
+                return {
+                    "success": False,
+                    "error": f"Nessun override registrato per {uri}",
+                }
+            orchestrator_state = inventory.get_orchestrator_state()
+            if not bool(orchestrator_state.get("github_write_authorized", False)):
+                return {
+                    "success": False,
+                    "error": "github_write_authorized=False: rimozione non autorizzata.",
+                    "authorization_required": True,
+                }
+            manifest_mgr = ManifestManager(self._ctx.github_root)
+            try:
+                removed = manifest_mgr.drop_override(resource_type, name)
+            except OSError as exc:
+                return {"success": False, "error": str(exc)}
+            registry.drop_override(uri)
+            return {"success": True, "uri": uri, "file_removed": removed}
 
         @_register_tool("scf_list_agents")
         async def scf_list_agents() -> dict[str, Any]:
@@ -5483,6 +6621,60 @@ class SparkFrameworkEngine:
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
             })
 
+        @_register_tool("scf_migrate_workspace")
+        async def scf_migrate_workspace(
+            dry_run: bool = True,
+            force: bool = False,
+        ) -> dict[str, Any]:
+            """Migrate a v2.x workspace `.github/` layout to the v3.0 schema.
+
+            Two-step flow: analyse first, then optionally execute.
+            With dry_run=True (default) only the migration plan is returned.
+            With dry_run=False and force=True, the plan is applied with a
+            timestamped backup and rollback on error.
+            """
+            workspace_root = self._ctx.workspace_root
+            engine_cache = self._ctx.engine_root / "cache"
+            planner = MigrationPlanner(workspace_root, engine_cache)
+            plan = planner.analyze()
+
+            if dry_run:
+                return {
+                    "success": True,
+                    "dry_run": True,
+                    "migration_plan": plan.to_dict(),
+                    "requires_confirmation": not plan.is_empty(),
+                    "workspace": str(workspace_root),
+                }
+
+            if not force and not plan.is_empty():
+                return {
+                    "success": False,
+                    "dry_run": False,
+                    "error": "force=True required to apply a non-empty migration plan",
+                    "migration_plan": plan.to_dict(),
+                    "workspace": str(workspace_root),
+                }
+
+            if plan.is_empty():
+                return {
+                    "success": True,
+                    "dry_run": False,
+                    "status": "no_op",
+                    "migration_plan": plan.to_dict(),
+                    "workspace": str(workspace_root),
+                }
+
+            report = planner.apply(plan)
+            return {
+                "success": not report["rolled_back"],
+                "dry_run": False,
+                "status": "rolled_back" if report["rolled_back"] else "migrated",
+                "migration_plan": plan.to_dict(),
+                "report": report,
+                "workspace": str(workspace_root),
+            }
+
         @_register_tool("scf_resolve_conflict_ai")
         async def scf_resolve_conflict_ai(session_id: str, conflict_id: str) -> dict[str, Any]:
             """Proponi una risoluzione automatica conservativa per un conflitto di merge."""
@@ -5857,9 +7049,25 @@ def _build_app() -> FastMCP:
         len(inventory.list_instructions()), len(inventory.list_prompts()),
     )
 
+    # v3.0: popola McpResourceRegistry con risorse engine + override workspace.
+    # I package_manifests del deposito centralizzato vengono integrati in Fase 5.
+    try:
+        engine_inv = EngineInventory()
+        engine_manifest = engine_inv.engine_manifest
+    except Exception as exc:  # pragma: no cover - difensivo
+        _log.warning("Caricamento engine-manifest fallito: %s", exc)
+        engine_manifest = {}
+    inventory.populate_mcp_registry(engine_manifest=engine_manifest)
+    if inventory.mcp_registry is not None:
+        _log.info(
+            "MCP resource registry: %d URI registrati",
+            len(inventory.mcp_registry.list_all()),
+        )
+
     app = SparkFrameworkEngine(mcp, context, inventory)
     app.register_resources()
     app.register_tools()
+    _log.info("Tools registered: 40 total")
 
     return mcp
 
