@@ -9,26 +9,25 @@
 
 ## Stato Sessione Corrente (v3.0.0)
 
-- Fase attiva: FASE 0 — `scf_migrate_workspace`
-- Prossima fase: FASE 1 — Schema manifest v3.0
+- Fase attiva: FASE 6 — `scf_bootstrap_workspace` v3 (AGENTS.md dinamico)
+- Prossima fase: FASE 7 — ManifestManager schema v3 + smoke test
 - Validazione architetturale: PASS (1 ciclo correttivo, patch v1.2.1)
 
 ## Fasi Completate (v3.0.0)
 
-- (vuoto — inizio implementazione)
+- [x] FASE 0 — `scf_migrate_workspace` (commit a10449d/c586cfe)
+- [x] FASE 1 — Schema manifest v3.0 + engine-manifest.json + spark-welcome
+- [x] FASE 2 — PackageResourceStore + McpResourceRegistry
+- [x] FASE 3 — Tool MCP override (4 nuovi tool)
+- [x] FASE 4 — Decorator FastMCP dinamici + alias retrocompat
+- [x] FASE 5 — WorkspaceLocator estensioni + RegistryClient cache_path + CLI flag
 
 ## Fasi in Corso (v3.0.0)
 
-- [ ] FASE 0 → [PHASE-0-migrate-workspace.todo.md](todolist/PHASE-0-migrate-workspace.todo.md)
+- [ ] FASE 6 → [PHASE-6-bootstrap-update.todo.md](todolist/PHASE-6-bootstrap-update.todo.md)
 
 ## Fasi in Attesa (v3.0.0)
 
-- [ ] FASE 1 → [PHASE-1-manifest-schema.todo.md](todolist/PHASE-1-manifest-schema.todo.md)
-- [ ] FASE 2 → [PHASE-2-resource-store-registry.todo.md](todolist/PHASE-2-resource-store-registry.todo.md)
-- [ ] FASE 3 → [PHASE-3-new-tools.todo.md](todolist/PHASE-3-new-tools.todo.md)
-- [ ] FASE 4 → [PHASE-4-fastmcp-decorators.todo.md](todolist/PHASE-4-fastmcp-decorators.todo.md)
-- [ ] FASE 5 → [PHASE-5-workspace-locator-cache.todo.md](todolist/PHASE-5-workspace-locator-cache.todo.md)
-- [ ] FASE 6 → [PHASE-6-bootstrap-update.todo.md](todolist/PHASE-6-bootstrap-update.todo.md)
 - [ ] FASE 7 → [PHASE-7-manifest-manager-smoketest.todo.md](todolist/PHASE-7-manifest-manager-smoketest.todo.md)
 - [ ] FASE 8 → [PHASE-8-deploy-migration.todo.md](todolist/PHASE-8-deploy-migration.todo.md)
 
