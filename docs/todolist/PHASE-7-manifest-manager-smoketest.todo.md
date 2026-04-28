@@ -1,6 +1,8 @@
 # Fase 7 — ManifestManager snellimento + smoke test Copilot
 # Dipende da: Fase 6
 # Effort stimato: M
+# Stato: COMPLETATA (codice + test) — Smoke test manuali DEFERRED a docs/SMOKE-TEST-COPILOT-v3.md
+# Data: 2026-04-28
 # File target:
 #   - spark-framework-engine/spark-framework-engine.py
 #   - spark-framework-engine/tests/test_manifest_manager.py
@@ -8,79 +10,67 @@
 
 ## Prerequisiti
 
-- [ ] Fasi 0-6 completate e in main
-- [ ] Suite test verde dopo ogni fase
-- [ ] Workspace di test isolato (separato da quello dev)
+- [x] Fasi 0-6 completate e in main
+- [x] Suite test verde dopo ogni fase
+- [ ] Workspace di test isolato (separato da quello dev) — DEFERRED
 
 ## Task
 
-- [ ] 7.1 Aggiornare tracking SHA-256 in `ManifestManager`
+- [x] 7.1 Aggiornare tracking SHA-256 in `ManifestManager`
       File: `spark-framework-engine.py`
-      Riga partenza: 1391.
-      Logica: tracciare SHA solo per:
-      - File in `workspace_files[]` di ogni manifest.
-      - File in `.github/overrides/{type}/*.md`.
-      Rimuovere tracking di file `agents/`, `prompts/`, `skills/`
-      nel workspace (che non esisteranno più post-Fase 6).
+      In v3 i file di pacchetto vivono in `engine_dir/packages/<pkg>/.github/`
+      e non vengono più copiati nel workspace, quindi il tracking SHA in
+      `.scf-manifest.json` resta naturalmente limitato a `workspace_files[]`
+      e a `.github/overrides/{type}/*.md`. Logica `_sha256` invariata, ambito
+      ridotto by-design dalla Fase 6.
 
-- [ ] 7.2 Aggiornare schema `.scf-manifest.json` per nuovo
-      tracking
+- [x] 7.2 Aggiornare schema `.scf-manifest.json` per nuovo tracking
       File: `spark-framework-engine.py`
-      Schema bump a v3.0 con campo `overrides[]`. Backward
-      compatibility: leggere v2.x e migrare in lettura.
+      Schema bump a `3.0` (`_MANIFEST_SCHEMA_VERSION`); aggiunto
+      `_LEGACY_MANIFEST_SCHEMA_VERSIONS` e set supportato esteso a
+      `{"1.0","2.0","2.1","3.0"}`. `save()` ora emette anche un campo
+      `overrides[]` (type, name, file, sha256) ordinato e derivato dalle
+      entries con `override_type`. Lettura v2.x backward-compat: load()
+      ritorna le entries; alla prima save() il file viene riscritto in
+      schema 3.0.
 
-- [ ] 7.3 Test ManifestManager nuovo schema
-      File: `tests/test_manifest_manager.py`
-      Casi: scrittura `.scf-manifest` v3.0, lettura v2.x con
-      auto-migrazione, gate `github_write_authorized` rispettato.
+- [x] 7.3 Test ManifestManager nuovo schema
+      File: `tests/test_manifest_manager.py` (creato).
+      10 test verdi: schema v3.0 emit, overrides[] derivato e ordinato,
+      backward-read v2.0/v2.1, rejection schema futuri, upgrade automatico
+      v2→v3 al prossimo save(), cycle override write/drop.
 
-- [ ] 7.4 Smoke test manuale Copilot — preparazione
-      Workspace di test: nuovo VS Code workspace pulito.
-      Engine: build v3.0.0-rc1 da branch.
-      Pacchetti: spark-base + scf-master-codecrafter +
-      scf-pycode-crafter.
+- [DEFERRED] 7.4 Smoke test manuale Copilot — preparazione
+      Vedi `docs/SMOKE-TEST-COPILOT-v3.md`.
 
-- [ ] 7.5 Smoke test 1: bootstrap genera AGENTS.md correttamente
-      Eseguire `scf_bootstrap_workspace`, verificare AGENTS.md
-      con tutti gli agenti elencati.
+- [DEFERRED] 7.5 Smoke test 1: bootstrap genera AGENTS.md correttamente
+      Coverage automatica equivalente in `tests/test_phase6_bootstrap_assets.py`.
 
-- [ ] 7.6 Smoke test 2: Copilot riconosce agenti
-      Aprire chat Copilot, dropdown agenti deve mostrare
-      `@spark-assistant`, `@code-Agent-Code`, `@py-Agent-Code`.
+- [DEFERRED] 7.6 Smoke test 2: Copilot riconosce agenti
+      UI manuale.
 
-- [ ] 7.7 Smoke test 3: MCP Resources accessibili da Copilot
-      "Add Context > MCP Resources" mostra lista agenti
-      engine + pacchetto.
+- [DEFERRED] 7.7 Smoke test 3: MCP Resources accessibili da Copilot
+      UI manuale.
 
-- [ ] 7.8 Smoke test 4: ciclo override completo
-      `scf_override_resource("agents://spark-guide", "...")` →
-      file creato in `.github/overrides/agents/spark-guide.md`.
-      `scf_read_resource("agents://spark-guide", "auto")` →
-      ritorna override.
-      `scf_drop_override("agents://spark-guide")` → file
-      rimosso, lettura ritorna engine.
+- [DEFERRED] 7.8 Smoke test 4: ciclo override completo
+      Coverage automatica in `tests/test_override_tools.py` e
+      `tests/test_manifest_manager.py::TestOverrideCycleV3`.
 
-- [ ] 7.9 Smoke test 5: install + remove pacchetto aggiorna
-      AGENTS.md
-      `scf_install_package("scf-pycode-crafter")` → AGENTS.md
-      include `py-Agent-*`.
-      `scf_remove_package("scf-pycode-crafter")` → entry
-      rimosse.
+- [DEFERRED] 7.9 Smoke test 5: install + remove pacchetto aggiorna AGENTS.md
+      Coverage parziale in `tests/test_phase6_bootstrap_assets.py`.
 
-- [ ] 7.10 Smoke test 6: migrazione workspace v2.x reale
-      Workspace v2.x con engine v2.4.0 esistente →
-      `scf_migrate_workspace(dry_run=True)` → review →
-      `scf_migrate_workspace(dry_run=False)` → workspace v3.0.
+- [DEFERRED] 7.10 Smoke test 6: migrazione workspace v2.x reale
+      UI/MCP manuale.
 
-- [ ] 7.11 Compilare report `docs/SMOKE-TEST-COPILOT-v3.md`
-      Lista test eseguiti, esito, eventuali regressioni.
+- [x] 7.11 Compilare report `docs/SMOKE-TEST-COPILOT-v3.md`
+      Documento creato con stato DEFERRED, mappa coverage automatica
+      ed esito suite pytest.
 
 ## Test di accettazione
 
-- [ ] Tutti i 6 smoke test passati e documentati nel report.
-- [ ] Suite test pytest verde (incluso
-      `tests/test_manifest_manager.py`).
-- [ ] Nessuna regressione su tool MCP esistenti.
+- [DEFERRED] Tutti i 6 smoke test passati e documentati nel report.
+- [x] Suite test pytest verde (incluso `tests/test_manifest_manager.py`).
+- [x] Nessuna regressione su tool MCP esistenti — 272 passed.
 
 ## Note tecniche
 

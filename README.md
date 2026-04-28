@@ -7,6 +7,9 @@ come Resources e Tools consumabili da GitHub Copilot in Agent mode.
 Il motore legge il `.github/` del progetto attivo dinamicamente —
 non contiene dati di dominio, si adatta a qualsiasi progetto.
 
+> **Versione corrente:** 3.0.0 (28 aprile 2026). Per la migrazione da 2.x
+> consultare [`docs/MIGRATION-GUIDE-v3.md`](docs/MIGRATION-GUIDE-v3.md).
+
 ---
 
 ## Requisiti

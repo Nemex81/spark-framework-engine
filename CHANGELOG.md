@@ -6,6 +6,64 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [3.0.0] - 2026-04-28
+
+### Added
+
+- **Architettura v3.0 — Centralized Package Store + MCP Resource Registry.**
+  I pacchetti SCF non vengono più copiati nel workspace utente: vivono in
+  `engine_dir/packages/{pkg_id}/.github/` e sono esposti via MCP resources con
+  override workspace prioritari (`workspace/.github/overrides/{type}/`).
+- `WorkspaceLocator` per la risoluzione esplicita del workspace target via
+  flag CLI `--workspace`, con cache engine in `engine_dir/.scf-cache/` e
+  override resolver per agenti, prompt, skill e instruction.
+- `RegistryClient` ora accetta `cache_path` esplicito (default retrocompatibile
+  in `github_root/.scf-registry-cache.json`) per supportare cache engine-side.
+- `MigrationPlanner` e tool `scf_migrate_workspace(dry_run=...)` per la
+  migrazione one-shot dei workspace v2.x verso v3.0 (rimuove file copiati
+  da `.github/agents/`, `prompts/`, `skills/`, registra override esistenti).
+- `PackageResourceStore` e `McpResourceRegistry` per la risoluzione
+  `(package_id, type, name) → engine_path` con priorità override.
+- Bootstrap v3 (Fase 6): `_apply_phase6_assets` genera dinamicamente
+  `.github/AGENTS.md` (safe-merge tra marker `SCF:BEGIN:agents-index`),
+  `AGENTS-{plugin}.md` per pacchetto, template `project-profile.md`,
+  `.clinerules` (solo se assente).
+- ManifestManager schema **3.0**: `.scf-manifest.json` ora include un campo
+  `overrides[]` ordinato e derivato dalle entry con `override_type`. Lettura
+  retrocompatibile con schema 1.0/2.0/2.1.
+- Agente engine `spark-welcome` per onboarding interattivo del workspace.
+- 26 nuovi test automatici: `tests/test_phase6_bootstrap_assets.py` (16) e
+  `tests/test_manifest_manager.py` (10).
+
+### Changed
+
+- `ENGINE_VERSION` bump a `3.0.0` (breaking: nuova architettura risorse).
+- `_MANIFEST_SCHEMA_VERSION` aggiornato da `"1.0"` a `"3.0"`.
+- I pacchetti `spark-base`, `scf-master-codecrafter` e `scf-pycode-crafter`
+  richiedono ora `min_engine_version: 3.0.0`.
+
+### Deprecated
+
+- Copia fisica di `agents/`, `prompts/`, `skills/`, `instructions/` nel
+  workspace utente. I client devono leggere via MCP resources.
+- Schema `.scf-manifest.json` 1.0/2.x: ancora letti, ma riscritti in
+  schema 3.0 alla prima `save()`.
+
+### Migration
+
+- Workspace v2.x: vedi `docs/MIGRATION-GUIDE-v3.md` per la procedura
+  `scf_migrate_workspace`.
+- Smoke test manuali Copilot: `docs/SMOKE-TEST-COPILOT-v3.md` (DEFERRED,
+  da eseguire dallo sviluppatore prima del rilascio pubblico).
+
+### Notes
+
+- Suite test: **272 passed** (28 aprile 2026, escluso integration-live).
+- Nessun comando git eseguito dall'engine: il tag `v3.0.0` va creato
+  manualmente (vedi sezione Release nel piano).
+
+---
+
 ## [2.4.0] - 2026-04-22
 
 ### Added

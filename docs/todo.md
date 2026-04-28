@@ -9,9 +9,11 @@
 
 ## Stato Sessione Corrente (v3.0.0)
 
-- Fase attiva: FASE 6 — `scf_bootstrap_workspace` v3 (AGENTS.md dinamico)
-- Prossima fase: FASE 7 — ManifestManager schema v3 + smoke test
-- Validazione architetturale: PASS (1 ciclo correttivo, patch v1.2.1)
+- Fase attiva: **TUTTE LE FASI 0-8 COMPLETATE** — 2026-04-28
+- Engine bumped a 3.0.0; suite test 272 passed.
+- Smoke test manuali Copilot DEFERRED a `docs/SMOKE-TEST-COPILOT-v3.md`
+  (richiedono UI Copilot, non eseguibili da agente automatico).
+- Tag git proposto (NON eseguito): `git tag -a v3.0.0 -m "..."`
 
 ## Fasi Completate (v3.0.0)
 
@@ -21,15 +23,17 @@
 - [x] FASE 3 — Tool MCP override (4 nuovi tool)
 - [x] FASE 4 — Decorator FastMCP dinamici + alias retrocompat
 - [x] FASE 5 — WorkspaceLocator estensioni + RegistryClient cache_path + CLI flag
+- [x] FASE 6 — `scf_bootstrap_workspace` v3 (AGENTS.md dinamico)
+- [x] FASE 7 — ManifestManager schema v3 (smoke test manuali deferred)
+- [x] FASE 8 — Deploy v3.0.0 + MIGRATION-GUIDE-v3.md
 
 ## Fasi in Corso (v3.0.0)
 
-- [ ] FASE 6 → [PHASE-6-bootstrap-update.todo.md](todolist/PHASE-6-bootstrap-update.todo.md)
+- (nessuna)
 
 ## Fasi in Attesa (v3.0.0)
 
-- [ ] FASE 7 → [PHASE-7-manifest-manager-smoketest.todo.md](todolist/PHASE-7-manifest-manager-smoketest.todo.md)
-- [ ] FASE 8 → [PHASE-8-deploy-migration.todo.md](todolist/PHASE-8-deploy-migration.todo.md)
+- (nessuna automatica) — pendenti solo gli smoke test manuali Copilot.
 
 ## Blocchi e Decisioni Aperte
 

@@ -40,7 +40,7 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 # Engine version
 # ---------------------------------------------------------------------------
 
-ENGINE_VERSION: str = "2.4.0"
+ENGINE_VERSION: str = "3.0.0"
 
 
 # ---------------------------------------------------------------------------
@@ -1639,8 +1639,11 @@ def build_workspace_info(context: WorkspaceContext, inventory: FrameworkInventor
 # ManifestManager (A3 — installation manifest)
 # ---------------------------------------------------------------------------
 
-_MANIFEST_SCHEMA_VERSION: str = "1.0"
-_SUPPORTED_MANIFEST_SCHEMA_VERSIONS: frozenset[str] = frozenset({"1.0", "2.0", "2.1"})
+_MANIFEST_SCHEMA_VERSION: str = "3.0"
+_SUPPORTED_MANIFEST_SCHEMA_VERSIONS: frozenset[str] = frozenset(
+    {"1.0", "2.0", "2.1", "3.0"}
+)
+_LEGACY_MANIFEST_SCHEMA_VERSIONS: frozenset[str] = frozenset({"1.0", "2.0", "2.1"})
 _MANIFEST_FILENAME: str = ".scf-manifest.json"
 _BOOTSTRAP_PACKAGE_ID: str = "scf-engine-bootstrap"
 
@@ -1712,10 +1715,17 @@ class ManifestManager:
             return []
 
     def save(self, entries: list[dict[str, Any]]) -> None:
-        """Persist entries to disk."""
+        """Persist entries to disk.
+
+        Schema v3.0: emits an explicit ``overrides[]`` summary derived from
+        entries tagged with ``override_type`` so external readers can locate
+        workspace overrides without scanning every entry.
+        """
+        overrides_summary = self._build_overrides_summary(entries)
         payload: dict[str, Any] = {
             "schema_version": _MANIFEST_SCHEMA_VERSION,
             "entries": entries,
+            "overrides": overrides_summary,
         }
         try:
             self._path.write_text(
@@ -1725,6 +1735,28 @@ class ManifestManager:
         except OSError as exc:
             _log.error("Cannot write manifest: %s", exc)
             raise
+
+    @staticmethod
+    def _build_overrides_summary(
+        entries: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return ``[{type, name, file, sha256}, ...]`` for override entries."""
+        out: list[dict[str, Any]] = []
+        for entry in entries:
+            override_type = str(entry.get("override_type", "")).strip()
+            override_name = str(entry.get("override_name", "")).strip()
+            if not override_type or not override_name:
+                continue
+            out.append(
+                {
+                    "type": override_type,
+                    "name": override_name,
+                    "file": str(entry.get("file", "")),
+                    "sha256": str(entry.get("sha256", "")),
+                }
+            )
+        out.sort(key=lambda item: (item["type"], item["name"]))
+        return out
 
     def upsert(
         self,
