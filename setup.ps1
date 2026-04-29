@@ -151,15 +151,16 @@ $proc = Start-Process -FilePath $VenvPython `
     -ArgumentList @($InitPy, "--workspace", $Project) `
     -WorkingDirectory $EngineRoot `
     -NoNewWindow -Wait -PassThru
+# Controlla prima il codice di uscita del processo figlio
+if ($proc.ExitCode -ne 0) {
+    Write-Error "[SPARK] spark-init.py ha restituito un errore."
+    exit 1
+}
+
 # Verifica che il package store v3 sia stato popolato correttamente
 $PackageStore = Join-Path $EngineRoot "packages\spark-base"
 if (-not (Test-Path $PackageStore)) {
     Write-Error "[SPARK] ERRORE: package store non popolato (packages\spark-base non trovato).`n        spark-init.py potrebbe aver fallito il bootstrap.`n        Verifica la connessione internet e rilancia il setup."
-    exit 1
-}
-
-if ($proc.ExitCode -ne 0) {
-    Write-Error "[SPARK] spark-init.py ha restituito un errore."
     exit 1
 }
 
