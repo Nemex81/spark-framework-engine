@@ -462,11 +462,12 @@ class _BootstrapInstaller:
     def __init__(self, project_root: Path, engine_root: Path) -> None:
         self._project_root = project_root
         self._engine_root = engine_root
-        self._manifest_path = project_root / MANIFEST_REL
+        self._package_store = engine_root / "packages"
+        self._manifest_path = engine_root / MANIFEST_REL
         self._registry_cache_path = engine_root / REGISTRY_CACHE_REL
 
     def ensure_spark_base(self, conflict_mode: str = "abort") -> str:
-        """Install spark-base once, or return that it is already present."""
+        """Install spark-base once, or return that it is already present in the engine package store."""
         if conflict_mode not in _BOOTSTRAP_SUPPORTED_CONFLICT_MODES:
             raise _BootstrapError(
                 f"Unsupported bootstrap conflict_mode '{conflict_mode}'. "
@@ -476,7 +477,7 @@ class _BootstrapInstaller:
         if self._has_existing_install(entries):
             _log(
                 "INFO",
-                "spark-base e gia tracciato nel manifest; bootstrap pacchetto saltato.",
+                "spark-base e gia tracciato nel manifest engine; bootstrap pacchetto saltato.",
             )
             return "già presente"
 
@@ -499,15 +500,106 @@ class _BootstrapInstaller:
         if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
             raise _BootstrapError("Il package-manifest di spark-base non contiene una lista 'files' valida.")
 
-        plan = self._build_install_plan(
+        # Directory di destinazione centralizzata v3
+        pkg_store_dir = self._package_store / SPARK_BASE_ID / ".github"
+        pkg_store_dir.mkdir(parents=True, exist_ok=True)
+
+        plan = self._build_install_plan_v3(
             files,
             package_info.repo_url,
-            entries,
+            pkg_store_dir,
             conflict_mode=conflict_mode,
         )
-        self._apply_install_plan(plan, package_version)
-        _log("INFO", "spark-base installato correttamente nel workspace.")
+        self._apply_install_plan_v3(plan, package_version, pkg_store_dir)
+        _log("INFO", f"spark-base installato correttamente in {pkg_store_dir}.")
         return "installato"
+    def _build_install_plan_v3(
+        self,
+        files: list[str],
+        repo_url: str,
+        pkg_store_dir: Path,
+        conflict_mode: str = "abort",
+    ) -> list[_InstallPlanItem]:
+        """Prepara il piano di installazione per la package store centralizzata v3."""
+        plan: list[_InstallPlanItem] = []
+        blocking_conflicts: list[_BootstrapConflict] = []
+        for file_path in files:
+            if not file_path.startswith(".github/"):
+                blocking_conflicts.append(
+                    _BootstrapConflict(file_path, "Percorso non supportato fuori da .github/")
+                )
+                continue
+            rel_path = file_path.removeprefix(".github/")
+            dest_path = pkg_store_dir / rel_path
+            content = self._fetch_raw_text(self._build_raw_url(repo_url, file_path))
+            content_sha256 = _sha256_text(content)
+            # Se il file esiste già, gestisci secondo conflict_mode
+            if dest_path.exists():
+                current_sha256 = _sha256_file(dest_path)
+                if current_sha256 == content_sha256:
+                    plan.append(_InstallPlanItem(file_path, rel_path, content, content_sha256, "adopt"))
+                elif conflict_mode == "replace":
+                    plan.append(_InstallPlanItem(file_path, rel_path, content, content_sha256, "write"))
+                elif conflict_mode == "preserve":
+                    plan.append(_InstallPlanItem(file_path, rel_path, dest_path.read_text(encoding="utf-8"), current_sha256, "preserve"))
+                else:
+                    blocking_conflicts.append(_BootstrapConflict(file_path, "File esistente, non sovrascritto"))
+                continue
+            plan.append(_InstallPlanItem(file_path, rel_path, content, content_sha256, "write"))
+        if blocking_conflicts:
+            for conflict in blocking_conflicts:
+                _log("ERROR", f"{conflict.file_path}: {conflict.reason}")
+            raise _BootstrapConflictError(
+                "Bootstrap spark-base annullato per evitare overwrite su file esistenti.",
+                blocking_conflicts,
+            )
+        return plan
+
+    def _apply_install_plan_v3(
+        self,
+        plan: list[_InstallPlanItem],
+        package_version: str,
+        pkg_store_dir: Path,
+    ) -> None:
+        """Applica il piano di installazione v3 e aggiorna il manifest engine."""
+        if not plan:
+            raise _BootstrapError("Nessun file installabile per spark-base dopo il preflight.")
+        for item in plan:
+            if item.action != "write":
+                continue
+            dest_path = pkg_store_dir / item.rel_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_bytes(item.content.encode("utf-8"))
+            _log("INFO", f"Installato: {dest_path}")
+        # Aggiorna manifest engine v3
+        existing_entries = self._load_manifest_entries()
+        touched_files = {item.rel_path for item in plan}
+        retained_entries = [
+            entry
+            for entry in existing_entries
+            if not (
+                str(entry.get("package", "")).strip() == SPARK_BASE_ID
+                and str(entry.get("file", "")).strip() in touched_files
+            )
+        ]
+        timestamp = _utc_timestamp()
+        for item in plan:
+            dest_path = pkg_store_dir / item.rel_path
+            retained_entries.append(
+                {
+                    "file": f"packages/{SPARK_BASE_ID}/.github/{item.rel_path}",
+                    "package": SPARK_BASE_ID,
+                    "package_version": package_version,
+                    "installed_at": timestamp,
+                    "sha256": _sha256_file(dest_path),
+                }
+            )
+        retained_entries.sort(key=lambda entry: (str(entry.get("file", "")), str(entry.get("package", ""))))
+        self._save_manifest_entries(retained_entries)
+        if not self._has_existing_install(retained_entries):
+            raise _BootstrapError(
+                "Manifest aggiornato senza ownership spark-base; bootstrap non considerato valido."
+            )
 
     def _build_install_plan(
         self,

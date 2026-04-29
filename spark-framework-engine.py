@@ -1,3 +1,4 @@
+        # 5. Aggiorna AGENTS.md
 """SPARK Framework Engine: expose the SPARK Code Framework as MCP Resources and Tools.
 
 Transport: stdio only.
@@ -1811,6 +1812,7 @@ class ManifestManager:
         """Remove a package's entries and delete unmodified files on disk.
 
         Returns the list of relative paths preserved because the user modified them.
+        For v3_store entries, skip any workspace file operation (handled by v3 orchestrator).
         """
         entries = self.load()
         preserved: list[str] = []
@@ -1820,9 +1822,7 @@ class ManifestManager:
             if entry.get("package") != package:
                 remaining.append(entry)
                 continue
-            # Le entry v3_store sono sentinelle che puntano allo store engine:
-            # nessun file workspace da rimuovere, quindi le scartiamo
-            # silenziosamente lasciando lo store al chiamante v3.
+            # v3_store: skip any workspace file operation
             if str(entry.get("installation_mode", "")).strip() == "v3_store":
                 continue
             file_path = self._github_root / entry["file"]
@@ -1975,7 +1975,9 @@ class ManifestManager:
         self.save(entries)
 
     def verify_integrity(self) -> dict[str, Any]:
-        """Verify manifest integrity against files currently present under .github/."""
+        """Verify manifest integrity against files currently present under .github/.
+        For v3_store entries, skip any workspace file check (handled by v3 orchestrator).
+        """
         entries = self.load()
         tracked_files: set[str] = set()
         missing: list[str] = []
@@ -1989,7 +1991,7 @@ class ManifestManager:
             package_id = str(entry.get("package", "")).strip()
             if not file_rel:
                 continue
-            # v3_store entries puntano allo store engine, non a file workspace.
+            # v3_store entries: skip any workspace file check
             if str(entry.get("installation_mode", "")).strip() == "v3_store":
                 continue
             tracked_files.add(file_rel)
@@ -3892,14 +3894,71 @@ class McpResourceRegistry:
 
 
 class SparkFrameworkEngine:
-    """Register MCP resources and tools over FastMCP via workspace discovery.
 
-    MCP Prompts are intentionally NOT registered here.
-    VS Code already exposes .github/prompts/*.prompt.md as native slash commands.
-    Registering them again via MCP would create duplicate entries in the / picker.
-    Prompt files remain accessible as Resources (prompts://list, prompts://{name})
-    and via scf_list_prompts / scf_get_prompt tools for Agent mode consumption.
-    """
+    async def _install_package_v3_into_store(
+        self,
+        package_id: str,
+        pkg: dict,
+        pkg_manifest: dict,
+        pkg_version: str,
+        min_engine_version: str,
+        dependencies: list,
+        conflict_mode: str,
+        build_install_result: callable,
+    ) -> dict:
+        """Install a v3_store package: scarica file in engine_dir/packages/{pkg_id}/.github/, aggiorna registry, entry sentinella manifest, AGENTS.md."""
+        import shutil
+        from pathlib import Path
+        engine_root = self._ctx.engine_root
+        store = PackageResourceStore(engine_root)
+        registry = self._inventory.mcp_registry
+        package_dir = store.package_dir(package_id).parent
+        # 1. Scarica e popola store
+        if package_dir.exists():
+            shutil.rmtree(package_dir)
+        package_dir.mkdir(parents=True, exist_ok=True)
+        # Scarica tutti i file dichiarati in pkg_manifest["files"]
+        files = pkg_manifest.get("files", [])
+        for file_entry in files:
+            rel_path = Path(file_entry)
+            dest_path = package_dir / rel_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            raw_url = pkg.get("raw_url_base", "") + "/" + str(rel_path).replace("\\", "/")
+            try:
+                content = RegistryClient.fetch_raw_file(self._inventory.registry, raw_url)
+                dest_path.write_text(content, encoding="utf-8")
+            except Exception as exc:
+                _log.warning(f"[SPARK-ENGINE][WARNING] Cannot fetch {raw_url}: {exc}")
+        # 2. Copia package-manifest.json
+        manifest_path = package_dir / ".." / "package-manifest.json"
+        manifest_path.write_text(json.dumps(pkg_manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+        # 3. Registra risorse MCP
+        for typ in ["agents", "prompts", "skills", "instructions"]:
+            for name in store.list_resources(package_id, typ):
+                uri = f"{typ}://{name}"
+                registry.register(uri, store.resolve(package_id, typ, name), package_id, typ)
+        # 4. Entry sentinella manifest workspace
+        manifest = ManifestManager(self._ctx.github_root)
+        entries = manifest.load()
+        entries = [e for e in entries if not (str(e.get("package", "")).strip() == package_id and str(e.get("installation_mode", "")).strip() == "v3_store")]
+        entries.append({
+            "file": f"__store__/{package_id}",
+            "package": package_id,
+            "package_version": pkg_version,
+            "installation_mode": "v3_store",
+            "store_path": str(package_dir),
+            "files": files,
+        })
+        manifest.save(entries)
+        # 5. Aggiorna AGENTS.md
+        installed_ids = list(manifest.get_installed_versions().keys())
+        _apply_phase6_assets(
+            self._ctx.workspace_root,
+            self._ctx.engine_root,
+            installed_ids,
+            self._is_github_write_authorized()
+        )
+        return build_install_result(True, package=package_id, package_version=pkg_version, installation_mode="v3_store")
 
     def __init__(self, mcp: FastMCP, context: WorkspaceContext, inventory: FrameworkInventory) -> None:
         self._mcp = mcp
@@ -5787,7 +5846,7 @@ class SparkFrameworkEngine:
             # Branch v3 lifecycle: pacchetti che dichiarano min_engine_version
             # >= 3.0.0 vengono installati nello store engine, non in workspace.
             if _is_v3_package(pkg_manifest):
-                return await self._install_package_v3(
+                return await self._install_package_v3_into_store(
                     package_id=package_id,
                     pkg=pkg,
                     pkg_manifest=pkg_manifest,

@@ -453,17 +453,19 @@ def test_bootstrap_installer_installs_spark_base_and_updates_manifest(
     action = installer.ensure_spark_base()
 
     assert action == "installato"
+    pkg_store_dir = engine_root / "packages" / _MODULE.SPARK_BASE_ID / ".github"
     for file_path, content in files.items():
-        assert (project_root / file_path).read_text(encoding="utf-8") == content
+        rel_path = file_path.removeprefix(".github/")
+        assert (pkg_store_dir / rel_path).read_text(encoding="utf-8") == content
 
-    manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((engine_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
     spark_base_entries = [
         entry for entry in manifest["entries"] if entry["package"] == _MODULE.SPARK_BASE_ID
     ]
     assert manifest["schema_version"] == "1.0"
     assert len(spark_base_entries) == len(files)
     assert {entry["file"] for entry in spark_base_entries} == {
-        path.removeprefix(".github/") for path in files
+        f"packages/{_MODULE.SPARK_BASE_ID}/.github/" + path.removeprefix(".github/") for path in files
     }
     assert "manifest remoto dichiara 1.0.0" in capsys.readouterr().err
 
@@ -483,7 +485,7 @@ def test_bootstrap_installer_falls_back_to_registry_version_when_manifest_versio
     action = installer.ensure_spark_base()
 
     assert action == "installato"
-    manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((engine_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
     assert {entry["package_version"] for entry in manifest["entries"]} == {"1.2.0"}
 
 
@@ -497,10 +499,10 @@ def test_bootstrap_installer_returns_already_present_when_manifest_tracks_spark_
     project_root.mkdir()
     engine_root.mkdir()
     _write_manifest(
-        project_root,
+        engine_root,
         [
             {
-                "file": "AGENTS.md",
+                "file": f"packages/{_MODULE.SPARK_BASE_ID}/.github/AGENTS.md",
                 "package": _MODULE.SPARK_BASE_ID,
                 "package_version": "1.0.0",
                 "installed_at": "2026-04-16T00:00:00Z",
@@ -531,10 +533,10 @@ def test_bootstrap_installer_accepts_schema_2_0_runtime_manifest(
     project_root.mkdir()
     engine_root.mkdir()
     _write_manifest(
-        project_root,
+        engine_root,
         [
             {
-                "file": "AGENTS.md",
+                "file": f"packages/{_MODULE.SPARK_BASE_ID}/.github/AGENTS.md",
                 "package": _MODULE.SPARK_BASE_ID,
                 "package_version": "1.0.0",
                 "installed_at": "2026-04-16T00:00:00Z",
@@ -542,7 +544,7 @@ def test_bootstrap_installer_accepts_schema_2_0_runtime_manifest(
             }
         ],
     )
-    manifest_path = project_root / ".github" / ".scf-manifest.json"
+    manifest_path = engine_root / ".github" / ".scf-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["schema_version"] = "2.0"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -566,8 +568,9 @@ def test_bootstrap_installer_blocks_untracked_conflicts(
     project_root.mkdir()
     engine_root.mkdir()
     files = _mock_bootstrap_remote(monkeypatch)
-    conflicting_path = project_root / ".github" / "AGENTS.md"
-    conflicting_path.parent.mkdir(parents=True)
+    pkg_store_dir = engine_root / "packages" / _MODULE.SPARK_BASE_ID / ".github"
+    conflicting_path = pkg_store_dir / "AGENTS.md"
+    conflicting_path.parent.mkdir(parents=True, exist_ok=True)
     conflicting_path.write_text("user version\n", encoding="utf-8")
 
     installer = _MODULE._BootstrapInstaller(project_root, engine_root)
@@ -575,7 +578,7 @@ def test_bootstrap_installer_blocks_untracked_conflicts(
     with pytest.raises(_MODULE._BootstrapError, match="evitare overwrite"):
         installer.ensure_spark_base()
 
-    manifest_path = project_root / ".github" / ".scf-manifest.json"
+    manifest_path = engine_root / ".github" / ".scf-manifest.json"
     assert not manifest_path.exists()
     assert conflicting_path.read_text(encoding="utf-8") != files[".github/AGENTS.md"]
 
@@ -589,8 +592,9 @@ def test_bootstrap_installer_replace_mode_overwrites_untracked_conflicts(
     project_root.mkdir()
     engine_root.mkdir()
     files = _mock_bootstrap_remote(monkeypatch)
-    conflicting_path = project_root / ".github" / "AGENTS.md"
-    conflicting_path.parent.mkdir(parents=True)
+    pkg_store_dir = engine_root / "packages" / _MODULE.SPARK_BASE_ID / ".github"
+    conflicting_path = pkg_store_dir / "AGENTS.md"
+    conflicting_path.parent.mkdir(parents=True, exist_ok=True)
     conflicting_path.write_text("user version\n", encoding="utf-8")
 
     installer = _MODULE._BootstrapInstaller(project_root, engine_root)
@@ -610,8 +614,9 @@ def test_bootstrap_installer_preserve_mode_tracks_existing_conflicts_as_local_ba
     project_root.mkdir()
     engine_root.mkdir()
     _mock_bootstrap_remote(monkeypatch)
-    conflicting_path = project_root / ".github" / "AGENTS.md"
-    conflicting_path.parent.mkdir(parents=True)
+    pkg_store_dir = engine_root / "packages" / _MODULE.SPARK_BASE_ID / ".github"
+    conflicting_path = pkg_store_dir / "AGENTS.md"
+    conflicting_path.parent.mkdir(parents=True, exist_ok=True)
     conflicting_path.write_text("user version\n", encoding="utf-8")
 
     installer = _MODULE._BootstrapInstaller(project_root, engine_root)
@@ -620,8 +625,8 @@ def test_bootstrap_installer_preserve_mode_tracks_existing_conflicts_as_local_ba
 
     assert action == "installato"
     assert conflicting_path.read_text(encoding="utf-8") == "user version\n"
-    manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
-    assert any(entry["file"] == "AGENTS.md" for entry in manifest["entries"])
+    manifest = json.loads((engine_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
+    assert any(entry["file"].endswith("AGENTS.md") for entry in manifest["entries"])
 
 
 def test_bootstrap_installer_integrate_mode_merges_existing_and_remote_text(
@@ -658,8 +663,9 @@ def test_bootstrap_installer_adopts_identical_untracked_files_without_rewriting(
     project_root.mkdir()
     engine_root.mkdir()
     files = _mock_bootstrap_remote(monkeypatch)
-    existing_path = project_root / ".github" / "AGENTS.md"
-    existing_path.parent.mkdir(parents=True)
+    pkg_store_dir = engine_root / "packages" / _MODULE.SPARK_BASE_ID / ".github"
+    existing_path = pkg_store_dir / "AGENTS.md"
+    existing_path.parent.mkdir(parents=True, exist_ok=True)
     existing_path.write_bytes(files[".github/AGENTS.md"].encode("utf-8"))
 
     installer = _MODULE._BootstrapInstaller(project_root, engine_root)
@@ -667,9 +673,10 @@ def test_bootstrap_installer_adopts_identical_untracked_files_without_rewriting(
     action = installer.ensure_spark_base()
 
     assert action == "installato"
-    assert "Adottato nel manifest senza riscrittura: .github/AGENTS.md" in capsys.readouterr().err
-    manifest = json.loads((project_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
-    assert any(entry["file"] == "AGENTS.md" for entry in manifest["entries"])
+    # Il log ora riporta il path completo del file adottato
+    assert f"Adottato nel manifest senza riscrittura: {existing_path}" in capsys.readouterr().err
+    manifest = json.loads((engine_root / ".github" / ".scf-manifest.json").read_text(encoding="utf-8"))
+    assert any(entry["file"].endswith("AGENTS.md") for entry in manifest["entries"])
 
 
 def test_main_prompts_for_conflict_mode_and_retries_bootstrap(
