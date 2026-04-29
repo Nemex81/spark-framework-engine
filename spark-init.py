@@ -879,8 +879,34 @@ class _BootstrapInstaller:
 def main() -> int:
     """Entry point for standalone workspace initialization."""
     _configure_stdio()
-    project_root = Path.cwd().resolve()
     engine_root = Path(__file__).resolve().parent
+    # Respect optional --workspace argument passed by external setup scripts.
+    # Fallback to current working directory when not provided.
+    project_root = Path.cwd().resolve()
+    argv = sys.argv[1:]
+    idx = 0
+    while idx < len(argv):
+        a = argv[idx]
+        if a.startswith("--workspace="):
+            ws = a.split("=", 1)[1]
+            p = Path(ws)
+            if not p.is_dir():
+                _log("ERROR", f"Workspace non valido o non trovato: {ws}")
+                return 1
+            project_root = p.resolve()
+            break
+        if a == "--workspace":
+            if idx + 1 >= len(argv):
+                _log("ERROR", "--workspace richiede un valore")
+                return 1
+            ws = argv[idx + 1]
+            p = Path(ws)
+            if not p.is_dir():
+                _log("ERROR", f"Workspace non valido o non trovato: {ws}")
+                return 1
+            project_root = p.resolve()
+            break
+        idx += 1
     engine_script = engine_root / "spark-framework-engine.py"
 
     if not engine_script.is_file():
