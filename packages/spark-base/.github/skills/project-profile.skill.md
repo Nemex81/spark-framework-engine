@@ -1,0 +1,181 @@
+---
+scf_protected: false
+scf_file_role: skill
+scf_merge_priority: 10
+scf_merge_strategy: replace
+scf_version: 1.4.0
+scf_owner: spark-base
+spark: true
+description: 'Procedura di caricamento da template canonico, matrice componenti language-specific,
+  template instructions per linguaggi non-Python. Template sorgente: .github/templates/project-profile.template.md'
+name: project-profile
+skill: project-profile
+scope:
+- Agent-Welcome
+---
+
+# Skill: project-profile
+
+## Struttura Canonica project-profile.md
+
+La struttura canonica è definita in:
+→ `.github/templates/project-profile.template.md`
+
+Quando generi o aggiorni `.github/project-profile.md`:
+
+1. Leggi `.github/templates/project-profile.template.md`
+2. Copia la struttura del frontmatter YAML e del corpo Markdown
+3. Sostituisci i segnaposto con i valori raccolti dall'utente
+4. Imposta `initialized: true`
+5. Scrivi il file in `.github/project-profile.md`
+
+Per valori non applicabili usa stringa vuota ""
+o lista vuota []. Non usare null o None.
+
+Valori ammessi per architecture:
+
+- "clean-architecture-4-layer"
+- "mvc"
+- "mvvm"
+- "layered"
+- "none"
+
+---
+
+## Matrice Componenti per Linguaggio
+
+Usa questa matrice in OP-1 (setup) e OP-2
+(aggiornamento linguaggio primario) per determinare
+quali componenti language-specific attivare.
+
+| Linguaggio primario | Instructions file | Azione |
+| ------------------- | ----------------- | ------ |
+| Python | python.instructions.md | Già esiste — nessuna azione |
+| C / C++ | cpp.instructions.md | Generare da template sezione sotto |
+| JavaScript | js.instructions.md | Generare da template sezione sotto |
+| TypeScript | ts.instructions.md | Generare da template sezione sotto |
+| C# | csharp.instructions.md | Generare da template sezione sotto |
+| Altro | [lang].instructions.md | Template generico + avviso utente |
+
+Regola: se il file instructions esiste già
+non sovrascriverlo. Avvisa l'utente che esiste
+e chiedi se vuole mantenerlo o rigenerarlo.
+
+---
+
+## Template Instructions per Linguaggi non-Python
+
+Usa questi template per generare il file instructions
+del linguaggio dichiarato dall'utente in OP-1.
+Sostituisci i segnaposto [LANG] e [EXTENSION].
+
+### Template C / C++
+
+```markdown
+---
+applyTo: "**/*.[EXTENSION]"
+---
+# Standard [LANG] — [NOME PROGETTO]
+
+## Naming Conventions
+
+- Variabili e funzioni: snake_case
+- Classi e struct: PascalCase
+- Costanti: UPPER_SNAKE_CASE
+- File header: .h / File implementazione: .cpp
+
+## Qualità Codice
+
+- Ogni funzione ha responsabilità singola
+- Nessuna funzione supera 40 righe
+- Commenti in italiano, codice in inglese
+- Nessun magic number: usa costanti nominate
+
+## Build
+
+- Standard: C17 / C++17 o superiore
+- Warning trattati come errori (-Wall -Wextra)
+
+## Note
+
+(personalizza in base al progetto)
+```
+
+### Template JavaScript / TypeScript
+
+```markdown
+---
+applyTo: "**/*.[EXTENSION]"
+---
+# Standard [LANG] — [NOME PROGETTO]
+
+## Naming Conventions
+
+- Variabili e funzioni: camelCase
+- Classi: PascalCase
+- Costanti: UPPER_SNAKE_CASE
+- File: kebab-case
+
+## Qualità Codice
+
+- Prefer const su let, mai var
+- Ogni funzione ha responsabilità singola
+- Nessuna funzione supera 40 righe
+- Commenti in italiano, codice in inglese
+
+## Note
+
+(personalizza in base al progetto)
+```
+
+### Template CSharp
+
+```markdown
+---
+applyTo: "**/*.cs"
+---
+# Standard C# — [NOME PROGETTO]
+
+## Naming Conventions
+
+- Metodi e proprietà pubbliche: PascalCase
+- Variabili locali e parametri: camelCase
+- Costanti: UPPER_SNAKE_CASE
+- Namespace: PascalCase
+
+## Qualità Codice
+
+- Ogni classe ha responsabilità singola
+- Nessun metodo supera 40 righe
+- Commenti in italiano, codice in inglese
+- Usa nullable reference types
+
+## Note
+
+(personalizza in base al progetto)
+```
+
+### Template Generico (linguaggi non coperti)
+
+```markdown
+---
+applyTo: "**/*.[EXTENSION]"
+---
+# Standard [LANG] — [NOME PROGETTO]
+
+## Naming Conventions
+
+(da completare manualmente)
+
+## Qualità Codice
+
+- Ogni funzione ha responsabilità singola
+- Nessuna funzione supera 40 righe
+- Commenti in italiano, codice in inglese
+
+## Note
+
+Questo template è stato generato automaticamente
+da Agent-Welcome per il linguaggio [LANG].
+Completare le sezioni mancanti manualmente.
+```
