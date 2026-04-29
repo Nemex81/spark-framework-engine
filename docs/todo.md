@@ -139,7 +139,7 @@ Fasi e stato (coordinator):
 - **OWN-D**: Integrazione flusso install/update — Stato: Completata — [todo-fase-OWN-D-integrazione-flusso.md](todolist/todo-fase-OWN-D-integrazione-flusso.md)
 - **OWN-E**: Estensione bootstrap workspace — Stato: Completata — [todo-fase-OWN-E-bootstrap-estensione.md](todolist/todo-fase-OWN-E-bootstrap-estensione.md)
 - **OWN-F**: Documentazione e release — Stato: Completata — [todo-fase-OWN-F-docs-release.md](todolist/todo-fase-OWN-F-docs-release.md)
-- **OWN-G**: Migrazione workspace esistenti — Stato: In corso (restano aperti FAQ, test delta-only e gate finali nel todo di fase) — [todo-fase-OWN-G-migrazione-workspace.md](todolist/todo-fase-OWN-G-migrazione-workspace.md)
+- **OWN-G**: Migrazione workspace esistenti — Stato: Completata (FAQ, test delta-only e gate finali verificati) — [todo-fase-OWN-G-migrazione-workspace.md](todolist/todo-fase-OWN-G-migrazione-workspace.md)
 
 Ordine di esecuzione (strettamente sequenziale):
 

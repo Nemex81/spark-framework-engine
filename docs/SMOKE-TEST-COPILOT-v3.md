@@ -40,6 +40,26 @@ I comportamenti core sono comunque coperti dalla suite pytest:
   `tests/test_manifest_manager.py` (10 test).
 - Bootstrap end-to-end: `tests/test_bootstrap_workspace.py`.
 
+## Test automatici equivalenti
+
+Suite dedicata: `tests/test_smoke_bootstrap_v3.py`
+
+- `test_scenario_7_4_preparazione_workspace_test_engine_v3` — **PASS**
+- `test_scenario_7_5_bootstrap_genera_agents_md` — **PASS**
+- `test_scenario_7_6_dropdown_agenti_equivalente_indice_agents` — **PASS**
+- `test_scenario_7_7_mcp_resources_accessibili_via_tool` — **PASS**
+- `test_scenario_7_8_ciclo_override_write_read_drop` — **PASS**
+- `test_scenario_7_9_install_remove_pacchetto_aggiorna_agents_md` — **PASS**
+- `test_scenario_7_10_migrazione_workspace_v2_dry_run_apply` — **PASS**
+
+Comando eseguito:
+
+```pwsh
+.venv\Scripts\python.exe -m pytest tests/test_smoke_bootstrap_v3.py -v --tb=short
+```
+
+Esito: **7 passed**.
+
 ## Esecuzione manuale richiesta prima del rilascio
 
 Lo sviluppatore (utente finale del repo) deve eseguire i test

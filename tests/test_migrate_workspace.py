@@ -148,6 +148,39 @@ class TestMigrationPlanner(unittest.TestCase):
             self.assertEqual(plan2.move_to_override, ())
             self.assertEqual(plan2.delete, ())
 
+    def test_partial_workspace_migration_applies_delta_only(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gh = root / ".github"
+            (gh / "overrides" / "agents").mkdir(parents=True)
+            (gh / "overrides" / "agents" / "kept.agent.md").write_text(
+                "existing override",
+                encoding="utf-8",
+            )
+            (gh / "agents").mkdir(parents=True)
+            (gh / "agents" / "new.agent.md").write_text("legacy agent", encoding="utf-8")
+
+            planner = MigrationPlanner(root)
+            plan = planner.analyze()
+
+            self.assertIn(
+                ("agents/new.agent.md", "overrides/agents/new.agent.md"),
+                plan.move_to_override,
+            )
+            self.assertIn("overrides/agents/kept.agent.md", plan.untouched)
+
+            report = planner.apply(plan)
+            self.assertFalse(report["rolled_back"])
+            self.assertTrue((gh / "overrides" / "agents" / "new.agent.md").is_file())
+            self.assertEqual(
+                (gh / "overrides" / "agents" / "kept.agent.md").read_text(encoding="utf-8"),
+                "existing override",
+            )
+
+            plan_after = planner.analyze()
+            self.assertEqual(plan_after.move_to_override, ())
+            self.assertEqual(plan_after.delete, ())
+
     def test_apply_rollback_on_oserror(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

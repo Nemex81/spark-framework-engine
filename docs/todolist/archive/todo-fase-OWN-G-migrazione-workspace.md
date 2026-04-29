@@ -2,7 +2,7 @@
 
 Piano di riferimento: [SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md](../SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md#fase-g--migrazione-workspace-esistenti)
 
-Stato: In corso
+Stato: Completata
 
 ---
 
@@ -42,14 +42,14 @@ Stato: In corso
 
 - [x] Sezione dedicata in README: "Migrazione da workspace pre-ownership"
 - [x] Prompt `/scf-migrate-workspace` per guidare la migrazione
-- [ ] FAQ: "cosa succede ai miei file personalizzati?"
+- [x] FAQ: "cosa succede ai miei file personalizzati?"
 
 ## Test migrazione
 
 - [x] Test: workspace con file senza front matter `scf_*`
 - [x] Test: workspace con `copilot-instructions.md` plain (senza marcatori)
 - [x] Test: workspace con `spark-user-prefs.json` assente
-- [ ] Test: workspace parzialmente migrato (delta-only, nessuna ripetizione completa)
+- [x] Test: workspace parzialmente migrato (delta-only, nessuna ripetizione completa)
 - [x] Test: migrazione accettata dall'utente
 - [x] Test: migrazione rifiutata (preservazione file)
 - [x] Test: migrazione bloccata senza autorizzazione `.github/`
@@ -57,7 +57,14 @@ Stato: In corso
 
 ## Gate di uscita
 
-- [ ] `pytest -q` passa suite completa
-- [ ] Workspace pre-esistente non viene corrotto da operazioni standard
-- [ ] Migrazione opt-in funzionante
-- [ ] README e prompt di migrazione completi
+- [x] `pytest -q` passa suite completa
+- [x] Workspace pre-esistente non viene corrotto da operazioni standard
+- [x] Migrazione opt-in funzionante
+- [x] README e prompt di migrazione completi
+
+## Evidenze finali
+
+- Test delta-only aggiunto in `tests/test_migrate_workspace.py`:
+  `test_partial_workspace_migration_applies_delta_only`.
+- FAQ migrazione aggiornata in `docs/MIGRATION-GUIDE-v3.md`.
+- Gate finale verificato con suite completa engine (escluso live integration).

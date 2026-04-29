@@ -140,17 +140,17 @@ I manifest dei pacchetti devono dichiarare:
 
 ```json
 {
-  "min_engine_version": "3.0.0"
+  "min_engine_version": "3.1.0"
 }
 ```
 
 I pacchetti del repo aggiornati in questa release:
 
-- `spark-base/package-manifest.json`
-- `scf-master-codecrafter/package-manifest.json`
-- `scf-pycode-crafter/package-manifest.json`
+- `spark-base/package-manifest.json` (`1.6.1`)
+- `scf-master-codecrafter/package-manifest.json` (`2.4.1`)
+- `scf-pycode-crafter/package-manifest.json` (`2.2.1`)
 
-I pacchetti che dichiarano `min_engine_version < 3.0.0` continuano ad
+I pacchetti che dichiarano `min_engine_version < 3.1.0` continuano ad
 essere installabili, ma non beneficiano del centralized store: l'engine
 emette un warning e ricade sul flusso v2 di copia file.
 
@@ -182,6 +182,12 @@ viene scritto in `.github/overrides/agents/spark-guide.agent.md`.
 **Domanda:** le risorse `engine-skills://` e `engine-instructions://`
 sono ancora disponibili?
 **Risposta:** sì, sono mantenute per retrocompatibilità con v2.4.x.
+
+**Domanda:** cosa succede ai miei file personalizzati durante la migrazione?
+**Risposta:** i file utente non classificati come asset v2 gestiti restano
+intatti (`untouched`), mentre i file storicamente gestiti in `agents/`,
+`prompts/`, `skills/` vengono spostati in `.github/overrides/` così da
+preservare la personalizzazione senza perderla nel passaggio al modello v3.
 
 ---
 

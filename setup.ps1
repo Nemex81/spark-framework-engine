@@ -22,6 +22,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# In PowerShell 7, evita che output su stderr di comandi nativi (es. python logging)
+# venga promosso a errore terminante quando ErrorActionPreference=Stop.
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+
 $EngineRoot  = $PSScriptRoot
 $EnginePy    = Join-Path $EngineRoot "spark-framework-engine.py"
 $InitPy      = Join-Path $EngineRoot "spark-init.py"
@@ -141,15 +147,11 @@ Write-Host "[SPARK] Dipendenze installate."
 Write-Host "[SPARK] Configurazione workspace in: $Project"
 Write-Host ""
 
-Push-Location $Project
-try {
-    & $VenvPython $InitPy
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "[SPARK] spark-init.py ha restituito un errore."
-        exit 1
-    }
-} finally {
-    Pop-Location
+$proc = Start-Process -FilePath $VenvPython -ArgumentList @($InitPy) -WorkingDirectory $Project -NoNewWindow -Wait -PassThru
+
+if ($proc.ExitCode -ne 0) {
+    Write-Error "[SPARK] spark-init.py ha restituito un errore."
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
