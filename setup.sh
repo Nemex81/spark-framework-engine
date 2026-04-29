@@ -111,8 +111,15 @@ echo "[SPARK] Dipendenze installate."
 echo "[SPARK] Configurazione workspace in: $PROJECT"
 echo ""
 
-cd "$PROJECT"
-"$VENV_PYTHON" "$INIT_PY"
+"$VENV_PYTHON" "$INIT_PY" --workspace "$PROJECT"
+# Verifica che il package store v3 sia stato popolato correttamente
+if [[ ! -d "$ENGINE_ROOT/packages/spark-base" ]]; then
+    echo ""
+    echo "[SPARK] ERRORE: package store non popolato (packages/spark-base non trovato)."
+    echo "        spark-init.py potrebbe aver fallito il bootstrap."
+    echo "        Verifica la connessione internet e rilancia il setup."
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Riepilogo finale

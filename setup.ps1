@@ -147,7 +147,16 @@ Write-Host "[SPARK] Dipendenze installate."
 Write-Host "[SPARK] Configurazione workspace in: $Project"
 Write-Host ""
 
-$proc = Start-Process -FilePath $VenvPython -ArgumentList @($InitPy) -WorkingDirectory $Project -NoNewWindow -Wait -PassThru
+$proc = Start-Process -FilePath $VenvPython `
+    -ArgumentList @($InitPy, "--workspace", $Project) `
+    -WorkingDirectory $EngineRoot `
+    -NoNewWindow -Wait -PassThru
+# Verifica che il package store v3 sia stato popolato correttamente
+$PackageStore = Join-Path $EngineRoot "packages\spark-base"
+if (-not (Test-Path $PackageStore)) {
+    Write-Error "[SPARK] ERRORE: package store non popolato (packages\spark-base non trovato).`n        spark-init.py potrebbe aver fallito il bootstrap.`n        Verifica la connessione internet e rilancia il setup."
+    exit 1
+}
 
 if ($proc.ExitCode -ne 0) {
     Write-Error "[SPARK] spark-init.py ha restituito un errore."

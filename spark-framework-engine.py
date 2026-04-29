@@ -654,7 +654,8 @@ class WorkspaceLocator:
             )
 
         github_root = workspace_root / ".github"
-        engine_root = workspace_root / "spark-framework-engine"
+        # engine_root è sempre la directory del file engine, indipendente dal workspace
+        engine_root = Path(__file__).resolve().parent
 
         if not github_root.is_dir():
             _log.warning(".github/ not found in workspace: %s", github_root)
