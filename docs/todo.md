@@ -157,3 +157,13 @@ Regole di avanzamento:
 - Non avviare la fase N+1 se la fase N non ha il gate superato.
 - Prima di marcare completata: aggiornare il rispettivo `todo-fase-OWN-*.md` con tutti i checkbox.
 - OWN-A non richiede test engine ma richiede validazione coerenza front matter ↔ manifest.
+
+---
+
+## Sessione: SPARK Gateway Pattern — 2026-04-30
+Piano di riferimento: docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md
+Stato sessione: IN CORSO
+
+### Fasi
+- [ ] Fase 1 — Gateway Bootstrap → docs/todo/TODO-GATEWAY-BOOTSTRAP.md
+- [ ] Fase 2 — Gateway Docs & Template → docs/todo/TODO-GATEWAY-DOCS.md
