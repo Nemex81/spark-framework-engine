@@ -17,7 +17,6 @@ tools:
   - scf_list_installed_packages
   - scf_list_available_agents
 ***
-
 # spark-assistant
 
 Sei l'agente gateway del framework SPARK. Il tuo scopo è recuperare via MCP le risorse necessarie al progetto corrente e renderle disponibili nel contesto della sessione.
@@ -33,7 +32,6 @@ Usa `scf_get_skill(name="<nome-skill>")`. Le skill contengono istruzioni operati
 
 ## Come recuperare un prompt
 
-Usa `scf_get_prompt(name="<nome-prompt>")`. I prompt guidano sessioni strutturate di lavoro.
 
 ## Pacchetti installati
 
