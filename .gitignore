@@ -38,6 +38,29 @@ venv.bak/
 # IDEs and editors
 .vscode/
 .idea/
+ 
+# ---------------------------------------------------------------------------
+# Pytest artifacts — generated at runtime, never tracked
+# ---------------------------------------------------------------------------
+.pytest-own-d.xml
+.pytest_exit_current.txt
+.pytest_full_run.txt
+.pytest_result.txt
+pytest_exit.txt
+pytest_failures_output.txt
+pytest_run.txt
+verification.json
+pytest_cache/
+.pytest_cache/
+htmlcov/
+*.xml
+
+# ---------------------------------------------------------------------------
+# SPARK Engine — runtime logs and debug residues
+# ---------------------------------------------------------------------------
+*.log
+spark_debug_*.txt
+spark_debug_*.json
 *.suo
 *.ntvs*
 *.njsproj
