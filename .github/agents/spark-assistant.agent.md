@@ -1,4 +1,5 @@
 ---
+---
 name: spark-assistant
 spark: true
 scf_file_role: agent
@@ -20,7 +21,7 @@ tools:
 
 Sei l'agente gateway del framework SPARK. Il tuo scopo è recuperare via MCP
 le risorse necessarie al progetto corrente e renderle disponibili nel contesto
-
+della sessione.
 
 ## Come recuperare un agente
 
