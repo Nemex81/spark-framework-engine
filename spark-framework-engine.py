@@ -593,21 +593,6 @@ class WorkspaceLocator:
 
     def resolve(self) -> WorkspaceContext:
         workspace_root: Path | None = None
-        # 1. MCP Roots (if available)
-        mcp_roots = getattr(self._ctx, "mcp_roots", None)
-        if mcp_roots and isinstance(mcp_roots, list) and mcp_roots:
-            root_uri = mcp_roots[0].get("uri") if isinstance(mcp_roots[0], dict) else None
-            if root_uri:
-                try:
-                    from urllib.parse import urlparse
-                    parsed = urlparse(root_uri)
-                    if parsed.scheme == "file":
-                        candidate = Path(parsed.path).expanduser().resolve()
-                        if candidate.is_dir():
-                            workspace_root = candidate
-                            _log.info("Workspace resolved via MCP Roots: %s", workspace_root)
-                except Exception as exc:
-                    _log.warning("Failed to parse MCP Roots uri: %s", exc)
 
         # 2. ENGINE_WORKSPACE env var (optional)
         if workspace_root is None:
@@ -1298,14 +1283,6 @@ class FrameworkInventory:
             len(registry.list_by_type("prompts")),
             len(registry.list_by_type("instructions")),
             len(registry.list_by_type("skills")),
-        )
-        _log.info(
-            "[SPARK-ENGINE][INFO] MCP registry populated: "
-            "%d agents, %d prompts, %d instructions, %d skills",
-            len(registry.list_by_type("agents")) if hasattr(registry, "list_by_type") else len(registry._resources.get("agents", [])),
-            len(registry.list_by_type("prompts")) if hasattr(registry, "list_by_type") else len(registry._resources.get("prompts", [])),
-            len(registry.list_by_type("instructions")) if hasattr(registry, "list_by_type") else len(registry._resources.get("instructions", [])),
-            len(registry.list_by_type("skills")) if hasattr(registry, "list_by_type") else len(registry._resources.get("skills", [])),
         )
         return registry
 
@@ -3910,8 +3887,6 @@ class SparkFrameworkEngine:
         build_install_result: callable,
     ) -> dict:
         """Install a v3_store package: scarica file in engine_dir/packages/{pkg_id}/.github/, aggiorna registry, entry sentinella manifest, AGENTS.md."""
-        import shutil
-        from pathlib import Path
         engine_root = self._ctx.engine_root
         store = PackageResourceStore(engine_root)
         registry = self._inventory.mcp_registry
