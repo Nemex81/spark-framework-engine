@@ -1,3 +1,36 @@
+                        @_register_tool("scf_get_skill_resource")
+                        async def scf_get_skill_resource(name: str) -> dict[str, Any]:
+                            """Return full content and metadata for a single SCF skill by name via skills:// URI."""
+                            uri = McpResourceRegistry.make_uri("skills", name)
+                            ff = inventory.mcp_registry.resolve(uri)
+                            if ff is None:
+                                return {
+                                    "success": False,
+                                    "error": f"Skill resource URI not found: {uri}",
+                                    "available": [ff.name for ff in inventory.list_skills()],
+                                }
+                            result = _ff_to_dict(ff)
+                            result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                            result["mcp_uri"] = uri
+                            result["mime_type"] = "text/markdown"
+                            return result
+
+                        @_register_tool("scf_get_instruction_resource")
+                        async def scf_get_instruction_resource(name: str) -> dict[str, Any]:
+                            """Return full content and metadata for a single SCF instruction by name via instructions:// URI."""
+                            uri = McpResourceRegistry.make_uri("instructions", name)
+                            ff = inventory.mcp_registry.resolve(uri)
+                            if ff is None:
+                                return {
+                                    "success": False,
+                                    "error": f"Instruction resource URI not found: {uri}",
+                                    "available": [ff.name for ff in inventory.list_instructions()],
+                                }
+                            result = _ff_to_dict(ff)
+                            result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                            result["mcp_uri"] = uri
+                            result["mime_type"] = "text/markdown"
+                            return result
                 @_register_tool("scf_get_agent_resource")
                 async def scf_get_agent_resource(name: str) -> dict[str, Any]:
                     """Return full content and metadata for a single SCF agent by name via agents:// URI."""

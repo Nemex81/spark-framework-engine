@@ -5,7 +5,7 @@
       "command": "python",
       "args": [
         "/path/to/spark-framework-engine/spark-framework-engine.py"
-      ],
+      ]
     }
   }
 }
