@@ -629,7 +629,13 @@ class WorkspaceLocator:
         # engine_root è sempre la directory del file engine, indipendente dal workspace
         engine_root = Path(__file__).resolve().parent
 
-        if not github_root.is_dir():
+        # Guardia esplicita: github_root e' None se workspace_root non e' stato risolto.
+        if github_root is None:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] .github/ non disponibile: "
+                "workspace root non risolto. Server avviato in modalita' degradata."
+            )
+        elif not github_root.is_dir():
             _log.warning(".github/ not found in workspace: %s", github_root)
 
         return WorkspaceContext(

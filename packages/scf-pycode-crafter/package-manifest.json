@@ -1,0 +1,172 @@
+{
+  "schema_version": "3.0",
+  "package": "scf-pycode-crafter",
+  "version": "2.2.1",
+  "display_name": "SCF Python Code Crafter",
+  "description": "Agenti, skill e istruzioni specializzati per lo sviluppo Python. Richiede scf-master-codecrafter.",
+  "author": "Nemex81",
+  "min_engine_version": "3.1.0",
+  "dependencies": [
+    {
+      "id": "scf-master-codecrafter",
+      "min_version": "2.2.0"
+    }
+  ],
+  "conflicts": [],
+  "file_ownership_policy": "error",
+  "changelog_path": ".github/changelogs/scf-pycode-crafter.md",
+  "workspace_files": [
+    ".github/copilot-instructions.md",
+    ".github/instructions/python.instructions.md",
+    ".github/instructions/tests.instructions.md"
+  ],
+  "mcp_resources": {
+    "agents": [
+      "py-Agent-Analyze",
+      "py-Agent-Code",
+      "py-Agent-Design",
+      "py-Agent-Plan",
+      "py-Agent-Validate"
+    ],
+    "prompts": [],
+    "skills": [],
+    "instructions": [
+      "python",
+      "tests"
+    ]
+  },
+  "files": [
+    ".github/agents/py-Agent-Analyze.md",
+    ".github/agents/py-Agent-Code.md",
+    ".github/agents/py-Agent-Design.md",
+    ".github/agents/py-Agent-Plan.md",
+    ".github/agents/py-Agent-Validate.md",
+    ".github/AGENTS-python.md",
+    ".github/changelogs/scf-pycode-crafter.md",
+    ".github/copilot-instructions.md",
+    ".github/instructions/python.instructions.md",
+    ".github/instructions/tests.instructions.md",
+    ".github/python.profile.md",
+    ".github/skills/error-recovery/reference/errors-python.md",
+    ".github/workflows/notify-engine.yml"
+  ],
+  "files_metadata": [
+    {
+      "path": ".github/agents/py-Agent-Analyze.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/py-Agent-Code.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/py-Agent-Design.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/py-Agent-Plan.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/py-Agent-Validate.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/AGENTS-python.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/changelogs/scf-pycode-crafter.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "merge_sections",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/python.instructions.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/tests.instructions.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/python.profile.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/skills/error-recovery/reference/errors-python.md",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/workflows/notify-engine.yml",
+      "scf_owner": "scf-pycode-crafter",
+      "scf_version": "2.0.1",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 30,
+      "scf_protected": false
+    }
+  ]
+}

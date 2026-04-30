@@ -1,0 +1,10 @@
+{
+  "current_phase": "",
+  "current_agent": "",
+  "retry_count": 0,
+  "confidence": 1.0,
+  "execution_mode": "autonomous",
+  "last_updated": "",
+  "phase_history": [],
+  "active_task_id": ""
+}

@@ -1,0 +1,47 @@
+name: Notify Engine on Manifest Update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package-manifest.json'  
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract manifest fields
+        id: manifest
+        run: |
+          PKG_ID=$(jq -r '.package' package-manifest.json)
+          VERSION=$(jq -r '.version' package-manifest.json)
+          ENGINE_MIN=$(jq -r '.min_engine_version' package-manifest.json)
+          echo "pkg_id=$PKG_ID" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "engine_min=$ENGINE_MIN" >> "$GITHUB_OUTPUT"
+
+      - name: Send repository_dispatch to spark-framework-engine
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.ENGINE_DISPATCH_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/Nemex81/spark-framework-engine/dispatches \
+            -d '{
+              "event_type": "plugin-manifest-updated",
+              "client_payload": {
+                "pkg_id": "${{ steps.manifest.outputs.pkg_id }}",
+                "version": "${{ steps.manifest.outputs.version }}",
+                "engine_min": "${{ steps.manifest.outputs.engine_min }}"
+              }
+            }')
+          echo "HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ne 204 ]; then
+            echo "::error::repository_dispatch failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi

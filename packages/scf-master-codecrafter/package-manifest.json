@@ -1,0 +1,174 @@
+{
+  "schema_version": "3.0",
+  "package": "scf-master-codecrafter",
+  "version": "2.4.1",
+  "display_name": "SCF Master CodeCrafter",
+  "description": "Plugin CORE-CRAFT per il master-layer SCF. Fornisce design, code routing, code UI e contesto MCP sopra spark-base.",
+  "author": "Nemex81",
+  "min_engine_version": "3.1.0",
+  "dependencies": [
+    {
+      "id": "spark-base",
+      "min_version": "1.4.0"
+    }
+  ],
+  "conflicts": [],
+  "file_ownership_policy": "error",
+  "changelog_path": ".github/changelogs/scf-master-codecrafter.md",
+  "workspace_files": [
+    ".github/copilot-instructions.md",
+    ".github/instructions/mcp-context.instructions.md"
+  ],
+  "mcp_resources": {
+    "agents": [
+      "code-Agent-Code",
+      "code-Agent-CodeRouter",
+      "code-Agent-CodeUI",
+      "code-Agent-Design"
+    ],
+    "prompts": [
+      "framework-release",
+      "framework-unlock",
+      "framework-update",
+      "git-commit",
+      "git-merge",
+      "help",
+      "package-update"
+    ],
+    "skills": [
+      "clean-architecture",
+      "code-routing",
+      "docs-manager"
+    ],
+    "instructions": [
+      "mcp-context"
+    ]
+  },
+  "files": [
+    ".github/agents/code-Agent-Code.md",
+    ".github/agents/code-Agent-CodeRouter.md",
+    ".github/agents/code-Agent-CodeUI.md",
+    ".github/agents/code-Agent-Design.md",
+    ".github/AGENTS-master.md",
+    ".github/changelogs/scf-master-codecrafter.md",
+    ".github/copilot-instructions.md",
+    ".github/instructions/mcp-context.instructions.md",
+    ".github/prompts/framework-release.prompt.md",
+    ".github/prompts/framework-unlock.prompt.md",
+    ".github/prompts/framework-update.prompt.md",
+    ".github/prompts/git-commit.prompt.md",
+    ".github/prompts/git-merge.prompt.md",
+    ".github/prompts/help.prompt.md",
+    ".github/prompts/package-update.prompt.md",
+    ".github/prompts/README.md",
+    ".github/skills/clean-architecture/SKILL.md",
+    ".github/skills/code-routing.skill.md",
+    ".github/skills/docs-manager/SKILL.md"
+  ],
+  "files_metadata": [
+    {
+      "path": ".github/agents/code-Agent-Code.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/code-Agent-CodeRouter.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/code-Agent-CodeUI.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/agents/code-Agent-Design.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/AGENTS-master.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/changelogs/scf-master-codecrafter.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "config",
+      "scf_merge_strategy": "merge_sections",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/instructions/mcp-context.instructions.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "instruction",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/skills/clean-architecture/SKILL.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "engine-managed",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/skills/code-routing.skill.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "2.2.0",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/skills/docs-manager/SKILL.md",
+      "scf_owner": "scf-master-codecrafter",
+      "scf_version": "engine-managed",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 20,
+      "scf_protected": false
+    }
+  ],
+  "engine_provided_skills": [
+    "clean-architecture",
+    "docs-manager"
+  ],
+  "engine_provided_instructions": []
+}

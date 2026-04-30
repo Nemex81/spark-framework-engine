@@ -1,3 +1,6 @@
+env.bak/
+venv.bak/
+
 # Byte-compiled / optimized / package files
 __pycache__/
 *.py[cod]
@@ -38,10 +41,18 @@ venv.bak/
 # IDEs and editors
 .vscode/
 .idea/
- 
-# ---------------------------------------------------------------------------
+
+# Local env and secrets
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# OneDrive / temp
+*.tmp
+
 # Pytest artifacts — generated at runtime, never tracked
-# ---------------------------------------------------------------------------
 .pytest-own-d.xml
 .pytest_exit_current.txt
 .pytest_full_run.txt
@@ -53,11 +64,9 @@ verification.json
 pytest_cache/
 .pytest_cache/
 htmlcov/
-*.xml
+.coverage
 
-# ---------------------------------------------------------------------------
 # SPARK Engine — runtime logs and debug residues
-# ---------------------------------------------------------------------------
 *.log
 spark_debug_*.txt
 spark_debug_*.json
@@ -65,30 +74,6 @@ spark_debug_*.json
 *.ntvs*
 *.njsproj
 *.sln
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Test / coverage
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Logs
-logs/
-*.log
-scripts/*.out
-
-# Python compiled
-*.pyc
-
-# Local env and secrets
-.env
-*.local
-
-# OneDrive / temp
-*.tmp
 
 # SCF-specific caches and manifests (generated/runtime files)
 .github/.scf-manifest.json
