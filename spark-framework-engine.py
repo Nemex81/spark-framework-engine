@@ -1,3 +1,36 @@
+                @_register_tool("scf_get_agent_resource")
+                async def scf_get_agent_resource(name: str) -> dict[str, Any]:
+                    """Return full content and metadata for a single SCF agent by name via agents:// URI."""
+                    uri = McpResourceRegistry.make_uri("agents", name)
+                    ff = inventory.mcp_registry.resolve(uri)
+                    if ff is None:
+                        return {
+                            "success": False,
+                            "error": f"Agent resource URI not found: {uri}",
+                            "available": [ff.name for ff in inventory.list_agents()],
+                        }
+                    result = _ff_to_dict(ff)
+                    result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                    result["mcp_uri"] = uri
+                    result["mime_type"] = "text/markdown"
+                    return result
+
+                @_register_tool("scf_get_prompt_resource")
+                async def scf_get_prompt_resource(name: str) -> dict[str, Any]:
+                    """Return full content and metadata for a single SCF prompt by name via prompts:// URI."""
+                    uri = McpResourceRegistry.make_uri("prompts", name)
+                    ff = inventory.mcp_registry.resolve(uri)
+                    if ff is None:
+                        return {
+                            "success": False,
+                            "error": f"Prompt resource URI not found: {uri}",
+                            "available": [ff.name for ff in inventory.list_prompts()],
+                        }
+                    result = _ff_to_dict(ff)
+                    result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                    result["mcp_uri"] = uri
+                    result["mime_type"] = "text/markdown"
+                    return result
         # 5. Aggiorna AGENTS.md
 """SPARK Framework Engine: expose the SPARK Code Framework as MCP Resources and Tools.
 
@@ -594,66 +627,54 @@ class WorkspaceLocator:
 
     def resolve(self) -> WorkspaceContext:
         workspace_root: Path | None = None
+        # 1. MCP Roots (if available)
+        mcp_roots = getattr(self._ctx, "mcp_roots", None)
+        if mcp_roots and isinstance(mcp_roots, list) and mcp_roots:
+            root_uri = mcp_roots[0].get("uri") if isinstance(mcp_roots[0], dict) else None
+            if root_uri:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(root_uri)
+                    if parsed.scheme == "file":
+                        candidate = Path(parsed.path).expanduser().resolve()
+                        if candidate.is_dir():
+                            workspace_root = candidate
+                            _log.info("Workspace resolved via MCP Roots: %s", workspace_root)
+                except Exception as exc:
+                    _log.warning("Failed to parse MCP Roots uri: %s", exc)
 
-        cli_value = self._parse_workspace_flag()
-        if cli_value:
-            cli_candidate = Path(cli_value).expanduser().resolve()
-            if not cli_candidate.is_dir():
-                _log.warning(
-                    "Ignoring --workspace because it is not a directory: %s",
-                    cli_candidate,
-                )
-            else:
-                workspace_root = cli_candidate
-                _log.info("Workspace resolved via --workspace: %s", workspace_root)
+        # 2. ENGINE_WORKSPACE env var (optional)
+        if workspace_root is None:
+            engine_workspace = os.environ.get("ENGINE_WORKSPACE")
+            if engine_workspace:
+                candidate = Path(engine_workspace).expanduser().resolve()
+                if candidate.is_dir():
+                    workspace_root = candidate
+                    _log.info("Workspace resolved via ENGINE_WORKSPACE: %s", workspace_root)
 
-        workspace_root_str: str | None = (
-            None if workspace_root is not None else os.environ.get("WORKSPACE_FOLDER")
-        )
+        # 3. WORKSPACE_FOLDER as alias (retrocompatibilità, non prioritaria)
+        if workspace_root is None:
+            workspace_folder = os.environ.get("WORKSPACE_FOLDER")
+            if workspace_folder:
+                candidate = Path(workspace_folder).expanduser().resolve()
+                if candidate.is_dir():
+                    workspace_root = candidate
+                    _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
 
-        if workspace_root_str:
-            candidate = Path(workspace_root_str).expanduser().resolve()
-            if not candidate.is_dir():
-                _log.warning(
-                    "Ignoring WORKSPACE_FOLDER because it is not a directory: %s",
-                    candidate,
-                )
-            elif self._is_user_home(candidate) and not (
-                self._has_local_workspace_config(candidate)
-                or self._has_scf_markers(candidate)
-            ):
-                _log.warning(
-                    "Ignoring WORKSPACE_FOLDER because it points to the user home without"
-                    " local workspace markers: %s",
-                    candidate,
-                )
-            else:
-                workspace_root = candidate
-                _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
-
+        # 4. Fallback: current working directory
         if workspace_root is None:
             cwd = Path.cwd().resolve()
             workspace_root = self._discover_from_cwd(cwd)
             if workspace_root is None:
                 workspace_root = cwd
-                _log.warning(
-                    "WORKSPACE_FOLDER env var not set or invalid and no local workspace"
-                    " markers were found."
-                )
+                _log.warning("No workspace root available from MCP Roots, ENGINE_WORKSPACE or WORKSPACE_FOLDER.")
                 _log.warning("Falling back to cwd: %s", workspace_root)
-                _log.warning(
-                    "This is likely wrong. Run spark-init.py in your project folder"
-                )
-                _log.warning(
-                    "or open the project via File > Open Workspace from File."
-                )
 
-        if not workspace_root.is_dir():
-            raise RuntimeError(
-                f"Workspace root does not exist or is not a directory: {workspace_root}"
-            )
+        if workspace_root is None or not workspace_root.is_dir():
+            _log.warning("[SPARK-ENGINE][WARNING] No workspace root available")
+            workspace_root = None
 
-        github_root = workspace_root / ".github"
+        github_root = workspace_root / ".github" if workspace_root else None
         # engine_root è sempre la directory del file engine, indipendente dal workspace
         engine_root = Path(__file__).resolve().parent
 
@@ -1311,6 +1332,14 @@ class FrameworkInventory:
             len(registry.list_by_type("prompts")),
             len(registry.list_by_type("instructions")),
             len(registry.list_by_type("skills")),
+        )
+        _log.info(
+            "[SPARK-ENGINE][INFO] MCP registry populated: "
+            "%d agents, %d prompts, %d instructions, %d skills",
+            len(registry.list_by_type("agents")) if hasattr(registry, "list_by_type") else len(registry._resources.get("agents", [])),
+            len(registry.list_by_type("prompts")) if hasattr(registry, "list_by_type") else len(registry._resources.get("prompts", [])),
+            len(registry.list_by_type("instructions")) if hasattr(registry, "list_by_type") else len(registry._resources.get("instructions", [])),
+            len(registry.list_by_type("skills")) if hasattr(registry, "list_by_type") else len(registry._resources.get("skills", [])),
         )
         return registry
 
