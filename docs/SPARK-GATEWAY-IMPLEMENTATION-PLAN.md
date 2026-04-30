@@ -1,53 +1,88 @@
-# SPARK Gateway Pattern — Implementation Plan
+---
+# SPARK Gateway Pattern — Piano Tecnico Implementativo
 
-## Sommario esecutivo
-Obiettivo: garantire accesso stabile e minimale agli agenti SPARK via Copilot, separando risorse gateway (Layer 0) da tutto il resto (Layer 1/2 via MCP).
+## Sezione 1: Architettura Gateway (invariante)
 
-## Architettura risultante
-- Layer 0: solo file gateway in .github/
-- Layer 1: tutte le risorse via MCP
-- Layer 2: pacchetti modulari, nessun impatto su Layer 0
+### Diagramma testuale
 
-## Interventi
-
-### Intervento 1 — Aggiornamento scf_bootstrap_workspace
-- File target: spark-framework-engine.py
-- Tipo: MODIFICA
-- Punto di inserimento: def scf_bootstrap_workspace
-- Dipende da: nessuno
-- Descrizione: Garantire che vengano copiati solo i file gateway Layer 0 (spark-assistant.agent.md, spark-guide.agent.md, spark-assistant-guide.instructions.md, scf-*.prompt.md) e che la sentinella sia sempre aggiornata.
-- Snippet: logica già presente, solo refactor per chiarezza e commenti.
-- Rischio regressione: BASSO
-- Motivo rischio: logica già idempotente, nessun impatto su altri flussi.
-
-### Intervento 2 — Aggiornamento documentazione e template
-- File target: docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md, CLAUDE.md, copilot-instructions.md (template)
-- Tipo: CREAZIONE
-- Punto di inserimento: nuovi file
-- Dipende da: Intervento 1
-- Descrizione: Documentare la strategia, fornire template minimi per Layer 0.
-- Snippet: vedi sezione "Struttura file da creare".
-- Rischio regressione: BASSO
-- Motivo rischio: solo aggiunta documentazione e template.
-
-## Struttura file da creare
-- docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md (questo file)
-- CLAUDE.md (template orientamento Claude)
-- copilot-instructions.md (template Layer 0, solo orientamento e URI MCP)
-
-## Diagramma testuale Gateway Pattern
 ```
 [.github/agents/spark-assistant.agent.md] --(loader)--> [MCP: scf_get_agent()]
 [.github/agents/spark-guide.agent.md] --(onboarding)--> [MCP: scf_list_available_agents()]
 [workspace user] --(richiesta)--> [Layer 0] --(pull)--> [Layer 1 MCP] --(proxy)--> [Layer 2 pacchetti]
 ```
 
-## Criteri di accettazione
-- Layer 0 contiene solo i file gateway
-- scf_bootstrap_workspace non sovrascrive file utente
-- Tutte le risorse extra sono accessibili via MCP
-- Documentazione aggiornata
+### Tabella architettura
 
-## Rischi residui
-- Engine non avviato → risorse MCP non accessibili (limite fisico)
-- Workspace con override manuali non tracciati → warning già gestito
+| Layer  | Dove risiede                | Cosa contiene                                               | Chi lo gestisce         |
+|--------|-----------------------------|-------------------------------------------------------------|-------------------------|
+| 0      | .github/ (workspace)        | spark-assistant.agent.md, spark-guide.agent.md,             | Engine (bootstrap)      |
+|        |                             | spark-assistant-guide.instructions.md, scf-*.prompt.md      |                         |
+| 1      | MCP server (engine + pkg)   | Tutti gli agenti, skills, prompts, instructions dei pacchetti| Engine MCP              |
+| 2      | Registry pacchetti SCF      | Pacchetti installabili, versioni, risorse aggiuntive        | Registry + Engine       |
+
+---
+
+## Sezione 2: Intervento 1 — File gateway Layer 0
+
+### .github/agents/spark-assistant.agent.md
+- **Scopo**: Agente gateway che recupera risorse SPARK via MCP e le inietta nella sessione.
+- **Frontmatter obbligatorio**:
+	- spark: true
+	- scf_file_role: "agent"
+	- scf_owner: "spark-framework-engine"
+	- tools: [scf_get_agent, scf_get_skill, scf_get_prompt, scf_get_instruction, scf_list_installed_packages, scf_list_available_agents]
+- **Body**: Sezioni H2 obbligatorie:
+	- Come recuperare un agente
+	- Come recuperare una skill
+	- Come recuperare un prompt
+	- Pacchetti installati
+	- Nota operativa
+- **Tool MCP da usare**: scf_get_agent, scf_get_skill, scf_get_prompt, scf_list_installed_packages, scf_list_available_agents
+
+### .github/agents/spark-guide.agent.md
+- **Scopo**: Agente di onboarding che guida l’utente nella scoperta e uso del framework.
+- **Frontmatter obbligatorio**:
+	- spark: true
+	- scf_file_role: "agent"
+	- scf_owner: "spark-framework-engine"
+	- tools: [scf_list_installed_packages, scf_list_available_agents, scf_workspace_info, scf_bootstrap_workspace, scf_get_registry]
+- **Body**: Sezioni H2 obbligatorie:
+	- Prima sessione su un workspace
+	- Scoperta risorse
+	- Installazione pacchetti
+- **Tool MCP da usare**: scf_list_installed_packages, scf_list_available_agents, scf_workspace_info, scf_bootstrap_workspace, scf_get_registry
+
+---
+
+## Sezione 3: Intervento 2 — Refactor scf_bootstrap_workspace
+
+- **Comportamento da mantenere**: idempotenza tramite sentinella spark-assistant.agent.md
+- **Comportamento da modificare**: il set di file copiati deve essere ESATTAMENTE:
+	- agents/spark-assistant.agent.md
+	- agents/spark-guide.agent.md
+	- instructions/spark-assistant-guide.instructions.md (se presente)
+	- prompts/scf-*.prompt.md (pattern glob)
+- **Logica di verifica**: se un file è già presente E modificato dall’utente (sha256 diverso), non sovrascrivere e loggare warning su stderr
+- **Punto di inserimento**: dopo la riga `def scf_bootstrap_workspace` (~riga 7379)
+
+---
+
+## Sezione 4: Intervento 3 — Riscrittura CLAUDE.md
+
+**Contenuto richiesto:**
+
+- **Sezione MCP Server**: come avviare, path file engine, transport stdio
+- **Sezione URI Schema**: elenco completo schemi supportati con esempio (agents://, skills://, prompts://, instructions://, scf://)
+- **Sezione Tool MCP principali**: scf_get_agent, scf_get_skill, scf_get_prompt, scf_list_installed_packages, scf_bootstrap_workspace (descrizione 1 riga ciascuno)
+- **Sezione Risorse Layer 0**: elenco file in .github/ con scopo
+- **Sezione Come interrogare le risorse**: esempio concreto di prompt per Claude
+
+---
+
+## Sezione 5: Criteri di accettazione verificabili
+
+- scf_bootstrap_workspace copia solo i 4 file gateway; verifica eseguendo il tool su un workspace vuoto e controllando che .github/agents/ contenga solo spark-assistant.agent.md e spark-guide.agent.md
+- Se spark-assistant-guide.instructions.md non è presente nell’engine, non viene copiato
+- Se un file gateway è già presente e modificato dall’utente (sha256 diverso), non viene sovrascritto
+- CLAUDE.md contiene tutte le sezioni richieste, senza placeholder
+- I file agent gateway hanno frontmatter e body come da specifica

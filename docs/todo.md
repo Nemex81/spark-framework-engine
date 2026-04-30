@@ -167,3 +167,19 @@ Stato sessione: IN CORSO
 ### Fasi
 - [ ] Fase 1 — Gateway Bootstrap → docs/todo/TODO-GATEWAY-BOOTSTRAP.md
 - [ ] Fase 2 — Gateway Docs & Template → docs/todo/TODO-GATEWAY-DOCS.md
+
+## Gateway Pattern
+
+- [x] Fase 1 — Piano tecnico implementativo riscritto (docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md)
+- [x] Fase 2 — TODO gateway bootstrap e docs riscritti (docs/todo/TODO-GATEWAY-BOOTSTRAP.md, TODO-GATEWAY-DOCS.md)
+- [x] Fase 3 — File gateway engine creati (.github/agents/spark-assistant.agent.md, spark-guide.agent.md)
+- [x] Fase 4 — CLAUDE.md riscritto con tutte le sezioni richieste
+- [x] Fase 5 — Refactor scf_bootstrap_workspace applicato (spark-framework-engine.py)
+
+### Criteri di accettazione
+
+- scf_bootstrap_workspace copia solo i file gateway Layer 0
+- File modificati dall’utente non vengono sovrascritti
+- Logging warning su sys.stderr se file gateway modificato
+- CLAUDE.md e agent gateway conformi a specifica
+- Idempotenza garantita tramite sentinella

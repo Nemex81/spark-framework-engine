@@ -1,13 +1,15 @@
 # TODO — Gateway Docs & Template
-Riferimento piano: docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md — Intervento 2
+Riferimento piano: docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md — Sezione 4
 Priorità: P1
 Dipende da: Gateway Bootstrap
 
 ## Task specifici
-- [ ] Creare/aggiornare CLAUDE.md secondo template
-- [ ] Creare/aggiornare copilot-instructions.md secondo template
-- [ ] Aggiornare docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md con dettagli implementativi
-
-## Criteri di completamento
-- Tutti i template Layer 0 sono presenti e corretti
-- Documentazione gateway aggiornata
+1. Sovrascrivi CLAUDE.md con tutte le sezioni richieste dal piano (Sezione 4):
+	- Criterio: Tutte le sezioni presenti, nessun placeholder
+	- Pass/Fail: Review manuale file
+2. Aggiorna docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md con struttura e dettagli implementativi:
+	- Criterio: Tutte le sezioni richieste, tabella, snippet, criteri
+	- Pass/Fail: Review manuale file
+3. Verifica che i file agent gateway abbiano frontmatter e body come da specifica:
+	- Criterio: Frontmatter e sezioni H2 obbligatorie
+	- Pass/Fail: Review manuale file

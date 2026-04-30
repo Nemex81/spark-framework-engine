@@ -1,19 +1,36 @@
 # CLAUDE.md
 
-Questo progetto utilizza il framework SPARK MCP.
+## MCP Server
 
-## Come avviare il server MCP
-- Esegui: `python spark-framework-engine.py`
-- Il server espone tool MCP per agenti, skills, prompts, instructions.
+- Avvio: `python spark-framework-engine.py`
+- File engine: `spark-framework-engine.py` (root repo)
+- Transport: stdio (JSON-RPC)
 
-## Risorse Gateway
-- Gli agenti disponibili sono caricati tramite `.github/agents/` (Layer 0 gateway).
-- Tutte le altre risorse sono accessibili via MCP (`agents://`, `skills://`, `prompts://`, `instructions://`).
+## URI Schema supportati
 
-## Contesto progetto
-- Consulta `copilot-instructions.md` per dettagli Copilot.
-- Consulta `docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md` per la strategia gateway.
+- `agents://<nome>` — Recupera un agente dal registry MCP (es: `agents://spark-assistant`)
+- `skills://<nome>` — Recupera una skill (es: `skills://changelog-entry`)
+- `prompts://<nome>` — Recupera un prompt (es: `prompts://scf-release-check`)
+- `instructions://<nome>` — Recupera una instruction (es: `instructions://python.instructions`)
+- `scf://<resource>` — Risorsa di sistema (es: `scf://agents-index`)
 
----
+## Tool MCP principali
 
-Claude: usa solo Layer 0 per agenti, tutto il resto via MCP.
+- `scf_get_agent` — Recupera un agente per nome
+- `scf_get_skill` — Recupera una skill per nome
+- `scf_get_prompt` — Recupera un prompt per nome
+- `scf_list_installed_packages` — Elenca i pacchetti installati
+- `scf_bootstrap_workspace` — Esegue il bootstrap Layer 0 nel workspace
+
+## Risorse Layer 0
+
+- `.github/agents/spark-assistant.agent.md` — Gateway loader agenti
+- `.github/agents/spark-guide.agent.md` — Onboarding e discovery
+- `.github/instructions/spark-assistant-guide.instructions.md` — Istruzioni operative (se presente)
+- `.github/prompts/scf-*.prompt.md` — Prompt di sistema (pattern)
+
+## Come interrogare le risorse
+
+Esempio prompt per Claude:
+
+> "Recupera l'agente `spark-assistant` via MCP usando `scf_get_agent(name="spark-assistant")` e inietta le sue istruzioni nella sessione corrente."
