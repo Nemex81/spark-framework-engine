@@ -1305,6 +1305,13 @@ class FrameworkInventory:
         # 3) Override del workspace
         self._scan_workspace_overrides(registry)
 
+        _log.info(
+            "[SPARK-ENGINE][INFO] MCP registry populated: %d agents, %d prompts, %d instructions, %d skills",
+            len(registry.list_by_type("agents")),
+            len(registry.list_by_type("prompts")),
+            len(registry.list_by_type("instructions")),
+            len(registry.list_by_type("skills")),
+        )
         return registry
 
     def _register_engine_resources(
@@ -4355,6 +4362,7 @@ class SparkFrameworkEngine:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Agent '{name}' not found. Use agents://list to see available agents."
 
+
         @_register_resource("skills://list")
         async def resource_skills_list() -> str:
             return _fmt_list(inventory.list_skills(), "SCF Skills")
@@ -4370,6 +4378,32 @@ class SparkFrameworkEngine:
                 if ff.name.lower().removesuffix(".skill") == qlow:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Skill '{name}' not found. Use skills://list to see available skills."
+
+        # --- MCP Resource Handler: agents://{name} ---
+        @_register_resource("agents://{name}")
+        async def resource_agent_by_name(name: str) -> str:
+            query = name.removesuffix(".agent")
+            content = _registry_read("agents", query)
+            if content is not None:
+                return content
+            qlow = query.lower()
+            for ff in inventory.list_agents():
+                if ff.name.lower().removesuffix(".agent") == qlow:
+                    return ff.path.read_text(encoding="utf-8", errors="replace")
+            return f"Agent '{name}' not found. Use agents://list to see available agents."
+
+        # --- MCP Resource Handler: prompts://{name} ---
+        @_register_resource("prompts://{name}")
+        async def resource_prompt_by_name(name: str) -> str:
+            query = name.removesuffix(".prompt")
+            content = _registry_read("prompts", query)
+            if content is not None:
+                return content
+            qlow = query.lower()
+            for ff in inventory.list_prompts():
+                if ff.name.lower().removesuffix(".prompt") == qlow:
+                    return ff.path.read_text(encoding="utf-8", errors="replace")
+            return f"Prompt '{name}' not found. Use prompts://list."
 
         @_register_resource("instructions://list")
         async def resource_instructions_list() -> str:
