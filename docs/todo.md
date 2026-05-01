@@ -42,6 +42,13 @@ Senza questo file l'invariante 3 di ogni step non è verificabile.
 Da quel momento ogni step confronta il proprio output di verifica con questa baseline.
 Se l'output cambia, lo step ha introdotto una modifica logica involontaria — rollback.
 
+> **NOTA SESSIONE 2026-05-01:** BASELINE NON TROVATA al momento dell'avvio Fase 0.
+> Schema teorico generato in `docs/reports/baseline-schema.json` (estratto da
+> `ManifestManager.verify_integrity` e dal handler `scf_verify_workspace`).
+> Finché l'utente non produce la baseline runtime reale, l'Invariante 3 di ogni
+> step viene gestita in modalità degradata: confronto statico tra import e
+> simboli MCP pre/post step.
+
 ---
 
 ## Fase 0 — Modularizzazione (9 step)

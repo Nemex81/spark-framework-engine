@@ -1,0 +1,22 @@
+[
+  {
+    "start": "class RegistryClient:\n    \"\"\"Fetch and cache the SCF registry index from GitHub.",
+    "end": "\n\n\n# ---------------------------------------------------------------------------\n# Migration v2.x -> v3.0 helpers (Phase 0 - scf_migrate_workspace)",
+    "replacement": "# RegistryClient moved to spark.registry.client (re-exported in header).\n\n\n# ---------------------------------------------------------------------------\n# Migration v2.x -> v3.0 helpers (Phase 0 - scf_migrate_workspace)"
+  },
+  {
+    "start": "_V3_STORE_INSTALLATION_MODE: str = \"v3_store\"\n\n\ndef _v3_store_sentinel_file(package_id: str) -> str:",
+    "end": "\n\n\ndef _install_package_v3_into_store(",
+    "replacement": "# v3_store helpers moved to spark.registry.v3_store (re-exported in header).\n\n\ndef _install_package_v3_into_store("
+  },
+  {
+    "start": "# Constant _RESOURCE_TYPES moved to spark.core.constants (re-exported in header).\n\n\ndef _resource_filename_candidates(resource_type: str, name: str) -> tuple[str, ...]:",
+    "end": "\n\n\n# ---------------------------------------------------------------------------\n# McpResourceRegistry (v3.0)",
+    "replacement": "# Constant _RESOURCE_TYPES moved to spark.core.constants (re-exported in header).\n# PackageResourceStore + _resource_filename_candidates moved to\n# spark.registry.store (re-exported in header).\n\n\n# ---------------------------------------------------------------------------\n# McpResourceRegistry (v3.0)"
+  },
+  {
+    "start": "class McpResourceRegistry:\n    \"\"\"Indice in-memory delle risorse MCP esposte dall'engine.",
+    "end": "\n\n\n# ---------------------------------------------------------------------------\n# SparkFrameworkEngine",
+    "replacement": "# McpResourceRegistry moved to spark.registry.mcp (re-exported in header)."
+  }
+]

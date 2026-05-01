@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 _SOURCE = Path(__file__).parent.parent / "spark-framework-engine.py"
+_CONSTANTS = Path(__file__).parent.parent / "spark" / "core" / "constants.py"
 _CHANGELOG = Path(__file__).parent.parent / "CHANGELOG.md"
 
 
@@ -36,10 +37,13 @@ def test_engine_version_changelog_alignment():
     """
     Verifica che ENGINE_VERSION nel sorgente coincida
     con la prima voce versionale di CHANGELOG.md.
+
+    Dopo Fase 0, la costante canonica vive in ``spark/core/constants.py``;
+    l'hub ``spark-framework-engine.py`` la re-esporta.
     """
-    source = _SOURCE.read_text(encoding="utf-8")
-    version_match = re.search(r'ENGINE_VERSION: str = "([^"]+)"', source)
-    assert version_match, "ENGINE_VERSION non trovata nel sorgente"
+    constants_source = _CONSTANTS.read_text(encoding="utf-8")
+    version_match = re.search(r'ENGINE_VERSION: str = "([^"]+)"', constants_source)
+    assert version_match, "ENGINE_VERSION non trovata in spark/core/constants.py"
     engine_ver = version_match.group(1)
 
     changelog = _CHANGELOG.read_text(encoding="utf-8")
