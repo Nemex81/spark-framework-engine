@@ -66,6 +66,9 @@ pytest_cache/
 htmlcov/
 .coverage
 
+# SPARK Engine — runtime snapshots test (mai tracciare)
+runtime/
+
 # SPARK Engine — runtime logs and debug residues
 *.log
 spark_debug_*.txt
