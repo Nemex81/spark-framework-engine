@@ -1,5 +1,4 @@
 ---
----
 name: spark-assistant
 spark: true
 scf_file_role: agent
