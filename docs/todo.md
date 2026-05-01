@@ -2,7 +2,7 @@
 
 - **Sessione attiva:** Refactoring Modulare — Fase 1 (Stabilizzazione)
 - **Ultimo aggiornamento:** 2026-05-01
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 APERTA
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 ATTIVA (step 1.2 e 1.3 completati)
 - **Baseline test:** 27 failed / 263 passed (invariata rispetto al pristine pre-Fase 0)
 
 ## Documenti di riferimento
@@ -21,7 +21,7 @@
 
 La baseline runtime `docs/reports/baseline-verify-workspace.json` non è ancora stata
 generata con il motore reale. Fase 0 è stata completata in modalità degradata (confronto
-statico). **Prima di iniziare qualsiasi step di Fase 1**, generare la baseline:
+statico). **Generare prima di chiudere Fase 1** (Step 1.7):
 
 1. Avvia il motore in locale:
 
@@ -36,10 +36,8 @@ statico). **Prima di iniziare qualsiasi step di Fase 1**, generare la baseline:
 
    ```powershell
    git add docs/reports/baseline-verify-workspace.json
-   git commit -m "docs(baseline): cattura output scf_verify_workspace post-Fase0"
+   git commit -m "docs(baseline): cattura output scf_verify_workspace post-Fase1"
    ```
-
-Senza questo file l'Invariante 3 di ogni step Fase 1 non è verificabile in modo runtime.
 
 ---
 
@@ -61,39 +59,33 @@ Senza questo file l'Invariante 3 di ogni step Fase 1 non è verificabile in modo
 
 - **`spark/inventory/` non previsto:** Copilot ha estratto `FrameworkInventory` e
   `EngineInventory` in un package separato `spark/inventory/{framework,engine}.py`
-  invece di `spark/workspace/inventory.py` come dichiarato nel piano. Il codice è
-  corretto e funzionante. Il piano Fase 0 e il grafo in `REFACTORING-DESIGN.md` sono
-  stati aggiornati per riflettere questa struttura reale.
+  invece di `spark/workspace/inventory.py` come dichiarato nel piano originale.
+  Il codice è corretto e funzionante. Il grafo in `REFACTORING-DESIGN.md` va aggiornato
+  (Step 1.8).
 - **`spark/workspace/policy.py` invece di `update_policy.py`:** Le 7 funzioni di policy
-  (`_default_update_policy`, `_update_policy_path`, ecc.) vivono in `policy.py`. Il piano
-  originale dichiarava `update_policy.py`. Rinomina prevista in Fase 1 Step 1.1.
-- **Modifiche di interfaccia in `WorkspaceLocator` e `EngineInventory`:** Entrambe
-  le classi ora accettano `engine_root: Path = None` con fallback a `Path.cwd()`.
-  Il fallback silenzioso è un debito tecnico da hardening in Fase 1 Step 1.2.
-- **4 sostituzioni chirurgiche in `SparkFrameworkEngine`:** `EngineInventory()` →
-  `EngineInventory(engine_root=self._ctx.engine_root)` e due `Path(__file__)` →
-  `self._ctx.engine_root`. Tecnicamente fuori dal mandato "nessuna modifica logica"
-  ma architetturalmente obbligatorie. Documentate nel TODO step-08.
+  vivono in `policy.py`. Rinomina prevista in Step 1.1.
+- **Marker `# FASE1-RIASSEGNA` mai materializzati nel codice Python:** i marker erano
+  citati nel piano ma non sono mai stati inseriti come commenti inline. Verificato con
+  grep exhaustivo in Fase 1 Step 1.3. Step chiuso a zero modifiche.
+- **`engine_root` obbligatorio:** hardening completato in Step 1.2 (commit fd4b552).
 
 ---
 
 ## Fase 1 — Stabilizzazione (ATTIVA)
 
-**Prerequisito:** Baseline runtime generata (vedi sezione PREREQUISITO ZERO sopra).
+| Step | Operazione | Rischio | Stato | Note |
+|------|-----------|---------|-------|------|
+| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [ ] | | 
+| 1.2 | Hardening `engine_root` obbligatorio in `WorkspaceLocator` e `EngineInventory` | BASSO | [x] | commit fd4b552 |
+| 1.3 | Censimento marker `# FASE1-RIASSEGNA` | MEDIO | [x] | 0 marker trovati nel codice Python |
+| 1.4 | Analisi e fix 27 failure pre-esistenti (gruppi: bootstrap, lifecycle, locator) | ALTO | [ ] | step successivo |
+| 1.5 | Fix log count hardcoded 40/44 in `spark/boot/sequence.py` | BASSO | [ ] | |
+| 1.6 | Rimozione `pytest_out.txt` + aggiornamento `.gitignore` | BASSO | [x] | commit f1ed7b6 |
+| 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | [ ] | dopo fix failure |
+| 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | [ ] | |
 
-| Step | Operazione | Rischio | File TODO | Stato |
-|------|-----------|---------|-----------|-------|
-| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | da creare | [ ] |
-| 1.2 | Hardening `engine_root` obbligatorio in `WorkspaceLocator` e `EngineInventory` | BASSO | da creare | [ ] |
-| 1.3 | Censimento e risoluzione marker `# FASE1-RIASSEGNA` | MEDIO | da creare | [ ] |
-| 1.4 | Fix bug `WorkspaceContext.manifest` mancante (causa 8 failure pre-esistenti) | MEDIO | da creare | [ ] |
-| 1.5 | Fix log count hardcoded 40/44 in `spark/boot/sequence.py` e docstring engine | BASSO | da creare | [ ] |
-| 1.6 | Rimozione `pytest_out.txt` dalla root + aggiornamento `.gitignore` | BASSO | da creare | [ ] |
-| 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | da creare | [ ] |
-| 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | da creare | [ ] |
-
-**Invariante globale Fase 1:** dopo ogni step, la suite test non deve scendere sotto
-27 failed / 263 passed. L'obiettivo finale di Fase 1 è ridurre i failed da 27 a 0.
+**Invariante globale Fase 1:** la suite test non deve scendere sotto 27 failed / 263
+passed dopo ogni step. L'obiettivo finale è 0 failed.
 
 ---
 
@@ -109,36 +101,36 @@ Senza questo file l'Invariante 3 di ogni step Fase 1 non è verificabile in modo
 
 ## Anomalie note — Backlog completo
 
-### P0 — Bloccanti per i test (27 failure pre-esistenti)
+### P0 — Causa dei 27 failure pre-esistenti (target Fase 1 Step 1.4)
 
-- **`WorkspaceContext.manifest` mancante:** il dataclass ha solo 3 campi
-  (`workspace_root`, `github_root`, `engine_root`), ma `SparkFrameworkEngine` accede
-  a `self._ctx.manifest` in almeno un punto. Causa 8 failure nel gruppo
-  `test_bootstrap_workspace`. Da correggere in Fase 1 Step 1.4 aggiungendo il campo
-  oppure correggendo il punto di accesso che lo usa erroneamente.
-- **`test_package_lifecycle_v3`:** 10 failure pre-esistenti. Causa da analizzare
-  durante Fase 1 Step 1.3 censimento marker.
-- **`test_workspace_locator` flaky:** 2-3 failure intermittenti legati a `Path.cwd()`
-  quando il test non specifica `engine_root`. Risolti da Step 1.2.
+I 27 failure sono divisi in 3 gruppi distinti. Analisi necessaria prima di
+intervento (Step 1.4 produce l'analisi completa con il Prompt 4).
 
-### P1 — Non bloccanti, da trattare in Fase 1
+- **Gruppo A — `test_bootstrap_workspace` (~8 failure):** `SparkFrameworkEngine`
+  accede a `self._ctx.manifest` ma `WorkspaceContext` non ha questo campo.
+  Causa probabile: accesso errato o campo mancante nel dataclass.
+- **Gruppo B — `test_package_lifecycle_v3` (~10 failure):** causa da analizzare
+  nel Prompt 4. Il gruppo era pre-esistente e non legato ai marker FASE1-RIASSEGNA.
+- **Gruppo C — `test_workspace_locator` (~2-3 failure):** flaky su
+  `test_workspace_locator_ignores_home_env_without_workspace_markers`. Presente
+  nel baseline pre-Fase 0, non introdotto dallo Step 1.2 (confermato da Copilot).
+
+### P1 — Non bloccanti, da trattare nei prossimi step
 
 - **Log count hardcoded 40/44:** `"Tools registered: 40 total"` in
   `spark/boot/sequence.py` e commento `Tools (40)` in `spark/boot/engine.py`.
-  Da aggiornare in Step 1.5.
+  Target: Step 1.5.
 - **`packages/diff.py` placeholder:** helper di diff sono inner function di
-  `register_tools`, non estraibili senza modifica logica. Marker `# FASE1-RIASSEGNA`
-  già inseriti. Da risolvere in Step 1.3.
-- **`engine_root` opzionale con fallback `Path.cwd()`:** debito tecnico da
-  `WorkspaceLocator.__init__` e `EngineInventory.__init__`. Da hardening in Step 1.2.
+  `register_tools`. Il piano li dichiarava come candidati a marker FASE1-RIASSEGNA
+  ma non sono stati annotati. Da valutare se estrarre in Fase 2 (modifica logica).
 
 ### P2 — Da trattare in Fase 2
 
 - **`_build_app` non deterministico:** fallback silenziosi su errori di inventory
-  e registry. Piano di correzione in `FASE2-PIANO-TECNICO.md`.
-- **`validate_completeness`:** funzione con logica parziale annotata
-  `# FASE2-FIX: log count hardcoded` (riga ~8380 originale, ora in
-  `spark/merge/validators.py` o `spark/boot/sequence.py`).
+  e registry. Piano in `FASE2-PIANO-TECNICO.md`.
+- **Riferimento obsoleto in FASE2:** il piano cita `_build_app` "alla riga 8348"
+  del monolite — quella riga non esiste più. La funzione ora vive in
+  `spark/boot/sequence.py`. Correzione prevista in Step 1.8 o all'apertura Fase 2.
 
 ---
 
