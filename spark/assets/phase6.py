@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 from spark.assets.collectors import _collect_engine_agents, _collect_package_agents
 from spark.assets.rendering import (
@@ -16,18 +16,28 @@ from spark.assets.rendering import (
 )
 from spark.registry.store import PackageResourceStore
 
+if TYPE_CHECKING:
+    from spark.manifest.gateway import WorkspaceWriteGateway
+
 
 def _apply_phase6_assets(
     workspace_root: Path,
     engine_root: Path,
     installed_packages: Iterable[str],
     github_write_authorized: bool,
+    gateway: WorkspaceWriteGateway | None = None,
+    engine_version: str = "",
 ) -> dict[str, Any]:
     """Generate AGENTS.md, AGENTS-{plugin}.md, .clinerules, project-profile.md.
 
     Idempotent: AGENTS.md uses safe-merge with SCF markers; AGENTS-{plugin}.md
     is rewritten on every run; .clinerules and project-profile.md are written
     only when missing. Returns a report dict.
+
+    When *gateway* is provided (together with *engine_version*), writes to
+    ``.github/`` are routed through the gateway so that the manifest tracks
+    every generated file.  Writes to workspace root (e.g. ``.clinerules``)
+    are always direct regardless of the gateway.
     """
     report: dict[str, Any] = {
         "agents_md": None,
@@ -52,7 +62,10 @@ def _apply_phase6_assets(
     existing = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
     new_content = _render_agents_md(engine_agents, package_agents, existing)
     if existing != new_content:
-        agents_md_path.write_text(new_content, encoding="utf-8")
+        if gateway is not None and engine_version:
+            gateway.write("AGENTS.md", new_content, "spark-engine", engine_version)
+        else:
+            agents_md_path.write_text(new_content, encoding="utf-8")
         report["agents_md"] = "written"
     else:
         report["agents_md"] = "unchanged"
@@ -60,19 +73,29 @@ def _apply_phase6_assets(
     # 2) AGENTS-{plugin}.md (always rewrite to keep in sync)
     for pkg_id, agents in package_agents.items():
         plugin_path = github_root / f"AGENTS-{pkg_id}.md"
-        plugin_path.write_text(_render_plugin_agents_md(pkg_id, agents), encoding="utf-8")
+        plugin_content = _render_plugin_agents_md(pkg_id, agents)
+        if gateway is not None and engine_version:
+            # Owner è "spark-engine": il file è generato dall'engine, non dal pacchetto.
+            gateway.write(f"AGENTS-{pkg_id}.md", plugin_content, "spark-engine", engine_version)
+        else:
+            plugin_path.write_text(plugin_content, encoding="utf-8")
         report["plugin_agents_md"].append(plugin_path.name)
     report["plugin_agents_md"].sort()
 
     # 3) project-profile.md (only if missing)
     profile_path = github_root / "project-profile.md"
     if not profile_path.is_file():
-        profile_path.write_text(_render_project_profile_template(), encoding="utf-8")
+        profile_content = _render_project_profile_template()
+        if gateway is not None and engine_version:
+            gateway.write("project-profile.md", profile_content, "spark-engine", engine_version)
+        else:
+            profile_path.write_text(profile_content, encoding="utf-8")
         report["project_profile"] = "created"
     else:
         report["project_profile"] = "preserved"
 
     # 4) .clinerules (only if missing — never overwrite user content)
+    # .clinerules lives at workspace root (outside .github/) → direct write always.
     clinerules_path = workspace_root / ".clinerules"
     if not clinerules_path.is_file():
         profile_text = (
