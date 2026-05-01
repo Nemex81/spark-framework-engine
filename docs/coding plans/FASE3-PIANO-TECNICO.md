@@ -55,11 +55,11 @@ Aggiornamenti alla struttura reale rispetto a quanto scritto sopra:
 - **Sezione 3 — `spark/workspace/update_policy.py`:** il file si chiama
   `spark/workspace/policy.py`. Step 1.1 di Fase 1 prevede la rinomina a
   `update_policy.py`. Se non eseguita prima di Fase 3, aggiornare il
-  riferimento.
+  riferimento. **[RISOLTO commit 950c81a — rinomina completata in Fase 1 Step 1.1]**
 - **`SnapshotManager` e `MergeSessionManager`:** entrambi già in
   `spark/manifest/snapshots.py` e `spark/merge/sessions.py` rispettivamente
   (estratti in Fase 0). Le modifiche ai path runtime si applicano a questi
-  file esistenti, non a nuovi file da creare.
+  file esistenti, non a nuovi file da creare. **[RISOLTO commit 950c81a]**
 
 ---
 
