@@ -67,6 +67,6 @@ def _build_app(engine_root: Path) -> FastMCP:
     app = SparkFrameworkEngine(mcp, context, inventory)
     app.register_resources()
     app.register_tools()
-    _log.info("Tools registered: 40 total")
+    _log.info("Tools registered: 44 total")
 
     return mcp

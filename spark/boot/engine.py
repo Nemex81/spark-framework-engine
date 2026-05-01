@@ -191,6 +191,8 @@ class SparkFrameworkEngine:
         engine_root = self._ctx.engine_root
         store = PackageResourceStore(engine_root)
         registry = self._inventory.mcp_registry
+        if registry is None:
+            _, registry, _ = self._v3_runtime_state()
         package_dir = store.package_dir(package_id).parent
         # 1. Scarica e popola store
         if package_dir.exists():
@@ -204,7 +206,7 @@ class SparkFrameworkEngine:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             raw_url = pkg.get("raw_url_base", "") + "/" + str(rel_path).replace("\\", "/")
             try:
-                content = RegistryClient.fetch_raw_file(self._inventory.registry, raw_url)
+                content = RegistryClient(self._ctx.github_root).fetch_raw_file(raw_url)
                 dest_path.write_text(content, encoding="utf-8")
             except Exception as exc:
                 _log.warning(f"[SPARK-ENGINE][WARNING] Cannot fetch {raw_url}: {exc}")
@@ -235,7 +237,7 @@ class SparkFrameworkEngine:
             self._ctx.workspace_root,
             self._ctx.engine_root,
             installed_ids,
-            self._is_github_write_authorized()
+            self._is_github_write_authorized_v3()
         )
         return build_install_result(True, package=package_id, package_version=pkg_version, installation_mode="v3_store")
 
@@ -803,7 +805,7 @@ class SparkFrameworkEngine:
         _log.info("[SPARK-ENGINE][INFO] Resources registrate: %d", len(resource_uris))
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all MCP tools. Resources (15) and Tools (40)."""
+        """Register all MCP tools. Resources (15) and Tools (44)."""
         inventory = self._inventory
         tool_names: list[str] = []
 
@@ -2220,7 +2222,7 @@ class SparkFrameworkEngine:
             # Branch v3 lifecycle: pacchetti che dichiarano min_engine_version
             # >= 3.0.0 vengono installati nello store engine, non in workspace.
             if _is_v3_package(pkg_manifest):
-                return await self._install_package_v3_into_store(
+                return await self._install_package_v3(
                     package_id=package_id,
                     pkg=pkg,
                     pkg_manifest=pkg_manifest,
@@ -3705,7 +3707,7 @@ class SparkFrameworkEngine:
 
             engine_github_root = self._ctx.engine_root / ".github"
             workspace_github_root = self._ctx.github_root
-            manifest = self._ctx.manifest
+            manifest = ManifestManager(workspace_github_root)
             sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
             sentinel_rel = "agents/spark-assistant.agent.md"
 
@@ -3796,6 +3798,28 @@ class SparkFrameworkEngine:
                     "install_base_requested": install_base,
                     "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 }
+
+            # Track bootstrapped files in manifest (idempotent: new + identical files)
+            bootstrap_manifest_targets = [
+                (dst.relative_to(workspace_github_root).as_posix(), dst)
+                for dst in written_paths + identical_paths
+                if not any(
+                    owner != _BOOTSTRAP_PACKAGE_ID
+                    for owner in manifest.get_file_owners(
+                        dst.relative_to(workspace_github_root).as_posix()
+                    )
+                )
+            ]
+            if bootstrap_manifest_targets:
+                manifest.upsert_many(
+                    _BOOTSTRAP_PACKAGE_ID,
+                    ENGINE_VERSION,
+                    bootstrap_manifest_targets,
+                )
+                _save_snapshots(
+                    _BOOTSTRAP_PACKAGE_ID,
+                    bootstrap_manifest_targets,
+                )
 
             return {
                 "success": True,

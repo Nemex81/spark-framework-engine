@@ -566,6 +566,9 @@ class _BootstrapInstaller:
             raise _BootstrapError("Nessun file installabile per spark-base dopo il preflight.")
         for item in plan:
             if item.action != "write":
+                if item.action == "adopt":
+                    dest_path = pkg_store_dir / item.rel_path
+                    _log("INFO", f"Adottato nel manifest senza riscrittura: {dest_path}")
                 continue
             dest_path = pkg_store_dir / item.rel_path
             dest_path.parent.mkdir(parents=True, exist_ok=True)

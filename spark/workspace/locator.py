@@ -186,7 +186,7 @@ class WorkspaceLocator:
             workspace_folder = os.environ.get("WORKSPACE_FOLDER")
             if workspace_folder:
                 candidate = Path(workspace_folder).expanduser().resolve()
-                if candidate.is_dir():
+                if candidate.is_dir() and not self._is_user_home(candidate):
                     workspace_root = candidate
                     _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
 
