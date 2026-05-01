@@ -1,7 +1,0 @@
-[
-  {
-    "start": "_AGENTS_INDEX_BEGIN: str = \"<!-- SCF:BEGIN:agents-index -->\"",
-    "end": "\n\n\n# ---------------------------------------------------------------------------\n# v3 package lifecycle helpers",
-    "replacement": "# Phase 6 assets (templates, rendering, collectors, _apply_phase6_assets)\n# moved to spark.assets (re-exported in header)."
-  }
-]

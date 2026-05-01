@@ -1,7 +1,0 @@
-[
-  {
-    "start": "_V2_MIGRATION_KEEP_DIRS: tuple[str, ...] = (\n    \"instructions\",",
-    "end": "\n\n\n# ---------------------------------------------------------------------------\n# Phase 6 — Bootstrap v3 asset rendering",
-    "replacement": "# Migration v2.x->v3.0 helpers (constants, classifier, MigrationPlan, MigrationPlanner)\n# moved to spark.workspace.migration (re-exported in header)."
-  }
-]
