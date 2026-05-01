@@ -46,3 +46,26 @@ Trasformare `spark/workspace/` in un layer di sola lettura. Introdurre un gatewa
 - **Bug di tracciamento.** Se il gateway dimentica di registrare anche solo una scrittura, il manifest diverge dallo stato reale. Mitigazione: test E2E che verificano `scf_verify_workspace.is_clean == True` dopo ogni operazione.
 - **Performance.** Il gateway aggiunge un livello indiretto su ogni scrittura. Mitigazione: batch writes in `WorkspaceWriteGateway.transaction()`.
 - **Compatibilità tool esterni.** Tool che oggi scrivono direttamente sotto `.github/` (script di terze parti) non passano dal gateway; il gateway non li blocca, ma `scf_verify_workspace` li segnala come `user_modified`.
+
+---
+
+## DRIFT — Note di allineamento post-Fase 0/1 (2026-05-01)
+
+Aggiornamenti alla struttura reale rispetto a quanto scritto sopra:
+
+- **Sezione 3 — `spark/workspace/inventory.py`:** il file non esiste.
+  `FrameworkInventory` ed `EngineInventory` vivono in `spark/inventory/framework.py`
+  e `spark/inventory/engine.py` (package separato estratto in Fase 0).
+  Il grep di Fase 4 deve includere `spark/inventory/`.
+- **Sezione 3 — `spark/assets/renderers.py`:** il file non esiste come singolo file.
+  Le funzioni di rendering sono distribuite in 4 file: `spark/assets/collectors.py`,
+  `spark/assets/phase6.py`, `spark/assets/rendering.py`, `spark/assets/templates.py`.
+  `_apply_phase6_assets` è in `spark/assets/phase6.py`.
+- **`spark/workspace/migration.py`:** questo file esiste in `workspace/` (non in
+  `packages/` come previsto dal piano originale). Contiene `MigrationPlan` e
+  `MigrationPlanner` e include operazioni di scrittura filesystem. Va incluso nel
+  censimento scritture di Fase 4 Operazione 1.
+- **Verificare scritture in `spark/packages/lifecycle.py`:** `_install_package_v3_into_store`
+  (funzione standalone, non il metodo istanza residuo) usa `dest.write_text` e
+  `dest.parent.mkdir` direttamente. È un candidato naturale per la migrazione al
+  gateway in Fase 4.

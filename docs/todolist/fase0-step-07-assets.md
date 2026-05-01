@@ -59,6 +59,29 @@ Aggiornare REFACTORING-DESIGN.md Sezione 6 per esplicitare la freccia.
 Invarianti verificati.
 ```
 
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con una deviazione rispetto al piano:
+
+- **Il package `spark/assets/` è implementato come 4 file** invece di un singolo
+  `renderers.py`:
+  - `spark/assets/collectors.py` — `_collect_engine_agents`, `_collect_package_agents`,
+    `_read_agent_summary`
+  - `spark/assets/phase6.py` — `_apply_phase6_assets`
+  - `spark/assets/rendering.py` — `_agents_index_section_text`, `_render_agents_md`,
+    `_render_plugin_agents_md`, `_render_clinerules`, `_render_project_profile_template`,
+    `_extract_profile_summary`
+  - `spark/assets/templates.py` — `_AGENTS_INDEX_BEGIN`, `_AGENTS_INDEX_END`,
+    `_CLINERULES_TEMPLATE_HEADER`, `_PROJECT_PROFILE_TEMPLATE`
+- L’import è `from spark.assets import _apply_phase6_assets, ...` (aggiornato
+  in `spark/assets/__init__.py`).
+- La freccia `registry → assets` (via `PackageResourceStore` in `_apply_phase6_assets`)
+  è stata confermata e aggiornata nel grafo `REFACTORING-DESIGN.md` Sezione 6.
+- `_apply_phase6_assets` usa anche `EngineInventory` da `spark/inventory/` —
+  freccia `inventory → assets` aggiunta al grafo.
+
 ```
 docs(design): aggiorna grafo — dipendenza registry→assets rilevata step 07
 

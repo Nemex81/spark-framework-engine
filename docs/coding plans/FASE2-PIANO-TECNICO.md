@@ -44,3 +44,24 @@ Riscrivere `spark/boot/sequence.py` come sequenza lineare e ordinata di iniziali
 
 - **Cambio di comportamento in caso di errore.** Trasformare un warning in fatal può rompere installazioni esistenti. Mitigazione: feature flag `SPARK_STRICT_BOOT=1` per abilitare il nuovo comportamento, default off in Fase 2; default on in Fase 3.
 - **Test che dipendono da boot permissivo.** Mitigazione: marker `pytest.mark.legacy_boot` per i test che richiedono il vecchio comportamento.
+
+---
+
+## DRIFT — Note di allineamento post-Fase 0/1 (2026-05-01)
+
+Aggiornamenti alla struttura reale rispetto a quanto scritto sopra al momento
+della stesura del piano:
+
+- **Sezione 4.1 riferimento riga monolite:** `_build_app` è descritta come
+  “alla riga 8348” del file monolite. Quella riga non esiste più. La funzione
+  ora vive in `spark/boot/sequence.py`.
+- **`spark/boot/validation.py`:** il file non esiste ancora. Era pianificato
+  come placeholder in Fase 0 Step 08 ma non è stato creato. Sarà il primo
+  artefatto da creare in Fase 2 (nuova, non estratta dal monolite).
+- **`spark/workspace/policy.py`:** il piano di Fase 3 e questo piano citano
+  `update_policy.py`; il file si chiama `policy.py`. Step 1.1 di Fase 1 prevede
+  la rinomina. Se non ancora eseguita all’apertura di Fase 2, aggiornare gli
+  import di conseguenza.
+- **Metodo istanza residuo:** `SparkFrameworkEngine._install_package_v3_into_store`
+  rimane in `spark/boot/engine.py` ma non è più chiamato (fix Step 1.4 Fase 1).
+  Candidato a rimozione come prima pulizia di Fase 2.

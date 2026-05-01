@@ -78,3 +78,31 @@ precedenti.
 Invarianti verificati: 44 tool registrati, scf_verify_workspace identico
 alla baseline.
 ```
+
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con le seguenti deviazioni rispetto al piano:
+
+- **`SparkFrameworkEngine` si trova in `spark/boot/engine.py`**, non in
+  `spark/boot/sequence.py` come pianificato. La funzione `_build_app` è in
+  `spark/boot/sequence.py`. Il package `spark.boot` esporta entrambe correttamente
+  tramite `__init__.py`.
+- **`spark/boot/validation.py` non creato** come placeholder. Il file è previsto
+  come nuovo artefatto da creare in Fase 2, non come estrazione dal monolite.
+- **Import path deviati rispetto alla lista del piano:**
+  - `from spark.workspace.inventory import FrameworkInventory, EngineInventory`
+    → `from spark.inventory import FrameworkInventory, EngineInventory`
+    (package `spark/inventory/` creato al posto di `spark/workspace/inventory.py`)
+  - `from spark.workspace.update_policy import ...`
+    → `from spark.workspace.policy import ...`
+    (file si chiama `policy.py`, rinomina pianificata Step 1.1 Fase 1)
+  - `from spark.registry.mcp_registry import McpResourceRegistry`
+    → `from spark.registry.mcp import McpResourceRegistry`
+    (file si chiama `mcp.py`, non `mcp_registry.py`)
+  - `from spark.manifest.manager import ManifestManager`
+    → `from spark.manifest.manifest import ManifestManager`
+    (file si chiama `manifest.py`, non `manager.py`)
+- **Invariante 1 (log):** il log reale è `"Tools registered: 44 total"`, non 40.
+  Il numero nel documento era errato al momento della stesura.

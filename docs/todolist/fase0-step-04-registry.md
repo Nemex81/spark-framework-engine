@@ -62,3 +62,18 @@ da spark-framework-engine.py a spark/registry/{client,store,mcp_registry}.py.
 Aggiunti re-export nell'hub.
 Invarianti verificati.
 ```
+
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con deviazioni rispetto al piano:
+
+- **`spark/registry/mcp.py`** invece di `mcp_registry.py` come pianificato.
+  La classe `McpResourceRegistry` è presente e funzionante. Import corretto:
+  `from spark.registry.mcp import McpResourceRegistry`.
+- **`spark/registry/v3_store.py`** aggiunto (non previsto nel piano originale):
+  contiene helper di basso livello per il v3 store (`v3_store_sentinel_file`,
+  `_build_package_raw_url_base`, `_resource_filename_candidates`).
+- Il `RegistryClient` è in `spark/registry/client.py` come previsto.
+- `PackageResourceStore` è in `spark/registry/store.py` come previsto.

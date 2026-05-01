@@ -115,30 +115,39 @@ spark-framework-engine/
     │   └── sessions.py
     │
     ├── manifest/
-    │   ├── manager.py
+    │   ├── manifest.py         ← nome effettivo (piano: manager.py)
+    │   ├── diff.py
     │   └── snapshots.py
     │
     ├── registry/
     │   ├── client.py
     │   ├── store.py
-    │   └── mcp_registry.py
+    │   ├── mcp.py              ← nome effettivo (piano: mcp_registry.py)
+    │   └── v3_store.py
+    │
+    ├── inventory/              ← package estratto da workspace/ in Fase 0
+    │   ├── framework.py        ← FrameworkInventory
+    │   └── engine.py           ← EngineInventory
     │
     ├── workspace/
     │   ├── locator.py
-    │   ├── inventory.py
-    │   └── update_policy.py
+    │   ├── migration.py        ← MigrationPlan/MigrationPlanner (piano: packages/)
+    │   └── policy.py           ← nome effettivo (piano: update_policy.py; Step 1.1)
     │
     ├── packages/
     │   ├── lifecycle.py
-    │   ├── migration.py
-    │   └── diff.py
+    │   └── registry_summary.py ← aggiunto in Fase 0
     │
-    ├── assets/
-    │   └── renderers.py
+    ├── assets/                 ← 4 file (piano: 1 file renderers.py)
+    │   ├── collectors.py
+    │   ├── phase6.py
+    │   ├── rendering.py
+    │   └── templates.py
     │
     └── boot/
-        ├── sequence.py
-        └── validation.py
+        ├── engine.py           ← SparkFrameworkEngine (piano: in sequence.py)
+        ├── sequence.py         ← _build_app
+        └── [validation.py]     ← da creare in Fase 2
 ```
 
 ---
@@ -162,17 +171,25 @@ L'eliminazione del re-export hub avviene solo all'ultimo step, quando tutto il c
 ```
 core
  └─► merge
- └─► manifest
-      └─► registry
-           └─► workspace
+      └─► manifest
+           └─► registry
+                ├─► workspace
+                ├─► inventory
                 └─► packages
-                └─► assets
-                      └─► boot
+                      └─► assets
+                           └─► boot
 ```
 
 Questa direzione è unidirezionale e non ha cicli. Ogni modulo può importare solo da moduli che si trovano sopra di lui nel grafo. Un modulo non può mai importare da un modulo che si trova sotto di lui.
 
-L'unica eccezione da verificare prima di iniziare è la dipendenza tra `workspace/inventory.py` e i moduli di `registry/`. Se `FrameworkInventory` o `EngineInventory` chiamano classi di `PackageResourceStore` o `McpResourceRegistry`, allora `registry/` è un prerequisito di `workspace/` e l'ordine di estrazione deve rispettarlo. Questa analisi va condotta sul codice reale prima di iniziare la Fase 0.
+**Aggiornamento post-Fase 0 (2026-05-01):** la dipendenza `merge → manifest` è stata
+confermata durante l'esecuzione di Fase 0 (Step 03): `ManifestManager` usa
+`_strip_package_section` di `spark.merge.sections`. Il package `spark/inventory/`
+(con `FrameworkInventory` ed `EngineInventory`) è stato estratto come package
+autónomo invece di `workspace/inventory.py` come previsto nel piano originale;
+entrambe le classi usano `McpResourceRegistry` e `PackageResourceStore`, pertanto
+`registry/` è un prerequisito di `inventory/`. Il package `assets/` dipende sia
+da `registry/` (via `PackageResourceStore`) che da `inventory/` (via `EngineInventory`).
 
 ---
 

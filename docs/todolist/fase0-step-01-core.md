@@ -72,3 +72,13 @@ Aggiunti re-export nell'hub.
 Invarianti verificati: avvio motore, wiring MCP (44 tool), output
 scf_verify_workspace identico alla baseline.
 ```
+
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con una correzione rispetto al piano:
+
+- **Invariante 1 (log):** il log reale è `"Tools registered: 44 total"`, non 40.
+  Il numero nel documento era errato al momento della stesura; il counter corretto
+  è stato allineato in Fase 1 Step 1.5.

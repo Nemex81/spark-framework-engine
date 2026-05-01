@@ -69,3 +69,20 @@ Conferma dipendenza registry → workspace (FrameworkInventory usa McpResourceRe
 e PackageResourceStore).
 Invarianti verificati.
 ```
+
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con deviazioni significative rispetto al piano:
+
+- **`FrameworkInventory` ed `EngineInventory` sono in `spark/inventory/`**, non in
+  `spark/workspace/inventory.py`. Copilot ha estratto un package separato
+  `spark/inventory/{framework.py, engine.py}` invece di creare `workspace/inventory.py`.
+  Deviazione documentata in `docs/todo.md`. Import corretto:
+  `from spark.inventory import FrameworkInventory, EngineInventory`.
+- **`spark/workspace/policy.py`** invece di `update_policy.py`.
+  Step 1.1 di Fase 1 prevede la rinomina. Import attuale:
+  `from spark.workspace.policy import ...`.
+- **`MigrationPlan` e `MigrationPlanner`** sono finiti in `spark/workspace/migration.py`
+  invece di `spark/packages/migration.py` come previsto dallo step successivo (06).

@@ -66,3 +66,21 @@ da spark-framework-engine.py a spark/packages/{migration,lifecycle}.py.
 Annotati i blocchi di SparkFrameworkEngine con # FASE1-RIASSEGNA.
 Invarianti verificati.
 ```
+
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con deviazioni rispetto al piano:
+
+- **`MigrationPlan` e `MigrationPlanner` sono in `spark/workspace/migration.py`**,
+  non in `spark/packages/migration.py`. La deviazione è avvenuta durante l'estrazione
+  dello step precedente (05). Deviazione non bloccante; il codice è funzionante.
+- **Le annotazioni `# FASE1-RIASSEGNA` non sono state inserite.** Il piano le
+  prevedeva su blocchi di `SparkFrameworkEngine`, ma i marker non sono mai stati
+  scritti nel codice. Verificato con grep in Fase 1 Step 1.3 (0 occorrenze trovate).
+  Il piano FASE1-PIANO-TECNICO.md è stato riscritto di conseguenza.
+- **`spark/packages/diff.py` non creato** come placeholder. Non bloccante.
+- **`spark/packages/registry_summary.py`** aggiunto (non previsto nel piano):
+  contiene `_build_registry_package_summary`, `_get_registry_min_engine_version`,
+  `_resolve_package_version`.

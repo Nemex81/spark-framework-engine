@@ -57,3 +57,17 @@ a spark/manifest/{manager,snapshots}.py.
 Conferma dipendenza merge → manifest (uso di _strip_package_section).
 Invarianti verificati.
 ```
+
+---
+
+## Nota post-completamento (2026-05-01)
+
+Lo step è stato completato con una deviazione rispetto al piano:
+
+- **Il file si chiama `spark/manifest/manifest.py`**, non `manager.py` come pianificato.
+  La classe `ManifestManager` è presente e funzionante. L'import nei file del package
+  è `from spark.manifest.manifest import ManifestManager`.
+- **Aggiunto `spark/manifest/diff.py`:** gli helper diff (`_normalize_remote_file_record`,
+  `_scf_diff_workspace`) sono in `diff.py` invece di `snapshots.py`.
+- La dipendenza `merge → manifest` è stata confermata (uso di `_strip_package_section`)
+  e aggiornata nel grafo di `REFACTORING-DESIGN.md` Sezione 6.

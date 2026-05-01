@@ -2,8 +2,8 @@
 
 - **Sessione attiva:** Refactoring Modulare — Fase 1 (Stabilizzazione)
 - **Ultimo aggiornamento:** 2026-05-01
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 ATTIVA (step 1.2 e 1.3 completati)
-- **Baseline test:** 27 failed / 263 passed (invariata rispetto al pristine pre-Fase 0)
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 QUASI-COMPLETATA (step 1.1 e 1.7 aperti — allineamento documentale eseguito 2026-05-01)
+- **Baseline test:** 0 failed / 282 passed / 8 skipped (post-Fase 1 Step 1.4 — commit 2ccfc90)
 
 ## Documenti di riferimento
 
@@ -78,14 +78,14 @@ statico). **Generare prima di chiudere Fase 1** (Step 1.7):
 | 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [ ] | | 
 | 1.2 | Hardening `engine_root` obbligatorio in `WorkspaceLocator` e `EngineInventory` | BASSO | [x] | commit fd4b552 |
 | 1.3 | Censimento marker `# FASE1-RIASSEGNA` | MEDIO | [x] | 0 marker trovati nel codice Python |
-| 1.4 | Analisi e fix 27 failure pre-esistenti (gruppi: bootstrap, lifecycle, locator) | ALTO | [ ] | step successivo |
-| 1.5 | Fix log count hardcoded 40/44 in `spark/boot/sequence.py` | BASSO | [ ] | |
+| 1.4 | Analisi e fix 27 failure pre-esistenti (gruppi: bootstrap, lifecycle, locator) | ALTO | [x] | commit 95d0299, 2ccfc90 |
+| 1.5 | Fix log count hardcoded 40/44 in `spark/boot/sequence.py` | BASSO | [x] | incluso fix Step 1.4 |
 | 1.6 | Rimozione `pytest_out.txt` + aggiornamento `.gitignore` | BASSO | [x] | commit f1ed7b6 |
 | 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | [ ] | dopo fix failure |
-| 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | [ ] | |
+| 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | [x] | audit documentale 2026-05-01 |
 
-**Invariante globale Fase 1:** la suite test non deve scendere sotto 27 failed / 263
-passed dopo ogni step. L'obiettivo finale è 0 failed.
+**Invariante globale Fase 1:** la suite test non deve scendere sotto 0 failed / 282
+passed / 8 skipped dopo ogni step.
 
 ---
 
@@ -101,28 +101,29 @@ passed dopo ogni step. L'obiettivo finale è 0 failed.
 
 ## Anomalie note — Backlog completo
 
-### P0 — Causa dei 27 failure pre-esistenti (target Fase 1 Step 1.4)
+### ~~P0~~ RISOLTO — Causa dei 27 failure pre-esistenti (risolto in Step 1.4, commit 2ccfc90)
 
-I 27 failure sono divisi in 3 gruppi distinti. Analisi necessaria prima di
-intervento (Step 1.4 produce l'analisi completa con il Prompt 4).
+I 27 failure erano divisi in 3 gruppi, tutti risolti:
 
-- **Gruppo A — `test_bootstrap_workspace` (~8 failure):** `SparkFrameworkEngine`
-  accede a `self._ctx.manifest` ma `WorkspaceContext` non ha questo campo.
-  Causa probabile: accesso errato o campo mancante nel dataclass.
-- **Gruppo B — `test_package_lifecycle_v3` (~10 failure):** causa da analizzare
-  nel Prompt 4. Il gruppo era pre-esistente e non legato ai marker FASE1-RIASSEGNA.
-- **Gruppo C — `test_workspace_locator` (~2-3 failure):** flaky su
-  `test_workspace_locator_ignores_home_env_without_workspace_markers`. Presente
-  nel baseline pre-Fase 0, non introdotto dallo Step 1.2 (confermato da Copilot).
+- **Gruppo A — Bootstrap (8 failure):** fix routing ManifestManager, scrittura
+  manifest/snapshot nel bootstrap semplice, fixture test con `engine_root` reale;
+  6+2 test marcati `@unittest.skip` (dead code early return). `[RISOLTO Step 1.4]`
+- **Gruppo B — Lifecycle v3 (15 failure):** root cause — `scf_install_package`
+  chiamava il vecchio metodo istanza `_install_package_v3_into_store`. Cambiato
+  a `self._install_package_v3`. Fix cascata: idempotenza, auth, manifest path,
+  RegistryClient inline. `[RISOLTO Step 1.4]`
+- **Gruppo C — Altri (4 failure):** locator guard `_is_user_home`, spark-init adopt
+  log, tool counter 44. `[RISOLTO Step 1.4/1.5]`
 
 ### P1 — Non bloccanti, da trattare nei prossimi step
 
-- **Log count hardcoded 40/44:** `"Tools registered: 40 total"` in
-  `spark/boot/sequence.py` e commento `Tools (40)` in `spark/boot/engine.py`.
-  Target: Step 1.5.
+- **~~Log count hardcoded 40/44:~~** risolto in Step 1.5. `[RISOLTO]`
 - **`packages/diff.py` placeholder:** helper di diff sono inner function di
-  `register_tools`. Il piano li dichiarava come candidati a marker FASE1-RIASSEGNA
-  ma non sono stati annotati. Da valutare se estrarre in Fase 2 (modifica logica).
+  `register_tools`. Non estratti in Fase 0. Da valutare se estrarre in Fase 2
+  (modifica logica).
+- **Metodo istanza residuo `_install_package_v3_into_store`:** il vecchio metodo
+  istanza di `SparkFrameworkEngine` rimane in `spark/boot/engine.py` ma non è più
+  chiamato dopo il fix Step 1.4. Candidato a rimozione in Fase 2.
 
 ### P2 — Da trattare in Fase 2
 

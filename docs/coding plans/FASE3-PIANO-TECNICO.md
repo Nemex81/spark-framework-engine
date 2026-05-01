@@ -45,3 +45,18 @@ Spostare tutti i file di stato temporaneo (snapshot, sessioni di merge, backup, 
 
 - **Migrazione idempotente non triviale.** Se l'utente lancia il motore mentre una sessione di merge è attiva, il file potrebbe essere in uso. Mitigazione: la migrazione runtime avviene solo se non ci sono sessioni attive (`MergeSessionManager.list_active() == []`).
 - **Workspace multipli che condividono engine.** Mitigazione: il path runtime include un hash deterministico del `workspace_root.absolute()`.
+
+---
+
+## DRIFT — Note di allineamento post-Fase 0/1 (2026-05-01)
+
+Aggiornamenti alla struttura reale rispetto a quanto scritto sopra:
+
+- **Sezione 3 — `spark/workspace/update_policy.py`:** il file si chiama
+  `spark/workspace/policy.py`. Step 1.1 di Fase 1 prevede la rinomina a
+  `update_policy.py`. Se non eseguita prima di Fase 3, aggiornare il
+  riferimento.
+- **`SnapshotManager` e `MergeSessionManager`:** entrambi già in
+  `spark/manifest/snapshots.py` e `spark/merge/sessions.py` rispettivamente
+  (estratti in Fase 0). Le modifiche ai path runtime si applicano a questi
+  file esistenti, non a nuovi file da creare.
