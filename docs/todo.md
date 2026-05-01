@@ -1,185 +1,107 @@
-# SPARK Refactoring — TODO Coordinatore
+# SPARK Framework Engine — TODO Coordinatore
 
-- Sessione attiva: Implementazione v3.0.0 (Dual-Client Architecture)
-- Ultimo aggiornamento: 2026-04-28
-- Documenti collegati:
-  - `docs/SPARK-REFACTORING-DESIGN-v1.2.md` (patch v1.2.1 applicata)
-  - `docs/VALIDATION-REPORT.md`
-  - `docs/SPARK-IMPLEMENTATION-PLAN.md`
+- **Sessione attiva:** Refactoring Modulare — Fase 0 (Modularizzazione)
+- **Ultimo aggiornamento:** 2026-05-01
+- **Stato piano:** VALIDATO — Confidence 0.9
+- **Verdetto Copilot:** PIANO PRONTO PER REVISIONE UMANA
 
-## Stato Sessione Corrente (v3.0.0)
+## Documenti di riferimento
 
-- Fase attiva: **FASE 9** — Ciclo install/update/remove v3-aware
-- Fasi 0-8: completate il 2026-04-28 (272 test verdi).
-- Smoke test manuali Copilot DEFERRED a `docs/SMOKE-TEST-COPILOT-v3.md`.
-- Fase 9 → [PHASE-9-package-lifecycle-v3.todo.md](todolist/PHASE-9-package-lifecycle-v3.todo.md)
-
-## Fasi Completate (v3.0.0)
-
-- [x] FASE 0 — `scf_migrate_workspace` (commit a10449d/c586cfe)
-- [x] FASE 1 — Schema manifest v3.0 + engine-manifest.json + spark-welcome
-- [x] FASE 2 — PackageResourceStore + McpResourceRegistry
-- [x] FASE 3 — Tool MCP override (4 nuovi tool)
-- [x] FASE 4 — Decorator FastMCP dinamici + alias retrocompat
-- [x] FASE 5 — WorkspaceLocator estensioni + RegistryClient cache_path + CLI flag
-- [x] FASE 6 — `scf_bootstrap_workspace` v3 (AGENTS.md dinamico)
-- [x] FASE 7 — ManifestManager schema v3 (smoke test manuali deferred)
-- [x] FASE 8 — Deploy v3.0.0 + MIGRATION-GUIDE-v3.md
-
-## Fasi in Corso (v3.0.0)
-
-- [ ] FASE 9 → [PHASE-9-package-lifecycle-v3.todo.md](todolist/PHASE-9-package-lifecycle-v3.todo.md)
-
-## Fasi in Attesa (v3.0.0)
-
-- (nessuna automatica) — pendenti solo gli smoke test manuali Copilot.
-
-## Blocchi e Decisioni Aperte
-
-- Nessuno. Decisioni autonome registrate nel patch v1.2.1:
-  - `scf_update_profile` rimandato a v3.1 (fuori scope v3.0).
-  - `engine-skills://` e `engine-instructions://` mantenuti come
-    alias retrocompatibili fino a v4.0.
-  - `engine-manifest.json` e `spark-welcome` deliverable Fase 1.
-
-## Note di Sessione (v3.0.0)
-
-- Tool count reale engine v2.4.0: 35 (post-validazione).
-- Pattern decorator dinamici già presente in v2.4.0
-  (`_register_resource` riga 2417).
-- `MergeSessionManager` e `SnapshotManager` riusati per
-  override-aware update e migrazione reversibile.
-- Smoke test Copilot in Fase 7 è gating per Fase 8.
+- Design: `docs/REFACTORING-DESIGN.md`
+- Prospetto tecnico: `docs/REFACTORING-TECHNICAL-BRIEF.md`
+- Piano operativo Fase 0: `docs/coding plans/FASE0-PIANO-TECNICO.md`
+- Rapporto di validazione: `docs/reports/FASE0-VALIDATION-REPORT.md`
 
 ---
 
-# Storico — Todo Coordinator SCF 3-Way Merge Implementation
+## ⚠ PREREQUISITO ZERO — Baseline diagnostica
 
-## Manutenzione bootstrap standalone
+Prima di iniziare qualsiasi step, genera la baseline del tool diagnostico fisso.
+Senza questo file l'invariante 3 di ogni step non è verificabile.
 
-- 2026-04-22: aggiunto fallback per creare `.venv` e installare `mcp` direttamente da `spark-init.py` quando il runtime locale del repo engine non esiste ancora.
+**Tool scelto:** `scf_verify_workspace`
 
-Funzione: coordinare lo stato delle fasi implementative e linkare i file todo specifici.
+**Procedura:**
 
-Fasi e stato (coordinatore):
+1. Avvia il motore in locale:
+   ```
+   cd <cartella-repo>
+   python spark-framework-engine.py
+   ```
+2. Da un client MCP (o `mcp dev`), chiama `scf_verify_workspace` senza argomenti.
+3. Salva l'output JSON completo in:
+   ```
+   docs/reports/baseline-verify-workspace.json
+   ```
+4. Committa il file:
+   ```
+   git add docs/reports/baseline-verify-workspace.json
+   git commit -m "docs(baseline): cattura output scf_verify_workspace pre-Fase0"
+   ```
 
-- **Fase 0**: Infrastruttura snapshot BASE — Stato: Completata — [todo-fase-0-snapshot-base.md](todolist/todo-fase-0-snapshot-base.md)
-- **Fase 1**: MergeEngine core — Stato: Completata — [todo-fase-1-merge-engine.md](todolist/todo-fase-1-merge-engine.md)
-- **Fase 2**: Integrazione install/update — Stato: Completata — [todo-fase-2-integrazione-update.md](todolist/todo-fase-2-integrazione-update.md)
-- **Fase 3**: Sessioni di merge stateful — Stato: Completata — [todo-fase-3-sessioni-merge.md](todolist/todo-fase-3-sessioni-merge.md)
-- **Fase 4**: Modalità auto (AI) — Stato: Completata — [todo-fase-4-modalita-auto.md](todolist/todo-fase-4-modalita-auto.md)
-- **Fase 5**: Modalità assisted — Stato: Completata — [todo-fase-5-modalita-assisted.md](todolist/todo-fase-5-modalita-assisted.md)
-- **Fase 6**: Policy multi-owner — Stato: Completata — [todo-fase-6-policy-multi-owner.md](todolist/todo-fase-6-policy-multi-owner.md)
-- **Fase 7**: Release e documentazione — Stato: Completata — [todo-fase-7-release-docs.md](todolist/todo-fase-7-release-docs.md)
-
----
-
-## Progetto spark-base — Riorganizzazione componenti
-
-Coordinator per la migrazione da `scf-master-codecrafter` standalone a `spark-base` + `scf-master-codecrafter` ridotto nel perimetro CORE-CRAFT.
-
-Piano: [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
-Analisi: [ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md](ANALISI-RIORGANIZZAZIONE-SPARK-BASE.md)
-
-Fasi e stato (coordinator):
-
-- **SB-0**: Preflight workspace — Stato: Completata (rieseguito su workspace reali; `tabboz-simulator-202` e `uno-ultra-v68` risultano `is_clean: true`) — [todo-fase-SB-0-preflight.md](todolist/todo-fase-SB-0-preflight.md)
-- **SB-1**: Creazione repository spark-base — Stato: Completata (repo remoto raggiungibile; manifest corrente `spark-base@1.2.0`, 79 file, consumato correttamente dal motore) — [todo-fase-SB-1-repo.md](todolist/todo-fase-SB-1-repo.md)
-- **SB-2**: Riduzione scf-master-codecrafter → CORE-CRAFT — Stato: Completata (manifest corrente `scf-master-codecrafter@2.1.0`, 14 file, dipendenza `spark-base` attiva) — [todo-fase-SB-2-master-v2.md](todolist/todo-fase-SB-2-master-v2.md)
-- **SB-3**: Dry-run manifest spark-base — Stato: Completata (`scf_plan_install("spark-base")` eseguito su `uno-ultra-v68`; richiesto `conflict_mode="replace"` per 9 prompt untracked) — [todo-fase-SB-3-dry-run.md](todolist/todo-fase-SB-3-dry-run.md)
-- **SB-4**: Aggiornamento registry — Stato: Completata (`registry.json` allineato ai manifest correnti: `spark-base@1.2.0`, `scf-master-codecrafter@2.1.0`, `scf-pycode-crafter@2.0.1`) — [todo-fase-SB-4-registry.md](todolist/todo-fase-SB-4-registry.md)
-- **SB-5**: Migrazione workspace utente — Stato: Completata con nota (eseguita su `uno-ultra-v68`; verify finale pulito, ma il repo target resta git-dirty per file `.github/**` non tracciati) — [todo-fase-SB-5-migrazione.md](todolist/todo-fase-SB-5-migrazione.md)
-- **SB-6**: Gate di verifica post-migrazione — Stato: In corso (workspace target pulito e stack base/core-craft allineato; gate bloccati dall'assenza di `scf-pycode-crafter` e da conteggi documentati non aggiornati) — [todo-fase-SB-6-gate.md](todolist/todo-fase-SB-6-gate.md)
-- **SB-7**: Migrazione `spark-init.py` a bootstrap embedded `spark-base` — Stato: Completata (script, test e README allineati localmente) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
-- **SB-2b**: Correzione asset split (`Agent-Code` + `spark-guide`) — Stato: Completata (`Agent-Code` ora nel master ridotto, `spark-guide` in `spark-base`) — [PIANO-IMPLEMENTATIVO-SPARK-BASE.md](PIANO-IMPLEMENTATIVO-SPARK-BASE.md)
-
-Ordine di esecuzione:
-
-1. SB-0 (obbligatorio, gate pre-tutto)
-2. SB-1 e SB-2 in parallelo (repo diversi)
-3. SB-4 (dipende da SB-1 + SB-2) — registry deve essere aggiornato per primo
-4. SB-3 (dipende da SB-4) — dry-run richiede entry registry spark-base presente e repo remoto pubblicato
-5. SB-5 (dipende da SB-3 + SB-4)
-6. SB-6 (dipende da SB-5)
+Da quel momento ogni step confronta il proprio output di verifica con questa baseline.
+Se l'output cambia, lo step ha introdotto una modifica logica involontaria — rollback.
 
 ---
 
-Regole di avanzamento:
+## Fase 0 — Modularizzazione (9 step)
 
-- Ogni fase deve avere tutti i test locali associati passati (`pytest -q <testfile>`).
-- Prima di marcare una fase come completata: aggiorna il rispettivo `todo-fase-*.md` con tutti i checkbox spuntati e committa la modifica proposta.
-- La revisione finale richiede l'esecuzione della suite completa `pytest -q` e l'audit `scf-coherence-audit` (se disponibile).
+Regola assoluta: nessuna modifica logica. Solo spostamento di codice.
+Re-export hub: prima si aggiunge il re-export, poi si rimuove il codice originale.
+Commit per ogni step completato: `refactor(modulo): estrai NomeClasse — nessuna modifica logica`
 
-Ordine di esecuzione raccomandato (dipendenze):
+| Step | Modulo | Rischio | File TODO | Stato |
+|------|--------|---------|-----------|-------|
+| 01 | `core` | BASSO | [fase0-step-01-core.md](todolist/fase0-step-01-core.md) | [ ] |
+| 02 | `merge` | MEDIO | [fase0-step-02-merge.md](todolist/fase0-step-02-merge.md) | [ ] |
+| 03 | `manifest` | MEDIO | [fase0-step-03-manifest.md](todolist/fase0-step-03-manifest.md) | [ ] |
+| 04 | `registry` | MEDIO | [fase0-step-04-registry.md](todolist/fase0-step-04-registry.md) | [ ] |
+| 05 | `workspace` | ALTO | [fase0-step-05-workspace.md](todolist/fase0-step-05-workspace.md) | [ ] |
+| 06 | `packages` | MEDIO | [fase0-step-06-packages.md](todolist/fase0-step-06-packages.md) | [ ] |
+| 07 | `assets` | BASSO | [fase0-step-07-assets.md](todolist/fase0-step-07-assets.md) | [ ] |
+| 08 | `boot` | ALTO | [fase0-step-08-boot.md](todolist/fase0-step-08-boot.md) | [ ] |
+| 09 | `cleanup` | BASSO | [fase0-step-09-cleanup.md](todolist/fase0-step-09-cleanup.md) | [ ] |
 
-1. F0 e F1 paralleli
-2. F2
-3. F3
-4. F4
-5. F5
-6. F6
-7. F7 (release)
+**Invarianti di verifica dopo ogni step:**
+1. Il motore si avvia senza eccezioni non gestite su stderr.
+2. Il server MCP risponde — wiring FastMCP intatto, tool raggiungibili.
+3. Output di `scf_verify_workspace` identico alla baseline in `docs/reports/baseline-verify-workspace.json`.
 
-Nota: le regole e le dipendenze sono descritte in dettaglio in [SCF-3WAY-MERGE-IMPLEMENTATION-PLAN.md](SCF-3WAY-MERGE-IMPLEMENTATION-PLAN.md).
-
----
-
-## Progetto SCF File Ownership & Workspace Merge System
-
-Coordinator per l'implementazione del sistema di ownership file, merge a sezioni e preferenze utente.
-
-Piano: [SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md](SCF-COPILOT-INSTRUCTIONS-MERGE-STRATEGY.md)
-Validazione: Superata v1.1.0 — 13 correzioni applicate al documento originale
-
-Fasi e stato (coordinator):
-
-- **OWN-A**: Normalizzazione pacchetti (front matter + manifest schema 2.1) — Stato: Completata — [todo-fase-OWN-A-normalizzazione.md](todolist/todo-fase-OWN-A-normalizzazione.md)
-- **OWN-B**: Tool policy + utility diff/backup — Stato: Completata — [todo-fase-OWN-B-policy-diff-backup.md](todolist/todo-fase-OWN-B-policy-diff-backup.md)
-- **OWN-C**: Utility section merge (SCF markers) — Stato: Completata — [todo-fase-OWN-C-section-merge.md](todolist/todo-fase-OWN-C-section-merge.md)
-- **OWN-D**: Integrazione flusso install/update — Stato: Completata — [todo-fase-OWN-D-integrazione-flusso.md](todolist/todo-fase-OWN-D-integrazione-flusso.md)
-- **OWN-E**: Estensione bootstrap workspace — Stato: Completata — [todo-fase-OWN-E-bootstrap-estensione.md](todolist/todo-fase-OWN-E-bootstrap-estensione.md)
-- **OWN-F**: Documentazione e release — Stato: Completata — [todo-fase-OWN-F-docs-release.md](todolist/todo-fase-OWN-F-docs-release.md)
-- **OWN-G**: Migrazione workspace esistenti — Stato: Completata (FAQ, test delta-only e gate finali verificati) — [todo-fase-OWN-G-migrazione-workspace.md](todolist/todo-fase-OWN-G-migrazione-workspace.md)
-
-Ordine di esecuzione (strettamente sequenziale):
-
-1. OWN-A (prerequisito per tutto — nessuna modifica engine)
-2. OWN-B (utility interne + 2 nuovi tool)
-3. OWN-C (section merge, dipende da OWN-B)
-4. OWN-D (integrazione nei tool pubblici, dipende da OWN-B + OWN-C)
-5. OWN-E (estensione bootstrap, dipende da OWN-D)
-6. OWN-F (docs e release, dipende da OWN-E)
-7. OWN-G (migrazione, dipende da OWN-F — può procedere in parallelo parziale)
-
-Regole di avanzamento:
-
-- Ogni fase richiede gate di uscita verificato (test + audit).
-- Non avviare la fase N+1 se la fase N non ha il gate superato.
-- Prima di marcare completata: aggiornare il rispettivo `todo-fase-OWN-*.md` con tutti i checkbox.
-- OWN-A non richiede test engine ma richiede validazione coerenza front matter ↔ manifest.
+**Procedura di rollback se un invariante fallisce:**
+```
+git stash
+# verifica che i tre invarianti tornino verdi
+# analizza la dipendenza nascosta
+# aggiorna il grafo in REFACTORING-DESIGN.md Sezione 6 se necessario
+# ripeti lo step con la dipendenza inclusa
+```
+Schema commit aggiornamento grafo: `docs(design): aggiorna grafo — dipendenza [A→B] rilevata step N`
 
 ---
 
-## Sessione: SPARK Gateway Pattern — 2026-04-30
-Piano di riferimento: docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md
-Stato sessione: IN CORSO
+## Fasi successive (in attesa di Fase 0 completata)
 
-### Fasi
-- [ ] Fase 1 — Gateway Bootstrap → docs/todo/TODO-GATEWAY-BOOTSTRAP.md
-- [ ] Fase 2 — Gateway Docs & Template → docs/todo/TODO-GATEWAY-DOCS.md
+| Fase | Obiettivo | Piano | Stato |
+|------|-----------|-------|-------|
+| Fase 1 | Stabilizzazione e correzione bug | [FASE1-PIANO-TECNICO.md](coding%20plans/FASE1-PIANO-TECNICO.md) | in attesa |
+| Fase 2 | Boot deterministico | [FASE2-PIANO-TECNICO.md](coding%20plans/FASE2-PIANO-TECNICO.md) | in attesa |
+| Fase 3 | Separazione runtime | [FASE3-PIANO-TECNICO.md](coding%20plans/FASE3-PIANO-TECNICO.md) | in attesa |
+| Fase 4 | Gateway e workspace minimale | [FASE4-PIANO-TECNICO.md](coding%20plans/FASE4-PIANO-TECNICO.md) | in attesa |
 
-## Gateway Pattern
+---
 
-- [x] Fase 1 — Piano tecnico implementativo riscritto (docs/SPARK-GATEWAY-IMPLEMENTATION-PLAN.md)
-- [x] Fase 2 — TODO gateway bootstrap e docs riscritti (docs/todo/TODO-GATEWAY-BOOTSTRAP.md, TODO-GATEWAY-DOCS.md)
-- [x] Fase 3 — File gateway engine creati (.github/agents/spark-assistant.agent.md, spark-guide.agent.md)
-- [x] Fase 4 — CLAUDE.md riscritto con tutte le sezioni richieste
-- [x] Fase 5 — Refactor scf_bootstrap_workspace applicato (spark-framework-engine.py)
+## Anomalie note (non bloccanti, da trattare in Fase 1)
 
-### Criteri di accettazione
+- **Log hardcoded:** messaggio `"Tools registered: 40 total"` a riga 8380 del sorgente
+  riporta 40 tool ma il reale è 44. Da correggere in Fase 2 durante riscrittura `_build_app`.
+- **`packages/diff.py` placeholder:** gli helper di diff sono inner function di `register_tools`
+  e non estraibili senza modifica logica. Verranno migrati in Fase 1 con marker `# FASE1-RIASSEGNA`.
+- **Costanti private:** le costanti oltre righe 44–55 (es. `_RESOURCE_TYPES`, `_MANIFEST_FILENAME`)
+  richiedono rilettura puntuale durante Step 01 per evitare omissioni.
 
-- scf_bootstrap_workspace copia solo i file gateway Layer 0
-- File modificati dall’utente non vengono sovrascritti
-- Logging warning su sys.stderr se file gateway modificato
-- CLAUDE.md e agent gateway conformi a specifica
-- Idempotenza garantita tramite sentinella
+---
+
+## Storico sessioni precedenti
+
+Le sessioni implementative precedenti (v3.0.0 Dual-Client, SCF 3-Way Merge,
+spark-base, File Ownership, Gateway Pattern) sono archiviate in `docs/archivio/`.
