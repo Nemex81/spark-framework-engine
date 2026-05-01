@@ -6,6 +6,31 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `WorkspaceWriteGateway` in `spark/manifest/gateway.py` — gateway centralizzato
+  per scritture su `<workspace>/.github/**`. Espone `write()`, `write_bytes()`,
+  `delete()` che aggiornano atomicamente il manifest dopo ogni write.
+- `tests/test_workspace_gateway.py` — suite test gateway (TestGatewayWrite,
+  TestGatewayWriteBytes, TestGatewayDelete, TestGatewayIdempotency,
+  TestPhase6GatewayIntegration).
+
+### Changed
+
+- `_apply_phase6_assets` in `spark/assets/phase6.py` — parametri opzionali
+  `gateway` e `engine_version`. Se il gateway è fornito, `AGENTS.md`,
+  `AGENTS-{pkg}.md` e `project-profile.md` sono scritti via gateway
+  (owner `"spark-engine"`) invece di scrittura diretta. `.clinerules` resta
+  scrittura diretta (file a root workspace, non sotto `.github/`).
+- `SparkFrameworkEngine` in `spark/boot/engine.py` — `WorkspaceWriteGateway`
+  importato da `spark.manifest` e iniettato ai 3 callsite di
+  `_apply_phase6_assets` (`_install_package_v3`, `_remove_package_v3`,
+  `scf_bootstrap_workspace`).
+
+---
+
 ## [3.1.0] - 2026-04-28
 
 ### Added

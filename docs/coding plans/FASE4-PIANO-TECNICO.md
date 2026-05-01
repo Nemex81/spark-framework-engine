@@ -69,3 +69,25 @@ Aggiornamenti alla struttura reale rispetto a quanto scritto sopra:
   (funzione standalone, non il metodo istanza residuo) usa `dest.write_text` e
   `dest.parent.mkdir` direttamente. È un candidato naturale per la migrazione al
   gateway in Fase 4.
+
+---
+
+## DRIFT — Reclassificazioni post-implementazione (2026-05-01)
+
+- **`spark/packages/lifecycle.py` — OUT-OF-SCOPE.** Le scritture scrivono in
+  `engine_root/packages/{pkg_id}/.github/` (store engine), non nel workspace
+  `.github/`. [RISOLTO — nessuna modifica necessaria]
+- **`spark/workspace/migration.py` — SKIP.** Migrazione one-shot v2→v3; il caller
+  (`_migrate_workspace`) non ha accesso al manifest al momento della chiamata e
+  il contesto è di migrazione storica. [RISOLTO — SKIP confermato]
+- **`spark/workspace/update_policy.py` — SKIP.** `_write_update_policy_payload`
+  scrive `user-prefs.json`; il caller `scf_set_update_policy` non ha manifest
+  disponibile. User prefs non sono file di pacchetto. [RISOLTO — SKIP confermato]
+- **`spark/assets/phase6.py` — RISOLTO commit 5650f79.** `_apply_phase6_assets`
+  ora accetta `gateway` e `engine_version` opzionali. Owner dei file phase6 è
+  `"spark-engine"` (non il pkg_id), per evitare collisioni col lifecycle v3.
+- **`spark/manifest/gateway.py` — CREATO commit 0761afd.** `WorkspaceWriteGateway`
+  con `write()`, `write_bytes()`, `delete()`.
+- **`spark/boot/engine.py` — RISOLTO commit 6dc60eb.** Gateway iniettato ai 3
+  callsite `_apply_phase6_assets`.
+- **`tests/test_workspace_gateway.py` — CREATO commit d047cb0.** 14 test gateway.
