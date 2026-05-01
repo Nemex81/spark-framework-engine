@@ -3768,158 +3768,6 @@ class SparkFrameworkEngine:
             `files_written`, `preserved` and `note`, plus optional install and
             authorization metadata for extended flows.
             """
-            import sys
-            GATEWAY_FILES = [
-                "agents/spark-assistant.agent.md",
-                "agents/spark-guide.agent.md",
-            ]
-            GATEWAY_GLOB_PATTERNS = [
-                "instructions/spark-assistant-guide.instructions.md",
-                "prompts/scf-*.prompt.md",
-            ]
-
-            engine_github_root = self._ctx.engine_root / ".github"
-            workspace_github_root = self._ctx.github_root
-            manifest = ManifestManager(workspace_github_root)
-            sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
-            sentinel_rel = "agents/spark-assistant.agent.md"
-
-            # Build list of (source, dest) pairs for gateway files
-            bootstrap_targets: list[tuple[Path, Path]] = []
-            for rel_path in GATEWAY_FILES:
-                src = engine_github_root / rel_path
-                dst = workspace_github_root / rel_path
-                bootstrap_targets.append((src, dst))
-            for pattern in GATEWAY_GLOB_PATTERNS:
-                for src in engine_github_root.glob(pattern):
-                    rel = src.relative_to(engine_github_root)
-                    dst = workspace_github_root / rel
-                    bootstrap_targets.append((src, dst))
-
-            files_written: list[str] = []
-            preserved: list[str] = []
-            written_paths: list[Path] = []
-            identical_paths: list[Path] = []
-
-            # Sentinel-based idempotency gate
-            if sentinel.is_file():
-                user_mod = manifest.is_user_modified(sentinel_rel)
-                if user_mod is False:
-                    return {
-                        "success": True,
-                        "status": "already_bootstrapped",
-                        "files_written": [],
-                        "preserved": [],
-                        "workspace": str(self._ctx.workspace_root),
-                        "note": "Bootstrap assets already present and verified. Run /scf-list-available to inspect the package catalog.",
-                    }
-                if user_mod is True:
-                    return {
-                        "success": True,
-                        "status": "user_modified",
-                        "files_written": [],
-                        "preserved": [sentinel_rel],
-                        "workspace": str(self._ctx.workspace_root),
-                        "install_base_requested": install_base,
-                        "note": "Sentinel file has been modified by user. No files overwritten.",
-                    }
-                # user_mod is None → sentinel exists but not tracked; fall through to copy
-
-            missing_sources = [str(src) for src, _ in bootstrap_targets if not src.is_file()]
-            if missing_sources:
-                return {
-                    "success": False,
-                    "status": "error",
-                    "files_written": [],
-                    "preserved": [],
-                    "workspace": str(self._ctx.workspace_root),
-                    "install_base_requested": install_base,
-                    "note": f"Bootstrap sources missing from engine repository: {missing_sources}",
-                }
-
-            try:
-                for src, dst in bootstrap_targets:
-                    rel_path = dst.relative_to(self._ctx.workspace_root).as_posix()
-                    github_rel = dst.relative_to(workspace_github_root).as_posix()
-                    if dst.is_file():
-                        if manifest._sha256(dst) == manifest._sha256(src):
-                            identical_paths.append(dst)
-                        else:
-                            print(f"[SPARK-ENGINE][WARN] Gateway file preserved (user-modified): {rel_path}", file=sys.stderr)
-                            preserved.append(rel_path)
-                        continue
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    # Preserve cross-owner ownership: if another package already
-                    # owns this manifest entry, write the file but skip the
-                    # gateway manifest upsert (route through direct write).
-                    cross_owner = any(
-                        owner != _BOOTSTRAP_PACKAGE_ID
-                        for owner in manifest.get_file_owners(github_rel)
-                    )
-                    if cross_owner:
-                        dst.write_bytes(src.read_bytes())
-                    else:
-                        _gateway_write_bytes(
-                            self._ctx.workspace_root,
-                            github_rel,
-                            src.read_bytes(),
-                            manifest,
-                            _BOOTSTRAP_PACKAGE_ID,
-                            ENGINE_VERSION,
-                        )
-                    written_paths.append(dst)
-                    files_written.append(rel_path)
-            except OSError as exc:
-                rollback_errors: list[str] = []
-                for written_path in reversed(written_paths):
-                    try:
-                        if written_path.is_file():
-                            written_path.unlink()
-                    except OSError as rollback_exc:
-                        rollback_errors.append(f"{written_path}: {rollback_exc}")
-                rollback_note = ""
-                if rollback_errors:
-                    rollback_note = f" Rollback issues: {rollback_errors}"
-                return {
-                    "success": False,
-                    "status": "error",
-                    "files_written": [],
-                    "preserved": preserved,
-                    "workspace": str(self._ctx.workspace_root),
-                    "install_base_requested": install_base,
-                    "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
-                }
-
-            # Track bootstrapped files in manifest (idempotent: new + identical files)
-            bootstrap_manifest_targets = [
-                (dst.relative_to(workspace_github_root).as_posix(), dst)
-                for dst in written_paths + identical_paths
-                if not any(
-                    owner != _BOOTSTRAP_PACKAGE_ID
-                    for owner in manifest.get_file_owners(
-                        dst.relative_to(workspace_github_root).as_posix()
-                    )
-                )
-            ]
-            if bootstrap_manifest_targets:
-                manifest.upsert_many(
-                    _BOOTSTRAP_PACKAGE_ID,
-                    ENGINE_VERSION,
-                    bootstrap_manifest_targets,
-                )
-                _save_snapshots(
-                    _BOOTSTRAP_PACKAGE_ID,
-                    bootstrap_manifest_targets,
-                )
-
-            return {
-                "success": True,
-                "status": "bootstrapped",
-                "files_written": files_written,
-                "preserved": preserved,
-                "workspace": str(self._ctx.workspace_root),
-                "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
-            }
             if install_base and conflict_mode not in _SUPPORTED_CONFLICT_MODES:
                 return {
                     "success": False,
@@ -4217,12 +4065,12 @@ class SparkFrameworkEngine:
                 (source_path, workspace_github_root / "prompts" / source_path.name)
                 for source_path in prompt_sources
             ]
-            bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
             user_guide_source = engine_github_root / "agents" / "spark-guide.agent.md"
             bootstrap_targets.append((user_guide_source, workspace_github_root / "agents" / "spark-guide.agent.md"))
             bootstrap_targets.append(
                 (guide_source, workspace_github_root / "instructions" / "spark-assistant-guide.instructions.md")
             )
+            bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
 
             # Sentinel-based idempotency gate.
             if sentinel.is_file():
@@ -4292,16 +4140,20 @@ class SparkFrameworkEngine:
                         for owner in manifest.get_file_owners(github_rel)
                     )
                     if cross_owner:
-                        dest_path.write_bytes(source_path.read_bytes())
-                    else:
-                        _gateway_write_bytes(
-                            self._ctx.workspace_root,
-                            github_rel,
-                            source_path.read_bytes(),
-                            manifest,
-                            _BOOTSTRAP_PACKAGE_ID,
-                            ENGINE_VERSION,
+                        _log.warning(
+                            "Bootstrap file preserved (owned by another package): %s",
+                            rel_path,
                         )
+                        preserved.append(rel_path)
+                        continue
+                    _gateway_write_bytes(
+                        self._ctx.workspace_root,
+                        github_rel,
+                        source_path.read_bytes(),
+                        manifest,
+                        _BOOTSTRAP_PACKAGE_ID,
+                        ENGINE_VERSION,
+                    )
                     written_paths.append(dest_path)
                     files_written.append(rel_path)
                     _log.info(
