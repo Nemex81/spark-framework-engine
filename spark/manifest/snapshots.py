@@ -140,32 +140,48 @@ class SnapshotManager:
 def _scf_backup_workspace(
     package_id: str,
     files_to_backup: list[tuple[str, Path]],
+    backup_root: "Path | None" = None,
 ) -> str:
-    """Create a timestamped backup directory for files about to be modified."""
-    github_root: Path | None = None
-    for _, file_abs in files_to_backup:
-        for candidate in (file_abs.parent, *file_abs.parents):
-            if candidate.name == ".github":
-                github_root = candidate
-                break
-        if github_root is not None:
-            break
+    """Create a timestamped backup directory for files about to be modified.
 
-    if github_root is None:
-        raise ValueError("Cannot infer .github root for workspace backup.")
-
+    Args:
+        package_id: Package identifier for this backup.
+        files_to_backup: List of (rel_path, abs_path) pairs.
+        backup_root: Optional base dir for backups. When ``None``, the backup is
+            created under ``.github/runtime/backups/`` (legacy mode, inferred
+            from the file paths). Pass ``runtime_dir / _BACKUPS_SUBDIR`` to
+            route backups to the engine runtime directory.
+    """
     timestamp = _utc_now().strftime("%Y%m%d-%H%M%S")
-    backup_root = github_root / _BACKUPS_SUBDIR / timestamp
-    backup_root.mkdir(parents=True, exist_ok=True)
-    snapshot_manager = SnapshotManager(github_root / _SNAPSHOTS_SUBDIR)
+
+    if backup_root is None:
+        # Legacy path resolution: infer github_root from file paths.
+        github_root: Path | None = None
+        for _, file_abs in files_to_backup:
+            for candidate in (file_abs.parent, *file_abs.parents):
+                if candidate.name == ".github":
+                    github_root = candidate
+                    break
+            if github_root is not None:
+                break
+
+        if github_root is None:
+            raise ValueError("Cannot infer .github root for workspace backup.")
+
+        effective_backup_root = github_root / "runtime" / "backups" / timestamp
+    else:
+        effective_backup_root = backup_root / timestamp
+
+    effective_backup_root.mkdir(parents=True, exist_ok=True)
+    path_validator = SnapshotManager(effective_backup_root)
 
     for rel_path, file_abs in files_to_backup:
-        normalized_rel = snapshot_manager._validate_relative_path(rel_path)
+        normalized_rel = path_validator._validate_relative_path(rel_path)
         if normalized_rel is None or not file_abs.is_file():
             continue
-        destination = backup_root / PurePosixPath(normalized_rel)
+        destination = effective_backup_root / PurePosixPath(normalized_rel)
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(file_abs.read_bytes())
 
-    _log.info("Workspace backup created for %s: %s", package_id, backup_root)
-    return str(backup_root)
+    _log.info("Workspace backup created for %s: %s", package_id, effective_backup_root)
+    return str(effective_backup_root)

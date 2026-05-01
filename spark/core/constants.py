@@ -16,10 +16,15 @@ ENGINE_VERSION: str = "3.1.0"
 # Changelogs directory
 # ---------------------------------------------------------------------------
 _CHANGELOGS_SUBDIR: str = "changelogs"
-_SNAPSHOTS_SUBDIR: str = "runtime/snapshots"
-_MERGE_SESSIONS_SUBDIR: str = "runtime/merge-sessions"
-_BACKUPS_SUBDIR: str = "runtime/backups"
-_USER_PREFS_FILENAME: str = "runtime/spark-user-prefs.json"
+_SNAPSHOTS_SUBDIR: str = "snapshots"
+_MERGE_SESSIONS_SUBDIR: str = "merge-sessions"
+_BACKUPS_SUBDIR: str = "backups"
+_USER_PREFS_FILENAME: str = "user-prefs.json"
+
+# ---------------------------------------------------------------------------
+# Runtime directory configuration
+# ---------------------------------------------------------------------------
+_SPARK_RUNTIME_DIR_ENV: str = "SPARK_RUNTIME_DIR"
 _ALLOWED_UPDATE_MODES: frozenset[str] = frozenset(
     {"ask", "integrative", "replace", "conservative", "selective"}
 )

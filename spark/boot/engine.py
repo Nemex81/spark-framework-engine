@@ -176,10 +176,24 @@ _log: logging.Logger = logging.getLogger("spark-framework-engine")
 
 class SparkFrameworkEngine:
 
-    def __init__(self, mcp: FastMCP, context: WorkspaceContext, inventory: FrameworkInventory) -> None:
+    def __init__(
+        self,
+        mcp: FastMCP,
+        context: WorkspaceContext,
+        inventory: FrameworkInventory,
+        *,
+        runtime_dir: Path | None = None,
+    ) -> None:
         self._mcp = mcp
         self._ctx = context
         self._inventory = inventory
+        # Fase 3: directory di runtime isolata per workspace (engine-local).
+        # Fallback: calcola in-process se non passata dal sequence builder.
+        if runtime_dir is not None:
+            self._runtime_dir: Path = runtime_dir
+        else:
+            from spark.boot.validation import resolve_runtime_dir  # noqa: PLC0415
+            self._runtime_dir = resolve_runtime_dir(context.engine_root, context.workspace_root)
         # v3.0: traccia URI alias deprecati gia' loggati per evitare spam.
         self._logged_alias_uris: set[str] = set()
 
@@ -1164,8 +1178,8 @@ class SparkFrameworkEngine:
         manifest = ManifestManager(self._ctx.github_root)
         registry = RegistryClient(self._ctx.github_root)
         merge_engine = MergeEngine()
-        snapshots = SnapshotManager(self._ctx.github_root / _SNAPSHOTS_SUBDIR)
-        sessions = MergeSessionManager(self._ctx.github_root / _MERGE_SESSIONS_SUBDIR)
+        snapshots = SnapshotManager(self._runtime_dir / _SNAPSHOTS_SUBDIR)
+        sessions = MergeSessionManager(self._runtime_dir / _MERGE_SESSIONS_SUBDIR)
         sessions.cleanup_expired_sessions()
 
         def _save_snapshots(package_id: str, files: list[tuple[str, Path]]) -> dict[str, list[str]]:
@@ -2523,7 +2537,11 @@ class SparkFrameworkEngine:
                 ]
                 if files_to_backup:
                     try:
-                        backup_path = _scf_backup_workspace(package_id, files_to_backup)
+                        backup_path = _scf_backup_workspace(
+                            package_id,
+                            files_to_backup,
+                            backup_root=self._runtime_dir / _BACKUPS_SUBDIR,
+                        )
                     except (OSError, ValueError) as exc:
                         return _build_install_result(
                             False,

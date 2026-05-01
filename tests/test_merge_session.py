@@ -28,6 +28,7 @@ MergeSessionManager = _module.MergeSessionManager
 SnapshotManager = _module.SnapshotManager
 SparkFrameworkEngine = _module.SparkFrameworkEngine
 WorkspaceContext = _module.WorkspaceContext
+resolve_runtime_dir: Any = _module.resolve_runtime_dir
 
 
 class FakeMCP:
@@ -68,6 +69,10 @@ class TestMergeSession(unittest.TestCase):
         engine.register_tools()
         return fake_mcp
 
+    def _runtime_dir(self, workspace_root: Path) -> Path:
+        """Compute the engine-local runtime dir for this workspace (mirrors sequence.py)."""
+        return resolve_runtime_dir(workspace_root / "spark-framework-engine", workspace_root)
+
     def _session_file_entry(
         self,
         file_path: str,
@@ -103,7 +108,7 @@ class TestMergeSession(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            sessions = MergeSessionManager(github_root / "runtime" / "merge-sessions")
+            sessions = MergeSessionManager(self._runtime_dir(workspace_root) / "merge-sessions")
             session = sessions.create_session(
                 "pkg-a",
                 "2.0.0",
@@ -138,7 +143,7 @@ class TestMergeSession(unittest.TestCase):
             resolved_text = "alpha\nresolved\nomega\n"
             target_file.write_text(resolved_text, encoding="utf-8")
 
-            sessions = MergeSessionManager(github_root / "runtime" / "merge-sessions")
+            sessions = MergeSessionManager(self._runtime_dir(workspace_root) / "merge-sessions")
             session = sessions.create_session(
                 "pkg-a",
                 "2.0.0",
@@ -168,7 +173,7 @@ class TestMergeSession(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             self.assertEqual(manifest.get_installed_versions(), {"pkg-a": "2.0.0"})
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             self.assertEqual(
                 snapshots.load_snapshot("pkg-a", "agents/shared.md"),
                 resolved_text,
@@ -190,7 +195,7 @@ class TestMergeSession(unittest.TestCase):
             base_text = "# Agent\nBody\n"
             ours_text = "## Local\n# Agent\nBody\n"
             theirs_text = "# Agent\nBody\n## Remote\n"
-            sessions = MergeSessionManager(github_root / "runtime" / "merge-sessions")
+            sessions = MergeSessionManager(self._runtime_dir(workspace_root) / "merge-sessions")
             session = sessions.create_session(
                 "pkg-a",
                 "2.0.0",
@@ -234,7 +239,7 @@ class TestMergeSession(unittest.TestCase):
             base_text = "# Agent\nBody\n"
             ours_text = "## Local\n# Agent\nBody\n"
             theirs_text = "# Agent\nBody\n## Remote\n"
-            sessions = MergeSessionManager(github_root / "runtime" / "merge-sessions")
+            sessions = MergeSessionManager(self._runtime_dir(workspace_root) / "merge-sessions")
             session = sessions.create_session(
                 "pkg-a",
                 "2.0.0",
@@ -281,7 +286,7 @@ class TestMergeSession(unittest.TestCase):
             )
             target_file.write_text(marker_text, encoding="utf-8")
 
-            sessions = MergeSessionManager(github_root / "runtime" / "merge-sessions")
+            sessions = MergeSessionManager(self._runtime_dir(workspace_root) / "merge-sessions")
             session = sessions.create_session(
                 "pkg-a",
                 "2.0.0",

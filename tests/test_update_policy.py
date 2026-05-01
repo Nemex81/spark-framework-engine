@@ -89,7 +89,7 @@ class TestUpdatePolicy(unittest.TestCase):
     def test_get_update_policy_returns_default_when_file_corrupt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
-            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            prefs_path = workspace_root / ".github" / "user-prefs.json"
             prefs_path.parent.mkdir(parents=True, exist_ok=True)
             prefs_path.write_text("{not-json", encoding="utf-8")
             fake_mcp = self._build_engine(workspace_root)
@@ -114,7 +114,7 @@ class TestUpdatePolicy(unittest.TestCase):
                 )
             )
 
-            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            prefs_path = workspace_root / ".github" / "user-prefs.json"
             self.assertTrue(result["success"])
             self.assertTrue(prefs_path.is_file())
             self.assertEqual(result["policy"]["default_mode"], "replace")
@@ -129,7 +129,7 @@ class TestUpdatePolicy(unittest.TestCase):
     def test_set_update_policy_partial_update_preserves_existing_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
-            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            prefs_path = workspace_root / ".github" / "user-prefs.json"
             prefs_path.parent.mkdir(parents=True, exist_ok=True)
             prefs_path.write_text(
                 json.dumps(

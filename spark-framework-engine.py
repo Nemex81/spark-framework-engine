@@ -187,6 +187,7 @@ from spark.inventory import (  # noqa: E402,F401
 from spark.boot import (  # noqa: E402,F401
     SparkFrameworkEngine,
     _build_app,
+    resolve_runtime_dir,
 )
 
 # ---------------------------------------------------------------------------

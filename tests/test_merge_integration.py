@@ -28,6 +28,7 @@ SnapshotManager = _module.SnapshotManager
 SparkFrameworkEngine = _module.SparkFrameworkEngine
 RegistryClient = _module.RegistryClient
 WorkspaceContext = _module.WorkspaceContext
+resolve_runtime_dir = _module.resolve_runtime_dir
 
 
 class FakeMCP:
@@ -77,6 +78,10 @@ class TestMergeIntegration(unittest.TestCase):
         engine.register_tools()
         return fake_mcp
 
+    def _runtime_dir(self, workspace_root: Path) -> Path:
+        """Compute the engine-local runtime dir for this workspace (mirrors sequence.py)."""
+        return resolve_runtime_dir(workspace_root / "spark-framework-engine", workspace_root)
+
     def _authorize_github_writes(self, workspace_root: Path) -> None:
         state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
         state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +113,7 @@ class TestMergeIntegration(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
@@ -151,7 +156,7 @@ class TestMergeIntegration(unittest.TestCase):
             self.assertEqual(result["merge_conflict"][0]["file"], ".github/agents/shared.md")
             self.assertIn("<<<<<<< YOURS", target_file.read_text(encoding="utf-8"))
 
-            session_path = github_root / "runtime" / "merge-sessions" / f"{result['session_id']}.json"
+            session_path = self._runtime_dir(workspace_root) / "merge-sessions" / f"{result['session_id']}.json"
             self.assertTrue(session_path.is_file())
             session_payload = json.loads(session_path.read_text(encoding="utf-8"))
             self.assertEqual(session_payload["package"], "pkg-a")
@@ -169,7 +174,7 @@ class TestMergeIntegration(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
@@ -269,7 +274,7 @@ class TestMergeIntegration(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
@@ -347,7 +352,7 @@ class TestMergeIntegration(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
@@ -387,7 +392,7 @@ class TestMergeIntegration(unittest.TestCase):
             self.assertEqual(result["merge_clean"][0]["status"], "auto_resolved")
             self.assertNotIn("<<<<<<< YOURS", target_file.read_text(encoding="utf-8"))
             if result["session_id"] is not None:
-                session_path = github_root / "runtime" / "merge-sessions" / f"{result['session_id']}.json"
+                session_path = self._runtime_dir(workspace_root) / "merge-sessions" / f"{result['session_id']}.json"
                 session_payload = json.loads(session_path.read_text(encoding="utf-8"))
                 self.assertEqual(session_payload["status"], "auto_completed")
 
@@ -404,7 +409,7 @@ class TestMergeIntegration(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))
@@ -457,7 +462,7 @@ class TestMergeIntegration(unittest.TestCase):
 
             manifest = ManifestManager(github_root)
             manifest.save([self._entry("agents/shared.md", "pkg-a", base_text, "1.0.0")])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(snapshots.save_snapshot("pkg-a", "agents/shared.md", snapshot_source))

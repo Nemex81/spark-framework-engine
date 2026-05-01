@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from spark.core.constants import _SPARK_RUNTIME_DIR_ENV
+from spark.core.utils import _sha256_text
 from spark.inventory import EngineInventory
 
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
@@ -59,3 +61,32 @@ def validate_engine_manifest(
             reason,
         )
         return {}, reason, False
+
+
+def resolve_runtime_dir(engine_root: Path, workspace_root: Path) -> Path:
+    """Calcola e restituisce la directory di runtime per questo workspace.
+
+    La directory è isolata per workspace tramite hash deterministico del
+    percorso assoluto. Può essere sovrascritta con la variabile d'ambiente
+    ``SPARK_RUNTIME_DIR``.
+
+    Args:
+        engine_root: Radice del repository engine.
+        workspace_root: Radice del workspace utente.
+
+    Returns:
+        Path della directory di runtime (non creata — il caller è responsabile
+        di crearla se necessario).
+    """
+    env_override = os.environ.get(_SPARK_RUNTIME_DIR_ENV, "").strip()
+    if env_override:
+        runtime_dir = Path(env_override)
+        _log.info(
+            "[SPARK-ENGINE][INFO] Runtime dir override da env %s: %s",
+            _SPARK_RUNTIME_DIR_ENV,
+            runtime_dir,
+        )
+        return runtime_dir
+
+    workspace_hash = _sha256_text(str(workspace_root.absolute()))[:12]
+    return engine_root / "runtime" / workspace_hash

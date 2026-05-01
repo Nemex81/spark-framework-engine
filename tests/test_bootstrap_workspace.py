@@ -25,6 +25,7 @@ ManifestManager: Any = _module.ManifestManager
 SnapshotManager: Any = _module.SnapshotManager
 SparkFrameworkEngine: Any = _module.SparkFrameworkEngine
 WorkspaceContext: Any = _module.WorkspaceContext
+resolve_runtime_dir: Any = _module.resolve_runtime_dir
 
 
 class _FakeMCP:
@@ -116,9 +117,8 @@ class TestBootstrapWorkspace(unittest.TestCase):
             manifest_path = workspace_root / ".github" / ".scf-manifest.json"
             self.assertTrue(manifest_path.is_file(), "Manifest must exist after first bootstrap")
 
-            snapshots = SnapshotManager(
-                workspace_root / ".github" / "runtime" / "snapshots"
-            )
+            runtime_dir = resolve_runtime_dir(_ENGINE_PATH.parent, workspace_root)
+            snapshots = SnapshotManager(runtime_dir / "snapshots")
             self.assertTrue(
                 snapshots.snapshot_exists(
                     "scf-engine-bootstrap",

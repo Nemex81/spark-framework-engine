@@ -9,13 +9,20 @@ Surgical change vs. original hub:
 - ``WorkspaceLocator()`` → ``WorkspaceLocator(engine_root=engine_root)``
 - ``EngineInventory()``  → ``EngineInventory(engine_root=engine_root)``
 - Hub entry point: ``_build_app(engine_root=Path(__file__).resolve().parent).run(transport="stdio")``
+
+Fase 3 (Separazione Runtime):
+- Aggiunto: ``resolve_runtime_dir`` per calcolare la dir runtime isolata per workspace.
+- Aggiunto: ``_migrate_runtime_to_engine_dir`` per migrare file legacy da .github/runtime/.
+- ``runtime_dir`` passato a ``SparkFrameworkEngine`` come parametro esplicito.
 """
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 
-from spark.boot.validation import validate_engine_manifest
+from spark.boot.validation import resolve_runtime_dir, validate_engine_manifest
+from spark.core.constants import _MERGE_SESSIONS_SUBDIR
 from spark.inventory import FrameworkInventory
 from spark.workspace import WorkspaceLocator
 
@@ -31,6 +38,79 @@ except ImportError as _import_exc:
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
 
 
+def _migrate_runtime_to_engine_dir(github_root: Path, runtime_dir: Path) -> bool:
+    """Sposta file runtime da .github/runtime/ alla directory engine isolata.
+
+    Idempotente: scrive il marker ``.runtime-migrated`` al termine.
+    Abortisce silenziosamente se esistono sessioni di merge attive nel path
+    legacy (INVARIANTE-7).
+
+    Args:
+        github_root: Root di ``.github/`` del workspace utente.
+        runtime_dir: Directory di runtime target (engine-local, isolata per workspace).
+
+    Returns:
+        ``True`` se la migrazione è avvenuta (o era già stata fatta), ``False``
+        se saltata per sessioni attive.
+    """
+    from spark.merge.sessions import MergeSessionManager  # noqa: PLC0415
+
+    marker = runtime_dir / ".runtime-migrated"
+    if marker.is_file():
+        _log.info("[SPARK-ENGINE][INFO] Runtime già migrato (marker presente): %s", marker)
+        return True
+
+    old_sessions_root = github_root / "runtime" / _MERGE_SESSIONS_SUBDIR
+    sessions = MergeSessionManager(old_sessions_root)
+    active = sessions.list_active()
+    if active:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Migrazione runtime saltata: %d sessioni merge attive: %s",
+            len(active),
+            active,
+        )
+        return False
+
+    # Sposta le directory runtime dal workspace al percorso engine-local.
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    for old_subdir, new_subdir in [
+        ("runtime/snapshots", "snapshots"),
+        ("runtime/merge-sessions", "merge-sessions"),
+        ("runtime/backups", "backups"),
+    ]:
+        old_path = github_root / old_subdir
+        new_path = runtime_dir / new_subdir
+        if old_path.is_dir():
+            if not new_path.exists():
+                new_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(old_path), str(new_path))
+                _log.info(
+                    "[SPARK-ENGINE][INFO] Runtime migrato: %s → %s",
+                    old_path,
+                    new_path,
+                )
+            else:
+                _log.info(
+                    "[SPARK-ENGINE][INFO] Runtime migration: %s già presente, skip",
+                    new_path,
+                )
+
+    # Sposta user-prefs: rimane in .github/ ma perde il prefisso runtime/.
+    old_prefs = github_root / "runtime" / "spark-user-prefs.json"
+    new_prefs = github_root / "user-prefs.json"
+    if old_prefs.is_file() and not new_prefs.is_file():
+        shutil.move(str(old_prefs), str(new_prefs))
+        _log.info(
+            "[SPARK-ENGINE][INFO] User prefs migrato: %s → %s",
+            old_prefs,
+            new_prefs,
+        )
+
+    marker.write_text("migrated", encoding="utf-8")
+    _log.info("[SPARK-ENGINE][INFO] Migrazione runtime completata. Marker scritto: %s", marker)
+    return True
+
+
 def _build_app(engine_root: Path) -> FastMCP:
     # Import here to avoid circular import at module level; engine.py imports
     # from spark.inventory and spark.workspace which are always safe.
@@ -41,6 +121,10 @@ def _build_app(engine_root: Path) -> FastMCP:
     locator = WorkspaceLocator(engine_root=engine_root)
     context = locator.resolve()
     _log.info("Workspace resolved: %s", context.workspace_root)
+
+    runtime_dir = resolve_runtime_dir(engine_root, context.workspace_root)
+    _log.info("[SPARK-ENGINE][INFO] Runtime dir: %s", runtime_dir)
+    _migrate_runtime_to_engine_dir(context.github_root, runtime_dir)
 
     inventory = FrameworkInventory(context)
     _log.info(
@@ -62,7 +146,7 @@ def _build_app(engine_root: Path) -> FastMCP:
             len(inventory.mcp_registry.list_all()),
         )
 
-    app = SparkFrameworkEngine(mcp, context, inventory)
+    app = SparkFrameworkEngine(mcp, context, inventory, runtime_dir=runtime_dir)
     app.register_resources()
     app.register_tools()
     _log.info("Tools registered: 44 total")

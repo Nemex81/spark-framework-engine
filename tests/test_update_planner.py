@@ -26,6 +26,7 @@ FrameworkInventory = _module.FrameworkInventory
 ManifestManager = _module.ManifestManager
 RegistryClient = _module.RegistryClient
 SparkFrameworkEngine = _module.SparkFrameworkEngine
+resolve_runtime_dir: Any = _module.resolve_runtime_dir
 WorkspaceContext = _module.WorkspaceContext
 
 
@@ -75,6 +76,10 @@ class TestUpdatePlanner(unittest.TestCase):
         engine = SparkFrameworkEngine(fake_mcp, context, inventory)
         engine.register_tools()
         return fake_mcp
+
+    def _runtime_dir(self, workspace_root: Path) -> Path:
+        """Compute the engine-local runtime dir for this workspace (mirrors sequence.py)."""
+        return resolve_runtime_dir(workspace_root / "spark-framework-engine", workspace_root)
 
     def _authorize_github_writes(self, workspace_root: Path) -> None:
         state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
@@ -261,7 +266,7 @@ class TestUpdatePlanner(unittest.TestCase):
                 ]
             )
 
-            snapshots = _module.SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = _module.SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             snapshot_source = workspace_root / "snapshot-base.md"
             snapshot_source.write_text(base_text, encoding="utf-8")
             self.assertTrue(

@@ -1,9 +1,9 @@
 # SPARK Framework Engine — TODO Coordinatore
 
-- **Sessione attiva:** Refactoring Modulare — Fase 1 (Stabilizzazione)
-- **Ultimo aggiornamento:** 2026-05-01
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — apertura Fase 2 autorizzata
-- **Baseline test:** 0 failed / 282 passed / 8 skipped (post-Fase 1 Step 1.4 — commit 2ccfc90)
+- **Sessione attiva:** Refactoring Modulare — Fase 3 COMPLETATA
+- **Ultimo aggiornamento:** 2026-05-08
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — apertura Fase 4 autorizzata
+- **Baseline test:** 0 failed / 282 passed / 8 skipped (post-Fase 3 Step 3.6)
 
 ## Documenti di riferimento
 
@@ -78,7 +78,7 @@ passed / 8 skipped dopo ogni step.
 | Fase | Obiettivo | Piano | Stato |
 |------|-----------|-------|-------|
 | Fase 2 | Boot deterministico | [FASE2-PIANO-TECNICO.md](coding%20plans/FASE2-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 3 autorizzata |
-| Fase 3 | Separazione runtime | [FASE3-PIANO-TECNICO.md](coding%20plans/FASE3-PIANO-TECNICO.md) | in attesa di Fase 2 |
+| Fase 3 | Separazione runtime | [FASE3-PIANO-TECNICO.md](coding%20plans/FASE3-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 4 autorizzata |
 | Fase 4 | Gateway e workspace minimale | [FASE4-PIANO-TECNICO.md](coding%20plans/FASE4-PIANO-TECNICO.md) | in attesa di Fase 3 |
 
 ---

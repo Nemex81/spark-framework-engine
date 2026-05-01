@@ -124,6 +124,25 @@ class MergeSessionManager:
             expired.append(session_id)
         return expired
 
+    def list_active(self) -> list[str]:
+        """Return the IDs of sessions that are currently active and not expired."""
+        if not self._sessions_root.is_dir():
+            return []
+
+        active: list[str] = []
+        for session_file in sorted(self._sessions_root.glob("*.json")):
+            session_id = session_file.stem
+            session = self.load_session(session_id)
+            if session is None:
+                continue
+            if str(session.get("status", "")).strip() != "active":
+                continue
+            expires_at = _parse_utc_timestamp(str(session.get("expires_at", "")).strip())
+            if expires_at is not None and expires_at <= _utc_now():
+                continue
+            active.append(session_id)
+        return active
+
     @staticmethod
     def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         """Persist JSON atomically using a .tmp file in the target directory."""

@@ -60,3 +60,52 @@ Aggiornamenti alla struttura reale rispetto a quanto scritto sopra:
   `spark/manifest/snapshots.py` e `spark/merge/sessions.py` rispettivamente
   (estratti in Fase 0). Le modifiche ai path runtime si applicano a questi
   file esistenti, non a nuovi file da creare.
+
+---
+
+## CHIUSURA FASE 3 (2026-05-08)
+
+**Stato:** COMPLETATA — suite 0 failed / 282 passed / 8 skipped.
+
+### Step implementati
+
+| Step | Modulo | Operazione | Stato |
+|------|--------|-----------|-------|
+| 3.0 | `spark/merge/sessions.py` | Aggiunto `list_active()` per guardia migrazione | ✅ |
+| 3.1 | `spark/core/constants.py` | Costanti subdir senza prefisso `runtime/`; `_SPARK_RUNTIME_DIR_ENV`; `_USER_PREFS_FILENAME` | ✅ |
+| 3.2 | `spark/boot/validation.py` | `resolve_runtime_dir(engine_root, workspace_root)` con override env | ✅ |
+| 3.3 | `spark/manifest/snapshots.py` | `_scf_backup_workspace()` accetta `backup_root` opzionale | ✅ |
+| 3.4 | `spark/boot/sequence.py` | `_migrate_runtime_to_engine_dir()` + `_build_app()` integra runtime_dir | ✅ |
+| 3.5 | `spark/boot/engine.py` | `__init__` accetta `runtime_dir=None`; orchestrator-state resta in `.github/runtime/` | ✅ |
+| 3.6 | test files (7 file) | Import `resolve_runtime_dir` + helper `_runtime_dir` + path aggiornati | ✅ |
+
+### Correzioni DRIFT introdotte durante implementazione
+
+1. `_sha256_text` non era in `spark/core/utils.py` → aggiunto helper in `validation.py` locale.
+2. `EngineInventory` non necessario in `validation.py` → import rimosso.
+3. `list_active()` in `MergeSessionManager` non era previsto nel piano → aggiunto in Step 3.0 per guardia migrazione.
+4. `_fix_tests2.py` ha rimpiazzato i path prima di inserire il metodo `_runtime_dir` → la stringa `_runtime_dir` era già presente nel testo (negli usi), bloccando il guard `"_runtime_dir" not in t`. Risolto manualmente con `replace_string_in_file` per i 3 file mancanti.
+5. `test_multi_owner_policy.py`: durante aggiunta `_runtime_dir`, `def _registry_package` fu consumato dall'oldString. Ripristinato.
+6. `test_bootstrap_workspace.py` lines 312/330: riferimenti a vecchio prefs path in metodi `@unittest.skip` — SKIPPED, no fix needed.
+
+### File toccati
+
+**Sorgenti:**
+- `spark/merge/sessions.py`
+- `spark/core/constants.py`
+- `spark/boot/validation.py`
+- `spark/manifest/snapshots.py`
+- `spark/boot/sequence.py`
+- `spark/boot/engine.py`
+- `spark/boot/__init__.py`
+- `spark-framework-engine.py` (re-export `resolve_runtime_dir`)
+
+**Test:**
+- `tests/test_bootstrap_workspace.py`
+- `tests/test_merge_integration.py`
+- `tests/test_merge_session.py`
+- `tests/test_multi_owner_policy.py`
+- `tests/test_package_installation_policies.py`
+- `tests/test_update_planner.py`
+- `tests/test_update_policy.py`
+

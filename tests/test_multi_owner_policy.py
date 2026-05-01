@@ -26,6 +26,7 @@ ManifestManager = _module.ManifestManager
 RegistryClient = _module.RegistryClient
 SnapshotManager = _module.SnapshotManager
 SparkFrameworkEngine = _module.SparkFrameworkEngine
+resolve_runtime_dir: Any = _module.resolve_runtime_dir
 WorkspaceContext = _module.WorkspaceContext
 
 
@@ -83,6 +84,10 @@ class TestMultiOwnerPolicy(unittest.TestCase):
         engine = SparkFrameworkEngine(fake_mcp, context, inventory)
         engine.register_tools()
         return fake_mcp
+
+    def _runtime_dir(self, workspace_root: Path) -> Path:
+        """Compute the engine-local runtime dir for this workspace (mirrors sequence.py)."""
+        return resolve_runtime_dir(workspace_root / "spark-framework-engine", workspace_root)
 
     def _registry_package(self, package_id: str) -> dict[str, str]:
         return {
@@ -240,7 +245,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertEqual(result["delegated_files"], [".github/copilot-instructions.md"])
             self.assertEqual(target_file.read_text(encoding="utf-8"), existing_text)
             self.assertEqual(manifest.get_file_owners("copilot-instructions.md"), ["pkg-a"])
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             self.assertFalse(snapshots.snapshot_exists("pkg-b", "copilot-instructions.md"))
 
     def test_manifest_manager_get_file_owners_returns_both_packages_after_extend(self) -> None:
@@ -397,7 +402,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
                     self._entry("copilot-instructions.md", "pkg-b", shared_text, "1.0.0"),
                 ]
             )
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             self.assertTrue(
                 snapshots.save_snapshot("pkg-b", "copilot-instructions.md", target_file)
             )

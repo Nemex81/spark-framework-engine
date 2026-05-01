@@ -27,6 +27,7 @@ ManifestManager = _module.ManifestManager
 RegistryClient = _module.RegistryClient
 SnapshotManager = _module.SnapshotManager
 SparkFrameworkEngine = _module.SparkFrameworkEngine
+resolve_runtime_dir: Any = _module.resolve_runtime_dir
 WorkspaceContext = _module.WorkspaceContext
 
 
@@ -84,6 +85,10 @@ class TestPackageInstallationPolicies(unittest.TestCase):
         engine = SparkFrameworkEngine(fake_mcp, context, inventory)
         engine.register_tools()
         return fake_mcp
+
+    def _runtime_dir(self, workspace_root: Path) -> Path:
+        """Compute the engine-local runtime dir for this workspace (mirrors sequence.py)."""
+        return resolve_runtime_dir(workspace_root / "spark-framework-engine", workspace_root)
 
     def _authorize_github_writes(self, workspace_root: Path) -> None:
         state_path = workspace_root / ".github" / "runtime" / "orchestrator-state.json"
@@ -242,7 +247,7 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertEqual(result["installed"], [".github/agents/shared.md"])
             self.assertEqual(shared_file.read_text(encoding="utf-8"), "new content")
             self.assertEqual(manifest.get_installed_versions(), {"pkg-b": "2.0.0"})
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             self.assertTrue(snapshots.snapshot_exists("pkg-b", "agents/shared.md"))
             self.assertEqual(
                 snapshots.load_snapshot("pkg-b", "agents/shared.md"),
@@ -267,7 +272,7 @@ class TestPackageInstallationPolicies(unittest.TestCase):
                     )
                 ]
             )
-            snapshots = SnapshotManager(github_root / "runtime" / "snapshots")
+            snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             self.assertTrue(snapshots.save_snapshot("pkg-b", "agents/shared.md", target_file))
 
             fake_mcp = self._build_engine(workspace_root)
