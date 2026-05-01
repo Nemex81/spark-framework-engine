@@ -117,7 +117,8 @@ spark-framework-engine/
     ├── manifest/
     │   ├── manifest.py         ← nome effettivo (piano: manager.py)
     │   ├── diff.py
-    │   └── snapshots.py
+    │   ├── snapshots.py
+    │   └── gateway.py          ← aggiunto in Fase 4 (WorkspaceWriteGateway)
     │
     ├── registry/
     │   ├── client.py
@@ -132,7 +133,7 @@ spark-framework-engine/
     ├── workspace/
     │   ├── locator.py
     │   ├── migration.py        ← MigrationPlan/MigrationPlanner (piano: packages/)
-    │   └── policy.py           ← nome effettivo (piano: update_policy.py; Step 1.1)
+    │   └── update_policy.py    ← rinominato da policy.py in Step 1.1
     │
     ├── packages/
     │   ├── lifecycle.py
@@ -147,7 +148,7 @@ spark-framework-engine/
     └── boot/
         ├── engine.py           ← SparkFrameworkEngine (piano: in sequence.py)
         ├── sequence.py         ← _build_app
-        └── [validation.py]     ← da creare in Fase 2
+        └── validation.py       ← creato in Fase 2 (boot deterministico)
 ```
 
 ---
@@ -253,7 +254,19 @@ Copilot, nella produzione del piano tecnico implementativo, fisserà il tool spe
 
 **Descrizione:** `workspace/` viene reso un layer di sola lettura. Tutte le operazioni di scrittura sul filesystem passano attraverso un gateway centralizzato che garantisce che ogni modifica sia tracciata dal `ManifestManager`. Il layer workspace descrive quello che trova, non decide quello che deve succedere.
 
-**Criterio di completamento:** nessuna scrittura sul filesystem avviene al di fuori del gateway. Il layer workspace non contiene chiamate a operazioni di modifica.
+**Criterio di completamento:** le scritture degli asset di Fase 6 (`_apply_phase6_assets`) passano attraverso `WorkspaceWriteGateway`. Le operazioni di install/update pacchetti in `boot/engine.py` sono documentate come deviazione rinviata (Fase 4-BIS futura).
+
+---
+
+### Fase 5 — Consolidamento finale e verifica contratti architetturali
+
+**Obiettivo:** verificare formalmente tutti i contratti architetturali del ciclo Fase 0–4. Correggere le deviazioni minori. Certificare la chiusura del refactoring modulare.
+
+**Descrizione:** analisi read-only completa dello stato reale: suite test, grafo dipendenze, entry point, struttura fisica, documenti di design. Produzione elenco correzioni classificate per rischio. Implementazione correzioni a rischio basso e medio. Documentazione formale delle deviazioni accettate e di quelle rinviate come lavoro futuro.
+
+**Deviazione documentata — INVARIANTE-4 (gateway bypass):** `spark/boot/engine.py` contiene ancora scritture dirette su `workspace/.github/**` nelle funzioni `scf_install_package`, `scf_update_package`, `scf_approve_conflict`, `scf_reject_conflict` e `scf_bootstrap_workspace`. Il refactoring completo richiede una Fase 4-BIS dedicata. Classificato BLOCCANTE-FUTURO.
+
+**Criterio di completamento:** suite test verde (≥ 296 passed), entry point ≤ 180 righe, design doc allineato alla struttura reale, `[Unreleased]` CHANGELOG aggiornato, report di chiusura creato.
 
 ---
 

@@ -28,6 +28,20 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   importato da `spark.manifest` e iniettato ai 3 callsite di
   `_apply_phase6_assets` (`_install_package_v3`, `_remove_package_v3`,
   `scf_bootstrap_workspace`).
+- `spark-framework-engine.py` — rimossi import stdlib inutilizzati e blocchi
+  di commenti storici (`# XYZ moved to…`). Entry point ridotto da 376 a 194
+  righe. Soli import effettivamente usati: `logging`, `sys`, `pathlib.Path`.
+- `docs/REFACTORING-DESIGN.md` — Sezione 4 aggiornata: `workspace/policy.py`
+  → `update_policy.py`, aggiunto `manifest/gateway.py`, rimosso `[validation.py]`
+  come "da creare". Sezione 7: aggiunta Fase 5 con deviazione INVARIANTE-4 documentata.
+- `docs/todo.md` — sessione aggiornata a Fase 5 ATTIVA, baseline test a 296,
+  Fase 4 segnata COMPLETATA, riferimento al piano FASE5-PIANO-TECNICO.md aggiunto.
+
+### Fixed
+
+- `tests/test_engine_coherence.py` — regex `r"## \[(\d[^\]]+)\]"` sostituisce
+  `r"## \[([^\]]+)\]"` per saltare la sezione `[Unreleased]` nel CHANGELOG
+  e rilevare correttamente la versione più recente rilasciata (CORREZIONE [1]).
 
 ---
 

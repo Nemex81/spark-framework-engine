@@ -52,7 +52,8 @@ def test_engine_version_changelog_alignment():
     engine_ver = version_match.group(1)
 
     changelog = _CHANGELOG.read_text(encoding="utf-8")
-    entry_match = re.search(r"## \[([^\]]+)\]", changelog)
+    # Salta [Unreleased] — cerca la prima voce versionale numerica.
+    entry_match = re.search(r"## \[(\d[^\]]+)\]", changelog)
     assert entry_match, "Nessuna voce versionale trovata in CHANGELOG.md"
     changelog_ver = entry_match.group(1)
 
