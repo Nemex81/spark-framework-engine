@@ -2,7 +2,8 @@
 import re
 from pathlib import Path
 
-_SOURCE = Path(__file__).parent.parent / "spark-framework-engine.py"
+_ENGINE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "engine.py"
+_SEQUENCE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "sequence.py"
 _CONSTANTS = Path(__file__).parent.parent / "spark" / "core" / "constants.py"
 _CHANGELOG = Path(__file__).parent.parent / "CHANGELOG.md"
 
@@ -16,7 +17,11 @@ def test_tool_counter_consistency():
     NOTA: a partire da v3.0 il pattern di registrazione tool usa
     l'helper @_register_tool("name") invece di @self._mcp.tool diretto.
     """
-    source = _SOURCE.read_text(encoding="utf-8")
+    source = (
+        _ENGINE_PATH.read_text(encoding="utf-8")
+        + "\n"
+        + _SEQUENCE_PATH.read_text(encoding="utf-8")
+    )
 
     actual = len(re.findall(r"@_register_tool\(", source))
 

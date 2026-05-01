@@ -2,8 +2,8 @@
 
 - **Sessione attiva:** Refactoring Modulare — Fase 0 (Modularizzazione)
 - **Ultimo aggiornamento:** 2026-05-01
-- **Stato piano:** VALIDATO — Confidence 0.9
-- **Verdetto Copilot:** PIANO PRONTO PER REVISIONE UMANA
+- **Stato piano:** COMPLETATO — Fase 0 terminata, baseline 27/263 confermata
+- **Verdetto Copilot:** FASE 0 COMPLETATA — tutti i 9 step eseguiti con successo
 
 ## Documenti di riferimento
 
@@ -59,15 +59,15 @@ Commit per ogni step completato: `refactor(modulo): estrai NomeClasse — nessun
 
 | Step | Modulo | Rischio | File TODO | Stato |
 |------|--------|---------|-----------|-------|
-| 01 | `core` | BASSO | [fase0-step-01-core.md](todolist/fase0-step-01-core.md) | [ ] |
-| 02 | `merge` | MEDIO | [fase0-step-02-merge.md](todolist/fase0-step-02-merge.md) | [ ] |
-| 03 | `manifest` | MEDIO | [fase0-step-03-manifest.md](todolist/fase0-step-03-manifest.md) | [ ] |
-| 04 | `registry` | MEDIO | [fase0-step-04-registry.md](todolist/fase0-step-04-registry.md) | [ ] |
-| 05 | `workspace` | ALTO | [fase0-step-05-workspace.md](todolist/fase0-step-05-workspace.md) | [ ] |
-| 06 | `packages` | MEDIO | [fase0-step-06-packages.md](todolist/fase0-step-06-packages.md) | [ ] |
-| 07 | `assets` | BASSO | [fase0-step-07-assets.md](todolist/fase0-step-07-assets.md) | [ ] |
-| 08 | `boot` | ALTO | [fase0-step-08-boot.md](todolist/fase0-step-08-boot.md) | [ ] |
-| 09 | `cleanup` | BASSO | [fase0-step-09-cleanup.md](todolist/fase0-step-09-cleanup.md) | [ ] |
+| 01 | `core` | BASSO | [fase0-step-01-core.md](todolist/fase0-step-01-core.md) | [x] |
+| 02 | `merge` | MEDIO | [fase0-step-02-merge.md](todolist/fase0-step-02-merge.md) | [x] |
+| 03 | `manifest` | MEDIO | [fase0-step-03-manifest.md](todolist/fase0-step-03-manifest.md) | [x] |
+| 04 | `registry` | MEDIO | [fase0-step-04-registry.md](todolist/fase0-step-04-registry.md) | [x] |
+| 05 | `workspace` | ALTO | [fase0-step-05-workspace.md](todolist/fase0-step-05-workspace.md) | [x] |
+| 06 | `packages` | MEDIO | [fase0-step-06-packages.md](todolist/fase0-step-06-packages.md) | [x] |
+| 07 | `assets` | BASSO | [fase0-step-07-assets.md](todolist/fase0-step-07-assets.md) | [x] |
+| 08 | `boot` | ALTO | [fase0-step-08-boot.md](todolist/fase0-step-08-boot.md) | [x] |
+| 09 | `cleanup` | BASSO | [fase0-step-09-cleanup.md](todolist/fase0-step-09-cleanup.md) | [x] |
 
 **Invarianti di verifica dopo ogni step:**
 1. Il motore si avvia senza eccezioni non gestite su stderr.
@@ -99,8 +99,10 @@ Schema commit aggiornamento grafo: `docs(design): aggiorna grafo — dipendenza 
 
 ## Anomalie note (non bloccanti, da trattare in Fase 1)
 
-- **Log hardcoded:** messaggio `"Tools registered: 40 total"` a riga 8380 del sorgente
+- **Log hardcoded:** messaggio `"Tools registered: 40 total"` in `spark/boot/sequence.py`
   riporta 40 tool ma il reale è 44. Da correggere in Fase 2 durante riscrittura `_build_app`.
+  Il commento `Tools (40)` nella docstring di `register_tools()` in `spark/boot/engine.py`
+  è anch'esso obsoleto — entrambi da aggiornare contestualmente.
 - **`packages/diff.py` placeholder:** gli helper di diff sono inner function di `register_tools`
   e non estraibili senza modifica logica. Verranno migrati in Fase 1 con marker `# FASE1-RIASSEGNA`.
 - **Costanti private:** le costanti oltre righe 44–55 (es. `_RESOURCE_TYPES`, `_MANIFEST_FILENAME`)
