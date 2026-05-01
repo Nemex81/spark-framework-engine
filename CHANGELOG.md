@@ -41,8 +41,17 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   come "da creare". Sezione 7: aggiunta Fase 5 con deviazione INVARIANTE-4 documentata.
   Aggiunta Sezione Fase 4-BIS che documenta la chiusura della deviazione
   INVARIANTE-4 per i forward write tracciati nel manifest.
-- `docs/todo.md` — sessione aggiornata a Fase 5 ATTIVA, baseline test a 296,
-  Fase 4 segnata COMPLETATA, riferimento al piano FASE5-PIANO-TECNICO.md aggiunto.
+- `docs/todo.md` — ciclo refactoring COMPLETATO; Fase 4-BIS aggiunta alla
+  tabella fasi successive; sessione attiva aggiornata da "Fase 5 ATTIVA" a
+  "Ciclo di refactoring modulare SPARK — COMPLETATO".
+- `docs/coding plans/FASE5-PIANO-TECNICO.md` — tabella Chiusura: SHA reali
+  sostituiscono i placeholder "da committare"; Verdetto Finale aggiornato a
+  "GATE: CHIUSO — C1–C5 tutti implementati"; deviazione gateway bypass
+  marcata RISOLTO in Fase 4-BIS.
+- `docs/reports/FASE5-CHIUSURA-REPORT.md` — C5 aggiornato da "⏭ RINVIATA"
+  a "✅ APPLICATA in Fase 4-BIS (commit a2a32ac)"; sezione deviazioni
+  riscritta con dettagli implementazione; contratti soddisfatti 4/5 → 5/5;
+  prossimo passo aggiornato: ciclo completamente certificato.
 - `spark/boot/engine.py` — Fase 4-BIS: 11 callsites di scrittura su
   `workspace/.github/**` instradate attraverso `WorkspaceWriteGateway`
   via i nuovi helper `_gateway_write_text`/`_gateway_write_bytes`.

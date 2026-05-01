@@ -88,12 +88,13 @@ Documentato come lavoro futuro.
 
 ## Verdetto Finale
 
-**GATE**: PROCEDERE CON C1–C4. RINVIARE C5.
+**GATE**: CHIUSO — C1–C5 tutti implementati.
+C5 eseguita in Fase 4-BIS (commit `a2a32ac`, 2026-05-01) come previsto al momento del rinvio.
 
 **Motivazione**:
 - C1–C3: correzioni documentali/test, rischio basso, nessuna logica toccata.
 - C4: rimozione commenti storici dall'entry point, rischio medio, nessuna logica toccata.
-- C5: refactoring gateway completo per install/update — richiede Fase 4-BIS dedicata.
+- C5: refactoring gateway completato in Fase 4-BIS (12 callsite migrati, 2 helper introdotti).
 
 ---
 
@@ -140,7 +141,7 @@ Documentato come lavoro futuro.
 
 | Deviazione | File | Motivo | Priorità futura |
 |------------|------|--------|-----------------|
-| Gateway bypass install/update | spark/boot/engine.py | Refactoring massiccio (>10 callsite) | ALTA |
+| ~~Gateway bypass install/update~~ | spark/boot/engine.py | **RISOLTO in Fase 4-BIS** (commit a2a32ac) | CHIUSA |
 | lifecycle.py write dirette su engine store | spark/packages/lifecycle.py | Funzionalità essenziale store | BASSA |
 | migration.py write su .github/ | spark/workspace/migration.py | Migrazione one-shot storica | NESSUNA (terminata) |
 | update_policy.py write user-prefs | spark/workspace/update_policy.py | Scrive su workspace root, non .github/ | NESSUNA |
@@ -151,9 +152,10 @@ Documentato come lavoro futuro.
 
 | Step | SHA | Stato |
 |------|-----|-------|
-| 5.0 — todo.md | da committare | applicato |
-| 5.1 — REFACTORING-DESIGN.md | da committare | applicato |
-| 5.2 — slim entry point | da committare | applicato |
-| 5.3 — commit C1 | da committare | applicato |
-| 5.4 — CHANGELOG | da committare | applicato |
-| FASE5-CHIUSURA-REPORT.md | da committare | creato |
+| 5.0 — todo.md | a2a32ac | ✅ COMMITTATO |
+| 5.1 — REFACTORING-DESIGN.md | a2a32ac | ✅ COMMITTATO |
+| 5.2 — slim entry point | a2a32ac | ✅ COMMITTATO |
+| 5.3 — commit C1 fix test | a2a32ac | ✅ COMMITTATO |
+| 5.4 — CHANGELOG | a2a32ac | ✅ COMMITTATO |
+| FASE5-CHIUSURA-REPORT.md | a2a32ac | ✅ COMMITTATO |
+| C5 — Fase 4-BIS gateway | a2a32ac | ✅ COMMITTATO (fuori piano originale) |

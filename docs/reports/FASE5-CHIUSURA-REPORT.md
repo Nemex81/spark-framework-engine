@@ -38,27 +38,27 @@ a una Fase 4-BIS dedicata.
 | C2 | docs | `docs/REFACTORING-DESIGN.md` | Sezione 4 allineata a struttura reale | ✅ APPLICATA |
 | C3 | docs | `docs/todo.md` | Sessione → Fase 5, baseline 296, Fase 4 COMPLETATA | ✅ APPLICATA |
 | C4 | code | `spark-framework-engine.py` | Entry point 376→194 righe | ✅ APPLICATA |
-| C5 | arch | `spark/boot/engine.py` | write_text su workspace .github/** senza gateway | ⏭ RINVIATA |
+| C5 | arch | `spark/boot/engine.py` | write_text su workspace .github/** — 12 callsite migrati via `_gateway_write_text`/`_gateway_write_bytes` | ✅ APPLICATA in Fase 4-BIS (commit `a2a32ac`) |
 
 ---
 
 ## Deviazioni accettate e rinviate
 
-### C5 — INVARIANTE-4 parzialmente non coperta (BLOCCANTE-FUTURO)
+### C5 — INVARIANTE-4 risolta in Fase 4-BIS
 
-`spark/boot/engine.py` contiene scritture dirette su `workspace/.github/**`
-nelle funzioni di installazione e aggiornamento pacchetti:
-- `scf_install_package` / `scf_update_package` (>10 callsite)
-- `scf_approve_conflict` / `scf_reject_conflict`
-- `scf_bootstrap_workspace`
+`spark/boot/engine.py` — 12 callsite di scrittura diretta su
+`workspace/.github/**` migrati al `WorkspaceWriteGateway`.
 
-La migrazione completa al gateway richiederebbe una Fase 4-BIS dedicata.
-Il rischio di regressione su una modifica massiva di `engine.py` è classificato
-ALTO e supera il perimetro Fase 5.
+**Implementazione:** due helper modulo-level `_gateway_write_text`
+e `_gateway_write_bytes` (14 occorrenze totali nel file).
+Callsite migrati: `scf_install_package` (7), `scf_approve_conflict` (1),
+`scf_reject_conflict` (1), `scf_bootstrap_workspace` (2).
+Cross-owner protection preservata nel bootstrap.
+Rollback restore (1 sito) documentato come deviazione accettata
+(cammino di emergenza, fuori scope).
 
-**Motivazione accettazione**: le funzioni di installazione pacchetti scrivono
-file controllati dal manifest; la tracciabilità è garantita indirettamente.
-La deviazione è documentata nel piano tecnico e nel design doc.
+**Suite test post-migrazione:** 296 passed / 8 skipped / 0 failed.
+**Commit:** `a2a32ac` (2026-05-01).
 
 ---
 
@@ -99,7 +99,7 @@ git commit -m "docs(FASE5): chiusura formale — refactoring modulare SPARK cert
 | Suite test | 296 passed / 8 skipped / 0 failed |
 | Entry point righe | 194 |
 | Tool registrati | 44 |
-| Contratti soddisfatti | 4/5 |
+| Contratti soddisfatti | 5/5 |
 | Violazioni grafe dipendenze | 0 |
 | Fasi completate | 0, 1, 2, 3, 4, 5 |
 
@@ -107,10 +107,12 @@ git commit -m "docs(FASE5): chiusura formale — refactoring modulare SPARK cert
 
 ## Prossimo passo raccomandato
 
-**Fase 4-BIS** — Migrazione gateway completa per `scf_install_package`,
-`scf_update_package`, `scf_approve_conflict`, `scf_reject_conflict` e
-`scf_bootstrap_workspace` in `spark/boot/engine.py`.
+Il ciclo di refactoring modulare SPARK (Fasi 0–5 + Fase 4-BIS) è
+**completamente certificato**. Tutti e 5 i contratti architetturali
+sono soddisfatti.
 
-Perimetro stimato: refactoring di 10+ callsite in engine.py.
-Prerequisito: valutare se introdurre un parametro `gateway` nelle funzioni
-interne o un helper `_write_workspace_file(gateway, dest, content)` condiviso.
+Lavoro futuro a bassa priorità (documentato, non bloccante):
+- `packages/lifecycle.py` righe 92, 95, 130: scritture dirette
+  nell'engine store — fuori scope gateway workspace.
+- `workspace/migration.py`: migrazione one-shot storica v2→v3 —
+  classificata NESSUNA azione necessaria.

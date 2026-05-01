@@ -1,9 +1,9 @@
 # SPARK Framework Engine — TODO Coordinatore
 
-- **Sessione attiva:** Refactoring Modulare — Fase 5 ATTIVA
-- **Ultimo aggiornamento:** 2026-05-01
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — apertura Fase 5 autorizzata
-- **Baseline test:** 0 failed / 296 passed / 8 skipped (post-Fase 4 CORREZIONE [1])
+- **Sessione attiva:** Ciclo di refactoring modulare SPARK — COMPLETATO
+- **Ultimo aggiornamento:** 2026-05-02
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA
+- **Baseline test:** 0 failed / 296 passed / 8 skipped (post-Fase 4-BIS commit a2a32ac)
 
 ## Documenti di riferimento
 
@@ -81,7 +81,8 @@ passed / 8 skipped dopo ogni step.
 | Fase 2 | Boot deterministico | [FASE2-PIANO-TECNICO.md](coding%20plans/FASE2-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 3 autorizzata |
 | Fase 3 | Separazione runtime | [FASE3-PIANO-TECNICO.md](coding%20plans/FASE3-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 4 autorizzata |
 | Fase 4 | Gateway e workspace minimale | [FASE4-PIANO-TECNICO.md](coding%20plans/FASE4-PIANO-TECNICO.md) | COMPLETATA (SHA: d047cb0, ff966dc) |
-| Fase 5 | Consolidamento finale e verifica contratti | [FASE5-PIANO-TECNICO.md](coding%20plans/FASE5-PIANO-TECNICO.md) | ATTIVA |
+| Fase 5 | Consolidamento finale e verifica contratti | [FASE5-PIANO-TECNICO.md](coding%20plans/FASE5-PIANO-TECNICO.md) | COMPLETATA (SHA: a2a32ac) |
+| Fase 4-BIS | Chiusura INVARIANTE-4 — gateway forward writes | [FASE5-PIANO-TECNICO.md § Chiusura](coding%20plans/FASE5-PIANO-TECNICO.md) | COMPLETATA (SHA: a2a32ac, 2026-05-01) |
 
 ---
 
