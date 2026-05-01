@@ -50,18 +50,24 @@ Riscrivere `spark/boot/sequence.py` come sequenza lineare e ordinata di iniziali
 ## DRIFT — Note di allineamento post-Fase 0/1 (2026-05-01)
 
 Aggiornamenti alla struttura reale rispetto a quanto scritto sopra al momento
-della stesura del piano:
+della stesura del piano. **Tutti risolti in Fase 2 (2026-05-01).**
 
-- **Sezione 4.1 riferimento riga monolite:** `_build_app` è descritta come
-  “alla riga 8348” del file monolite. Quella riga non esiste più. La funzione
-  ora vive in `spark/boot/sequence.py`.
-- **`spark/boot/validation.py`:** il file non esiste ancora. Era pianificato
-  come placeholder in Fase 0 Step 08 ma non è stato creato. Sarà il primo
-  artefatto da creare in Fase 2 (nuova, non estratta dal monolite).
-- **`spark/workspace/policy.py`:** il piano di Fase 3 e questo piano citano
-  `update_policy.py`; il file si chiama `policy.py`. Step 1.1 di Fase 1 prevede
-  la rinomina. Se non ancora eseguita all’apertura di Fase 2, aggiornare gli
-  import di conseguenza.
+- **Sezione 4.1 riferimento riga monolite:** `_build_app` era descritta come
+  "alla riga 8348" del file monolite. La funzione ora vive in `spark/boot/sequence.py`.
+  `[RISOLTO]`
+- **`spark/boot/validation.py`:** creato in Step 2.1 — funzione `validate_engine_manifest()`
+  con feature flag `SPARK_STRICT_BOOT`. `[RISOLTO]`
+- **`spark/workspace/policy.py`:** rinominato `update_policy.py` in Fase 1 Step 1.1.
+  `[RISOLTO]`
 - **Metodo istanza residuo:** `SparkFrameworkEngine._install_package_v3_into_store`
-  rimane in `spark/boot/engine.py` ma non è più chiamato (fix Step 1.4 Fase 1).
-  Candidato a rimozione come prima pulizia di Fase 2.
+  rimosso in Step 2.0. `[RISOLTO]`
+
+## Chiusura Fase 2 (2026-05-01)
+
+| Step | Descrizione | File | Stato |
+|------|-------------|------|-------|
+| 2.0 | Rimozione metodo istanza residuo `_install_package_v3_into_store` | `spark/boot/engine.py` | COMPLETATO |
+| 2.1 | Creazione `spark/boot/validation.py` con `validate_engine_manifest()` | `spark/boot/validation.py` | COMPLETATO |
+| 2.2 | Sostituzione try/except inline con `validate_engine_manifest()` | `spark/boot/sequence.py` | COMPLETATO |
+
+**Invariante finale:** 0 failed / 282 passed / 8 skipped confermata post-ogni-step.

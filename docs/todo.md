@@ -46,8 +46,8 @@ Riferimento fisso per invariante diagnostico Fase 2+.
   invece di `spark/workspace/inventory.py` come dichiarato nel piano originale.
   Il codice è corretto e funzionante. Il grafo in `REFACTORING-DESIGN.md` va aggiornato
   (Step 1.8).
-- **`spark/workspace/policy.py` invece di `update_policy.py`:** Le 7 funzioni di policy
-  vivono in `policy.py`. Rinomina prevista in Step 1.1.
+- **`spark/workspace/update_policy.py` (ex `policy.py`):** Rinomina
+  completata in Step 1.1 (2026-05-01). Deviazione risolta.
 - **Marker `# FASE1-RIASSEGNA` mai materializzati nel codice Python:** i marker erano
   citati nel piano ma non sono mai stati inseriti come commenti inline. Verificato con
   grep exhaustivo in Fase 1 Step 1.3. Step chiuso a zero modifiche.
@@ -77,7 +77,7 @@ passed / 8 skipped dopo ogni step.
 
 | Fase | Obiettivo | Piano | Stato |
 |------|-----------|-------|-------|
-| Fase 2 | Boot deterministico | [FASE2-PIANO-TECNICO.md](coding%20plans/FASE2-PIANO-TECNICO.md) | in attesa di Fase 1 |
+| Fase 2 | Boot deterministico | [FASE2-PIANO-TECNICO.md](coding%20plans/FASE2-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 3 autorizzata |
 | Fase 3 | Separazione runtime | [FASE3-PIANO-TECNICO.md](coding%20plans/FASE3-PIANO-TECNICO.md) | in attesa di Fase 2 |
 | Fase 4 | Gateway e workspace minimale | [FASE4-PIANO-TECNICO.md](coding%20plans/FASE4-PIANO-TECNICO.md) | in attesa di Fase 3 |
 
@@ -105,17 +105,12 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
 - **`packages/diff.py` placeholder:** helper di diff sono inner function di
   `register_tools`. Non estratti in Fase 0. Da valutare se estrarre in Fase 2
   (modifica logica).
-- **Metodo istanza residuo `_install_package_v3_into_store`:** il vecchio metodo
-  istanza di `SparkFrameworkEngine` rimane in `spark/boot/engine.py` ma non è più
-  chiamato dopo il fix Step 1.4. Candidato a rimozione in Fase 2.
+- **~~Metodo istanza residuo `_install_package_v3_into_store`~~:** rimosso in Fase 2 Step 2.0. `[RISOLTO]`
 
 ### P2 — Da trattare in Fase 2
 
-- **`_build_app` non deterministico:** fallback silenziosi su errori di inventory
-  e registry. Piano in `FASE2-PIANO-TECNICO.md`.
-- **Riferimento obsoleto in FASE2:** il piano cita `_build_app` "alla riga 8348"
-  del monolite — quella riga non esiste più. La funzione ora vive in
-  `spark/boot/sequence.py`. Correzione prevista in Step 1.8 o all'apertura Fase 2.
+- **~~`_build_app` non deterministico~~:** risolto in Fase 2 (validation.py + SPARK_STRICT_BOOT feature flag). `[RISOLTO]`
+- **~~Riferimento obsoleto in FASE2~~:** piano aggiornato in chiusura Fase 2. `[RISOLTO]`
 
 ---
 

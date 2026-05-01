@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
-from spark.inventory import EngineInventory, FrameworkInventory
+from spark.boot.validation import validate_engine_manifest
+from spark.inventory import FrameworkInventory
 from spark.workspace import WorkspaceLocator
 
 try:
@@ -51,12 +51,10 @@ def _build_app(engine_root: Path) -> FastMCP:
 
     # v3.0: popola McpResourceRegistry con risorse engine + override workspace.
     # I package_manifests del deposito centralizzato vengono integrati in Fase 5.
-    try:
-        engine_inv = EngineInventory(engine_root=engine_root)
-        engine_manifest = engine_inv.engine_manifest
-    except Exception as exc:  # pragma: no cover - difensivo
-        _log.warning("Caricamento engine-manifest fallito: %s", exc)
-        engine_manifest = {}
+    # SPARK_STRICT_BOOT=1 abilita comportamento fatale su errore manifest (default off).
+    engine_manifest, _manifest_status, _manifest_ok = validate_engine_manifest(engine_root)
+    if not _manifest_ok:
+        _log.info("[SPARK-ENGINE][INFO] Engine manifest: %s", _manifest_status)
     inventory.populate_mcp_registry(engine_manifest=engine_manifest)
     if inventory.mcp_registry is not None:
         _log.info(
