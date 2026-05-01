@@ -1,6 +1,8 @@
 """Update-policy helpers — SPARK Framework Engine.
 
-Extracted to ``spark.workspace.policy`` during Phase 0 modular refactoring.
+Extracted to ``spark.workspace.update_policy`` during Phase 0 modular refactoring
+(file previously named ``policy.py``; renamed to ``update_policy.py`` in Fase 1
+Step 1.1 to match the original plan declared in fase0-step-05-workspace.md).
 All symbols are re-exported from ``spark.workspace``.
 """
 from __future__ import annotations

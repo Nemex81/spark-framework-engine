@@ -2,7 +2,7 @@
 
 - **Sessione attiva:** Refactoring Modulare — Fase 1 (Stabilizzazione)
 - **Ultimo aggiornamento:** 2026-05-01
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 QUASI-COMPLETATA (step 1.1 e 1.7 aperti — allineamento documentale eseguito 2026-05-01)
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — apertura Fase 2 autorizzata
 - **Baseline test:** 0 failed / 282 passed / 8 skipped (post-Fase 1 Step 1.4 — commit 2ccfc90)
 
 ## Documenti di riferimento
@@ -17,27 +17,11 @@
 
 ---
 
-## ⚠ PREREQUISITO ZERO — Baseline diagnostica runtime (APERTO)
+## ✅ PREREQUISITO ZERO — Baseline diagnostica runtime (SODDISFATTO)
 
-La baseline runtime `docs/reports/baseline-verify-workspace.json` non è ancora stata
-generata con il motore reale. Fase 0 è stata completata in modalità degradata (confronto
-statico). **Generare prima di chiudere Fase 1** (Step 1.7):
-
-1. Avvia il motore in locale:
-
-   ```powershell
-   cd <cartella-repo>
-   .venv\Scripts\python.exe spark-framework-engine.py
-   ```
-
-2. Da un client MCP (o `mcp dev`), chiama `scf_verify_workspace` senza argomenti.
-3. Salva l'output JSON completo in `docs/reports/baseline-verify-workspace.json`.
-4. Committa:
-
-   ```powershell
-   git add docs/reports/baseline-verify-workspace.json
-   git commit -m "docs(baseline): cattura output scf_verify_workspace post-Fase1"
-   ```
+Baseline generata: `docs/reports/baseline-verify-workspace.json` (13013 bytes).
+Output reale di `scf_verify_workspace` con motore live post-Step 1.1 (2026-05-01).
+Riferimento fisso per invariante diagnostico Fase 2+.
 
 ---
 
@@ -75,13 +59,13 @@ statico). **Generare prima di chiudere Fase 1** (Step 1.7):
 
 | Step | Operazione | Rischio | Stato | Note |
 |------|-----------|---------|-------|------|
-| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [ ] | | 
+| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [x] | rinomina completata, import aggiornati | 
 | 1.2 | Hardening `engine_root` obbligatorio in `WorkspaceLocator` e `EngineInventory` | BASSO | [x] | commit fd4b552 |
 | 1.3 | Censimento marker `# FASE1-RIASSEGNA` | MEDIO | [x] | 0 marker trovati nel codice Python |
 | 1.4 | Analisi e fix 27 failure pre-esistenti (gruppi: bootstrap, lifecycle, locator) | ALTO | [x] | commit 95d0299, 2ccfc90 |
 | 1.5 | Fix log count hardcoded 40/44 in `spark/boot/sequence.py` | BASSO | [x] | incluso fix Step 1.4 |
 | 1.6 | Rimozione `pytest_out.txt` + aggiornamento `.gitignore` | BASSO | [x] | commit f1ed7b6 |
-| 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | [ ] | dopo fix failure |
+| 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | [x] | baseline generata, 13013 bytes |
 | 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | [x] | audit documentale 2026-05-01 |
 
 **Invariante globale Fase 1:** la suite test non deve scendere sotto 0 failed / 282

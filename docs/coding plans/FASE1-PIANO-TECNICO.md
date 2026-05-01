@@ -46,11 +46,10 @@ Nessuna nuova feature.
 
 ## 4. Operazioni completate
 
-### Step 1.1 — Rinomina `policy.py` → `update_policy.py` (APERTO)
+### Step 1.1 — Rinomina `policy.py` → `update_policy.py` (COMPLETATO)
 
-Pianificato. `spark/workspace/policy.py` contiene le 7 funzioni di policy.
-Il piano originale (fase0-step-05) prevedeva il nome `update_policy.py`.
-Rinomina + aggiornamento import posticipata a fine Fase 1 (non bloccante per Fase 2).
+Rinomina completata il 2026-05-01. Import aggiornato in `spark/workspace/__init__.py`.
+`policy.py` eliminato. Suite test invariante: 0 failed / 282 passed / 8 skipped.
 
 ### Step 1.2 — Hardening `engine_root` obbligatorio (COMPLETATO)
 
@@ -105,11 +104,12 @@ Incluso nel Gruppo C sopra. `spark/boot/sequence.py`: log `"Tools registered: 44
 
 commit: `f1ed7b6`
 
-### Step 1.7 — Generazione baseline runtime (APERTO)
+### Step 1.7 — Generazione baseline runtime (COMPLETATO)
 
-Vedere sezione **PREREQUISITO ZERO** in `docs/todo.md`.
-Richiede avvio del motore in ambiente MCP live + chiamata `scf_verify_workspace`.
-Non bloccante per Fase 2.
+Baseline generata il 2026-05-01 tramite chiamata stdio JSON-RPC al motore live.
+File: `docs/reports/baseline-verify-workspace.json` (13013 bytes).
+Chiavi: `missing`, `modified`, `ok`, `duplicate_owners`, `orphan_candidates`,
+`user_files`, `untagged_spark_files`, `summary`.
 
 ### Step 1.8 — Aggiornamento `docs/REFACTORING-DESIGN.md` grafo (COMPLETATO)
 
@@ -127,15 +127,16 @@ Riepilogo file con nome diverso dal piano originale:
 | `manifest/manager.py` | `manifest/manifest.py` | fase0-step-03 |
 | `registry/mcp_registry.py` | `registry/mcp.py` | fase0-step-04 |
 | `workspace/inventory.py` | `spark/inventory/` (nuovo package) | fase0-step-05 |
-| `workspace/update_policy.py` | `workspace/policy.py` | fase0-step-05, Step 1.1 |
+| `workspace/update_policy.py` | ✅ `workspace/update_policy.py` | fase0-step-05, Step 1.1 (allineato) |
 | `packages/migration.py` | `workspace/migration.py` | fase0-step-06 |
 | `assets/renderers.py` | 4 file: collectors, phase6, rendering, templates | fase0-step-07 |
 | `boot/sequence.py` (SparkFrameworkEngine) | `boot/engine.py` | fase0-step-08 |
 
 ## 6. Rischi specifici post-Fase 1
 
-- **Step 1.1 (rinomina policy.py):** basso rischio. File da aggiornare:
-  `spark/workspace/__init__.py`, `spark/boot/engine.py` (import locali).
+Tutti i rischi elencati di seguito sono stati risolti. Fase 1 chiusa il 2026-05-01.
+
+- **Step 1.1 (rinomina policy.py):** RISOLTO. `update_policy.py` creato, import aggiornato.
 - **Step 1.7 (baseline runtime):** richiede ambiente MCP live. Non bloccante
   se posticipato — Fase 2 può procedere senza.
 - **`_install_package_v3_into_store` metodo istanza residuo:** il vecchio metodo

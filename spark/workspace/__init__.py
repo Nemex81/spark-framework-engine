@@ -14,7 +14,7 @@ from spark.workspace.migration import (
     _classify_v2_workspace_file,
 )
 from spark.workspace.locator import WorkspaceLocator
-from spark.workspace.policy import (
+from spark.workspace.update_policy import (
     _default_update_policy,
     _default_update_policy_payload,
     _normalize_update_mode,
