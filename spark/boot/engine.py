@@ -105,6 +105,7 @@ from spark.merge.validators import (
 from spark.manifest import (
     ManifestManager,
     SnapshotManager,
+    WorkspaceWriteGateway,
     _normalize_remote_file_record,
     _scf_backup_workspace,
     _scf_diff_workspace,
@@ -370,11 +371,14 @@ class SparkFrameworkEngine:
         # Rigeneriamo gli asset Phase 6 (AGENTS.md, AGENTS-{pkg}.md, ecc.).
         try:
             installed_ids = list(manifest.get_installed_versions().keys())
+            _phase6_gateway = WorkspaceWriteGateway(self._ctx.workspace_root, manifest)
             phase6_report = _apply_phase6_assets(
                 self._ctx.workspace_root,
                 self._ctx.engine_root,
                 installed_ids,
                 github_write_authorized=True,
+                gateway=_phase6_gateway,
+                engine_version=ENGINE_VERSION,
             )
         except OSError as exc:
             _log.warning(
@@ -441,11 +445,14 @@ class SparkFrameworkEngine:
         # Phase 6 regen senza il pacchetto.
         installed_ids = list(manifest.get_installed_versions().keys())
         try:
+            _phase6_gateway = WorkspaceWriteGateway(self._ctx.workspace_root, manifest)
             phase6_report = _apply_phase6_assets(
                 self._ctx.workspace_root,
                 self._ctx.engine_root,
                 installed_ids,
                 github_write_authorized=self._is_github_write_authorized_v3(),
+                gateway=_phase6_gateway,
+                engine_version=ENGINE_VERSION,
             )
         except OSError as exc:
             _log.warning(
@@ -4015,11 +4022,14 @@ class SparkFrameworkEngine:
                     write_authorized = False
                 installed_for_phase6 = list(manifest.get_installed_versions().keys())
                 try:
+                    _phase6_gateway = WorkspaceWriteGateway(self._ctx.workspace_root, manifest)
                     phase6_report = _apply_phase6_assets(
                         self._ctx.workspace_root,
                         self._ctx.engine_root,
                         installed_for_phase6,
                         github_write_authorized=write_authorized,
+                        gateway=_phase6_gateway,
+                        engine_version=ENGINE_VERSION,
                     )
                     result["phase6_assets"] = phase6_report
                 except OSError as exc:
