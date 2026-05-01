@@ -175,6 +175,65 @@ except ImportError as _import_exc:
 
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
 
+
+def _gateway_write_text(
+    workspace_root: Path,
+    github_rel: str,
+    content: str,
+    manifest_manager: ManifestManager,
+    owner: str,
+    version: str,
+    merge_strategy: str | None = None,
+) -> Path:
+    """Route text writes under ``.github/`` through ``WorkspaceWriteGateway``.
+
+    Centralizza la scrittura ``write_text`` su ``<workspace>/.github/{github_rel}``
+    e l'aggiornamento del manifest entry corrispondente (INVARIANTE-4).
+
+    Args:
+        workspace_root: root assoluto del workspace utente.
+        github_rel: path relativo a ``.github/`` (senza prefisso).
+        content: testo UTF-8 da scrivere.
+        manifest_manager: manager del manifest da aggiornare.
+        owner: package id proprietario del file.
+        version: versione del pacchetto proprietario.
+        merge_strategy: strategia di merge opzionale (passata al manifest entry).
+
+    Returns:
+        Path assoluto del file scritto.
+    """
+    gateway = WorkspaceWriteGateway(workspace_root, manifest_manager)
+    return gateway.write(github_rel, content, owner, version, merge_strategy)
+
+
+def _gateway_write_bytes(
+    workspace_root: Path,
+    github_rel: str,
+    content: bytes,
+    manifest_manager: ManifestManager,
+    owner: str,
+    version: str,
+) -> Path:
+    """Route binary writes under ``.github/`` through ``WorkspaceWriteGateway``.
+
+    Variante binaria di :func:`_gateway_write_text`. Usata per file non testuali
+    (es. asset copiati durante install).
+
+    Args:
+        workspace_root: root assoluto del workspace utente.
+        github_rel: path relativo a ``.github/`` (senza prefisso).
+        content: bytes da scrivere.
+        manifest_manager: manager del manifest da aggiornare.
+        owner: package id proprietario del file.
+        version: versione del pacchetto proprietario.
+
+    Returns:
+        Path assoluto del file scritto.
+    """
+    gateway = WorkspaceWriteGateway(workspace_root, manifest_manager)
+    return gateway.write_bytes(github_rel, content, owner, version)
+
+
 class SparkFrameworkEngine:
 
     def __init__(
@@ -2591,7 +2650,15 @@ class SparkFrameworkEngine:
                             pkg_version,
                         )
                         dest.parent.mkdir(parents=True, exist_ok=True)
-                        dest.write_text(next_text, encoding="utf-8")
+                        _gateway_write_text(
+                            self._ctx.workspace_root,
+                            rel,
+                            next_text,
+                            manifest,
+                            package_id,
+                            pkg_version,
+                            remote_strategy,
+                        )
                         written_paths.append((file_path, rel, dest))
                         manifest_targets.append((rel, dest))
                         installed.append(file_path)
@@ -2614,7 +2681,15 @@ class SparkFrameworkEngine:
                             pkg_version,
                         )
                         dest.parent.mkdir(parents=True, exist_ok=True)
-                        dest.write_text(next_text, encoding="utf-8")
+                        _gateway_write_text(
+                            self._ctx.workspace_root,
+                            rel,
+                            next_text,
+                            manifest,
+                            package_id,
+                            pkg_version,
+                            remote_strategy,
+                        )
                         written_paths.append((file_path, rel, dest))
                         manifest_targets.append((rel, dest))
                         installed.append(file_path)
@@ -2638,7 +2713,15 @@ class SparkFrameworkEngine:
                             merged_text = merge_result.merged_text
                             if merged_text != ours_text:
                                 dest.parent.mkdir(parents=True, exist_ok=True)
-                                dest.write_text(merged_text, encoding="utf-8")
+                                _gateway_write_text(
+                                    self._ctx.workspace_root,
+                                    rel,
+                                    merged_text,
+                                    manifest,
+                                    package_id,
+                                    pkg_version,
+                                    remote_strategy,
+                                )
                                 written_paths.append((file_path, rel, dest))
                             merge_clean.append(
                                 {
@@ -2656,7 +2739,15 @@ class SparkFrameworkEngine:
                         merged_text = merge_engine.render_with_markers(merge_result)
                         if effective_conflict_mode in {"manual", "assisted"}:
                             dest.parent.mkdir(parents=True, exist_ok=True)
-                            dest.write_text(merged_text, encoding="utf-8")
+                            _gateway_write_text(
+                                self._ctx.workspace_root,
+                                rel,
+                                merged_text,
+                                manifest,
+                                package_id,
+                                pkg_version,
+                                remote_strategy,
+                            )
                             written_paths.append((file_path, rel, dest))
                         merge_conflict.append(
                             {
@@ -2678,7 +2769,15 @@ class SparkFrameworkEngine:
                         continue
 
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    dest.write_text(content, encoding="utf-8")
+                    _gateway_write_text(
+                        self._ctx.workspace_root,
+                        rel,
+                        content,
+                        manifest,
+                        package_id,
+                        pkg_version,
+                        remote_strategy,
+                    )
                     written_paths.append((file_path, rel, dest))
                     manifest_targets.append((rel, dest))
                     installed.append(file_path)
@@ -2719,7 +2818,14 @@ class SparkFrameworkEngine:
                             if resolution.get("success") is True:
                                 proposed_text = str(current_entry.get("proposed_text", "") or "")
                                 dest.parent.mkdir(parents=True, exist_ok=True)
-                                dest.write_text(proposed_text, encoding="utf-8")
+                                _gateway_write_text(
+                                    self._ctx.workspace_root,
+                                    manifest_rel,
+                                    proposed_text,
+                                    manifest,
+                                    package_id,
+                                    pkg_version,
+                                )
                                 written_paths.append((public_file, manifest_rel, dest))
                                 current_entry["resolution_status"] = "approved"
                                 _replace_session_entry(session_payload, current_index, current_entry)
@@ -2733,7 +2839,14 @@ class SparkFrameworkEngine:
 
                             marker_text = _render_marker_text(current_entry)
                             dest.parent.mkdir(parents=True, exist_ok=True)
-                            dest.write_text(marker_text, encoding="utf-8")
+                            _gateway_write_text(
+                                self._ctx.workspace_root,
+                                manifest_rel,
+                                marker_text,
+                                manifest,
+                                package_id,
+                                pkg_version,
+                            )
                             written_paths.append((public_file, manifest_rel, dest))
                             current_entry["resolution_status"] = "manual"
                             _replace_session_entry(session_payload, current_index, current_entry)
@@ -3727,6 +3840,7 @@ class SparkFrameworkEngine:
             try:
                 for src, dst in bootstrap_targets:
                     rel_path = dst.relative_to(self._ctx.workspace_root).as_posix()
+                    github_rel = dst.relative_to(workspace_github_root).as_posix()
                     if dst.is_file():
                         if manifest._sha256(dst) == manifest._sha256(src):
                             identical_paths.append(dst)
@@ -3735,7 +3849,24 @@ class SparkFrameworkEngine:
                             preserved.append(rel_path)
                         continue
                     dst.parent.mkdir(parents=True, exist_ok=True)
-                    dst.write_bytes(src.read_bytes())
+                    # Preserve cross-owner ownership: if another package already
+                    # owns this manifest entry, write the file but skip the
+                    # gateway manifest upsert (route through direct write).
+                    cross_owner = any(
+                        owner != _BOOTSTRAP_PACKAGE_ID
+                        for owner in manifest.get_file_owners(github_rel)
+                    )
+                    if cross_owner:
+                        dst.write_bytes(src.read_bytes())
+                    else:
+                        _gateway_write_bytes(
+                            self._ctx.workspace_root,
+                            github_rel,
+                            src.read_bytes(),
+                            manifest,
+                            _BOOTSTRAP_PACKAGE_ID,
+                            ENGINE_VERSION,
+                        )
                     written_paths.append(dst)
                     files_written.append(rel_path)
             except OSError as exc:
@@ -4143,6 +4274,7 @@ class SparkFrameworkEngine:
             try:
                 for source_path, dest_path in bootstrap_targets:
                     rel_path = dest_path.relative_to(self._ctx.workspace_root).as_posix()
+                    github_rel = dest_path.relative_to(workspace_github_root).as_posix()
                     if dest_path.is_file():
                         if manifest._sha256(dest_path) == manifest._sha256(source_path):
                             _log.info("Bootstrap file already matches source: %s", rel_path)
@@ -4153,12 +4285,28 @@ class SparkFrameworkEngine:
                         continue
 
                     dest_path.parent.mkdir(parents=True, exist_ok=True)
-                    dest_path.write_bytes(source_path.read_bytes())
+                    # Preserve cross-owner ownership: skip gateway upsert if
+                    # another package already owns this manifest entry.
+                    cross_owner = any(
+                        owner != _BOOTSTRAP_PACKAGE_ID
+                        for owner in manifest.get_file_owners(github_rel)
+                    )
+                    if cross_owner:
+                        dest_path.write_bytes(source_path.read_bytes())
+                    else:
+                        _gateway_write_bytes(
+                            self._ctx.workspace_root,
+                            github_rel,
+                            source_path.read_bytes(),
+                            manifest,
+                            _BOOTSTRAP_PACKAGE_ID,
+                            ENGINE_VERSION,
+                        )
                     written_paths.append(dest_path)
                     files_written.append(rel_path)
                     _log.info(
                         "[SPARK-ENGINE][INFO] Bootstrapped: %s",
-                        dest_path.relative_to(workspace_github_root).as_posix(),
+                        github_rel,
                     )
             except OSError as exc:
                 rollback_errors: list[str] = []
@@ -4372,9 +4520,19 @@ class SparkFrameworkEngine:
                 }
 
             workspace_path = str(file_entry.get("workspace_path", "")).strip()
+            manifest_rel = str(file_entry.get("manifest_rel", "")).strip() or workspace_path.removeprefix(".github/")
+            owner_pkg = str(session.get("package", "")).strip()
+            owner_version = str(session.get("package_version", "")).strip()
             dest = self._ctx.workspace_root / workspace_path
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(proposed_text, encoding="utf-8")
+            _gateway_write_text(
+                self._ctx.workspace_root,
+                manifest_rel,
+                proposed_text,
+                manifest,
+                owner_pkg,
+                owner_version,
+            )
 
             file_entry["validator_results"] = validator_results
             file_entry["resolution_status"] = "approved"
@@ -4423,9 +4581,19 @@ class SparkFrameworkEngine:
             index, file_entry = found
             marker_text = _render_marker_text(file_entry)
             workspace_path = str(file_entry.get("workspace_path", "")).strip()
+            manifest_rel = str(file_entry.get("manifest_rel", "")).strip() or workspace_path.removeprefix(".github/")
+            owner_pkg = str(session.get("package", "")).strip()
+            owner_version = str(session.get("package_version", "")).strip()
             dest = self._ctx.workspace_root / workspace_path
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(marker_text, encoding="utf-8")
+            _gateway_write_text(
+                self._ctx.workspace_root,
+                manifest_rel,
+                marker_text,
+                manifest,
+                owner_pkg,
+                owner_version,
+            )
 
             file_entry["resolution_status"] = "rejected"
             _replace_session_entry(session, index, file_entry)

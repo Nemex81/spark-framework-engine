@@ -146,7 +146,7 @@ spark-framework-engine/
     │   └── templates.py
     │
     └── boot/
-        ├── engine.py           ← SparkFrameworkEngine (piano: in sequence.py)
+        ├── engine.py           ← SparkFrameworkEngine + helper `_gateway_write_text`/`_gateway_write_bytes` (Fase 4-BIS)
         ├── sequence.py         ← _build_app
         └── validation.py       ← creato in Fase 2 (boot deterministico)
 ```
@@ -267,6 +267,20 @@ Copilot, nella produzione del piano tecnico implementativo, fisserà il tool spe
 **Deviazione documentata — INVARIANTE-4 (gateway bypass):** `spark/boot/engine.py` contiene ancora scritture dirette su `workspace/.github/**` nelle funzioni `scf_install_package`, `scf_update_package`, `scf_approve_conflict`, `scf_reject_conflict` e `scf_bootstrap_workspace`. Il refactoring completo richiede una Fase 4-BIS dedicata. Classificato BLOCCANTE-FUTURO.
 
 **Criterio di completamento:** suite test verde (≥ 296 passed), entry point ≤ 180 righe, design doc allineato alla struttura reale, `[Unreleased]` CHANGELOG aggiornato, report di chiusura creato.
+
+---
+
+### Fase 4-BIS — Risoluzione INVARIANTE-4 (gateway forward writes)
+
+**Obiettivo:** chiudere la deviazione INVARIANTE-4 ereditata dalla Fase 5 instradando tutte le scritture di forward (install/update/approve/reject/bootstrap) sotto `workspace/.github/**` attraverso `WorkspaceWriteGateway`.
+
+**Descrizione:** in `spark/boot/engine.py` vengono introdotti due helper modulo-level (`_gateway_write_text`, `_gateway_write_bytes`) che incapsulano la creazione del gateway e la scrittura tracciata. Le 11 callsites identificate nei tool `scf_install_package` (8), `scf_approve_conflict` (1), `scf_reject_conflict` (1) e `scf_bootstrap_workspace` (2) vengono ridirezionate sugli helper. Il `manifest.upsert_many` finale dei flussi install/bootstrap viene mantenuto: l'aggiornamento per-write del gateway e l'upsert batch finale convivono in modo idempotente.
+
+**Deviazione mantenuta — rollback restore:** la singola riga `dest.write_text(previous_content, encoding="utf-8")` nel cammino di rollback in `scf_install_package` resta diretta. È un percorso di emergenza dopo `OSError`; la coerenza manifest in caso di rollback è un problema preesistente non in scope di Fase 4-BIS.
+
+**Cross-owner protection in bootstrap:** prima di scrivere via gateway in `scf_bootstrap_workspace`, viene verificato se il file è già di proprietà di un altro pacchetto nel manifest. In tal caso il file viene scritto direttamente (`dst.write_bytes`) senza upsert, preservando l'ownership cross-package come nel comportamento pre-Fase 4-BIS.
+
+**Criterio di completamento:** suite test verde (296 passed / 8 skipped / 0 failed), nessuna regressione su test di install/update/bootstrap/conflict, deviazione INVARIANTE-4 chiusa per tutti i forward write tracciati nel manifest.
 
 ---
 

@@ -16,6 +16,11 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `tests/test_workspace_gateway.py` — suite test gateway (TestGatewayWrite,
   TestGatewayWriteBytes, TestGatewayDelete, TestGatewayIdempotency,
   TestPhase6GatewayIntegration).
+- `spark/boot/engine.py` — helper modulo-level `_gateway_write_text` e
+  `_gateway_write_bytes` (Fase 4-BIS). Incapsulano l'istanziazione del
+  gateway e la scrittura tracciata; usati dai forward write di
+  `scf_install_package`, `scf_approve_conflict`, `scf_reject_conflict` e
+  `scf_bootstrap_workspace`.
 
 ### Changed
 
@@ -34,8 +39,19 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `docs/REFACTORING-DESIGN.md` — Sezione 4 aggiornata: `workspace/policy.py`
   → `update_policy.py`, aggiunto `manifest/gateway.py`, rimosso `[validation.py]`
   come "da creare". Sezione 7: aggiunta Fase 5 con deviazione INVARIANTE-4 documentata.
+  Aggiunta Sezione Fase 4-BIS che documenta la chiusura della deviazione
+  INVARIANTE-4 per i forward write tracciati nel manifest.
 - `docs/todo.md` — sessione aggiornata a Fase 5 ATTIVA, baseline test a 296,
   Fase 4 segnata COMPLETATA, riferimento al piano FASE5-PIANO-TECNICO.md aggiunto.
+- `spark/boot/engine.py` — Fase 4-BIS: 11 callsites di scrittura su
+  `workspace/.github/**` instradate attraverso `WorkspaceWriteGateway`
+  via i nuovi helper `_gateway_write_text`/`_gateway_write_bytes`.
+  Coperti `scf_install_package` (8 punti: merge_sections, extend_section,
+  diff3 clean, diff3 conflict, replace, auto-approve, auto-marker),
+  `scf_approve_conflict`, `scf_reject_conflict` e `scf_bootstrap_workspace`
+  (2 path: bootstrap legacy + bootstrap nuovo). La cross-owner protection
+  in bootstrap viene preservata: file già di proprietà di altro pacchetto
+  vengono scritti direttamente senza upsert manifest.
 
 ### Fixed
 
