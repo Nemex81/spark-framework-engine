@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 from spark.manifest.diff import _normalize_remote_file_record, _scf_diff_workspace
+from spark.manifest.gateway import WorkspaceWriteGateway
 from spark.manifest.manifest import ManifestManager
 from spark.manifest.snapshots import SnapshotManager, _scf_backup_workspace
 
 __all__ = [
     "ManifestManager",
     "SnapshotManager",
+    "WorkspaceWriteGateway",
     "_normalize_remote_file_record",
     "_scf_backup_workspace",
     "_scf_diff_workspace",
