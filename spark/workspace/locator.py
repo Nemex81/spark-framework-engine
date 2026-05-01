@@ -34,17 +34,16 @@ class WorkspaceLocator:
         "instructions",
     )
 
-    def __init__(self, engine_root: Path | None = None) -> None:
+    def __init__(self, engine_root: Path) -> None:
         """Store the engine root so that ``resolve()`` is file-location-agnostic.
 
         Args:
             engine_root: Absolute path to the directory containing
                 ``spark-framework-engine.py`` (the engine root).
-                Callers should pass ``Path(__file__).resolve().parent``.
-                When ``None`` (e.g. in unit tests), falls back to
-                ``Path.cwd()`` at resolve time.
+                Pass ``Path(__file__).resolve().parent`` from the hub;
+                in tests pass the relevant ``tmp_path`` fixture.
         """
-        self._engine_root: Path | None = engine_root
+        self._engine_root: Path = engine_root
 
     @staticmethod
     def get_engine_cache_dir(engine_dir: Path) -> Path:
@@ -207,8 +206,7 @@ class WorkspaceLocator:
         github_root = workspace_root / ".github" if workspace_root else None
         # engine_root è sempre la directory del file engine, indipendente dal workspace.
         # Valore passato esplicitamente dal chiamante (nessun Path(__file__) qui).
-        # Fallback a Path.cwd() per contesti di test dove engine_root non è rilevante.
-        engine_root: Path = self._engine_root if self._engine_root is not None else Path.cwd()
+        engine_root: Path = self._engine_root
 
         # Guardia esplicita: github_root e' None se workspace_root non e' stato risolto.
         if github_root is None:

@@ -40,10 +40,8 @@ class EngineInventory(FrameworkInventory):
 
     ENGINE_MANIFEST_FILENAME: ClassVar[str] = "engine-manifest.json"
 
-    def __init__(self, engine_root: Path | None = None) -> None:  # noqa: D401 - simple override
-        # When engine_root is None (e.g. unit tests), fall back to cwd so that
-        # the real engine root is resolved when tests run from the repo root.
-        resolved_root: Path = engine_root if engine_root is not None else Path.cwd()
+    def __init__(self, engine_root: Path) -> None:  # noqa: D401 - simple override
+        resolved_root: Path = engine_root
         engine_github_root = resolved_root / ".github"
         synthetic_ctx = WorkspaceContext(
             workspace_root=resolved_root,

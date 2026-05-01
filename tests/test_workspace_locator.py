@@ -28,7 +28,7 @@ def test_workspace_locator_uses_workspace_folder_for_existing_directory(
     monkeypatch.setenv("WORKSPACE_FOLDER", str(project_root))
     monkeypatch.chdir(tmp_path)
 
-    ctx = _MODULE.WorkspaceLocator().resolve()
+    ctx = _MODULE.WorkspaceLocator(engine_root=tmp_path).resolve()
 
     assert ctx.workspace_root == project_root
     assert ctx.github_root == project_root / ".github"
@@ -45,7 +45,7 @@ def test_workspace_locator_discovers_workspace_from_local_vscode_settings(
     monkeypatch.delenv("WORKSPACE_FOLDER", raising=False)
     monkeypatch.chdir(nested)
 
-    ctx = _MODULE.WorkspaceLocator().resolve()
+    ctx = _MODULE.WorkspaceLocator(engine_root=tmp_path).resolve()
 
     assert ctx.workspace_root == project_root
 
@@ -64,7 +64,7 @@ def test_workspace_locator_discovers_workspace_from_scf_github_markers(
     monkeypatch.delenv("WORKSPACE_FOLDER", raising=False)
     monkeypatch.chdir(nested)
 
-    ctx = _MODULE.WorkspaceLocator().resolve()
+    ctx = _MODULE.WorkspaceLocator(engine_root=tmp_path).resolve()
 
     assert ctx.workspace_root == project_root
 
@@ -83,7 +83,7 @@ def test_workspace_locator_ignores_home_env_without_workspace_markers(
     monkeypatch.setenv("WORKSPACE_FOLDER", str(fake_home))
     monkeypatch.chdir(project_root)
 
-    ctx = _MODULE.WorkspaceLocator().resolve()
+    ctx = _MODULE.WorkspaceLocator(engine_root=tmp_path).resolve()
 
     assert ctx.workspace_root == project_root
 
@@ -97,7 +97,7 @@ def test_workspace_locator_falls_back_to_cwd_when_no_markers_exist(
     monkeypatch.chdir(project_root)
 
     with caplog.at_level("WARNING"):
-        ctx = _MODULE.WorkspaceLocator().resolve()
+        ctx = _MODULE.WorkspaceLocator(engine_root=tmp_path).resolve()
 
     assert ctx.workspace_root == project_root
     assert "Falling back to cwd" in caplog.text

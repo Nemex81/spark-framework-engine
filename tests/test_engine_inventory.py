@@ -27,13 +27,13 @@ class TestEngineInventoryManifest(unittest.TestCase):
 
     def test_loads_real_engine_manifest(self) -> None:
         """The repository ships engine-manifest.json; loader must populate it."""
-        inv = EngineInventory()
+        inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
         self.assertIsInstance(inv.engine_manifest, dict)
         self.assertEqual(inv.engine_manifest.get("schema_version"), "3.0")
         self.assertEqual(inv.engine_manifest.get("package"), "spark-framework-engine")
 
     def test_workspace_files_helper(self) -> None:
-        inv = EngineInventory()
+        inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
         ws_files = inv.get_engine_workspace_files()
         self.assertIsInstance(ws_files, list)
         # Almeno le 6 instruction engine dichiarate dal design §3.5
@@ -49,7 +49,7 @@ class TestEngineInventoryManifest(unittest.TestCase):
             self.assertIn(expected, joined)
 
     def test_mcp_resources_helper(self) -> None:
-        inv = EngineInventory()
+        inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
         resources = inv.get_engine_mcp_resources()
         self.assertEqual(
             set(resources.keys()), {"agents", "instructions", "prompts", "skills"}
@@ -62,7 +62,7 @@ class TestEngineInventoryManifest(unittest.TestCase):
         """When engine-manifest.json is missing, loader logs warning and returns empty."""
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            inv = EngineInventory()
+            inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
             empty = inv._load_engine_manifest(tmp_path)
             self.assertEqual(empty, {})
 
@@ -72,7 +72,7 @@ class TestEngineInventoryManifest(unittest.TestCase):
             (tmp_path / "engine-manifest.json").write_text(
                 "not-valid-json", encoding="utf-8"
             )
-            inv = EngineInventory()
+            inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
             self.assertEqual(inv._load_engine_manifest(tmp_path), {})
 
     def test_non_object_root_returns_empty(self) -> None:
@@ -81,12 +81,12 @@ class TestEngineInventoryManifest(unittest.TestCase):
             (tmp_path / "engine-manifest.json").write_text(
                 "[1, 2, 3]", encoding="utf-8"
             )
-            inv = EngineInventory()
+            inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
             self.assertEqual(inv._load_engine_manifest(tmp_path), {})
 
     def test_helpers_robust_to_malformed_manifest(self) -> None:
         """Helpers must not crash on partially malformed manifest."""
-        inv = EngineInventory()
+        inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
         inv.engine_manifest = {"workspace_files": "not-a-list"}
         self.assertEqual(inv.get_engine_workspace_files(), [])
 

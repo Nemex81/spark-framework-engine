@@ -114,7 +114,7 @@ class TestFrameworkInventoryRegistryPopulation(unittest.TestCase):
         EngineInventory = _module.EngineInventory
         WorkspaceContext = _module.WorkspaceContext
 
-        engine_inv = EngineInventory()
+        engine_inv = EngineInventory(engine_root=_ENGINE_PATH.parent)
         # Use engine root as workspace per il test (ha .github/agents)
         engine_root = Path(_module.__file__).parent
         ctx = WorkspaceContext(
