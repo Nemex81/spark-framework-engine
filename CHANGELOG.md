@@ -72,6 +72,10 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   precedenza esplicita per `--workspace`, `ENGINE_WORKSPACE` e
   `WORKSPACE_FOLDER`, così il bootstrap del primo avvio può puntare al
   workspace utente anche quando il server è lanciato da una directory diversa.
+- `spark/workspace/locator.py` — `_discover_from_cwd()` ignora esplicitamente
+  `engine_root` come candidato workspace e `resolve()` emette un warning di
+  degrado quando il processo viene avviato dalla directory engine senza un
+  workspace utente esplicito.
 - `spark/boot/sequence.py` — `_build_app()` ora invoca un hook di
   auto-bootstrap minimo dopo `register_tools()`, materializzando il Layer 0
   nel workspace utente quando mancano i file essenziali (`spark-assistant`,

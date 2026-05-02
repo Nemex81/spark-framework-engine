@@ -118,3 +118,22 @@ def test_workspace_locator_falls_back_to_cwd_when_no_markers_exist(
 
     assert ctx.workspace_root == project_root
     assert "Falling back to cwd" in caplog.text
+
+
+def test_workspace_locator_skips_engine_root_during_cwd_discovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    engine_root = tmp_path / "engine"
+    engine_root.mkdir()
+    (engine_root / ".github" / "agents").mkdir(parents=True)
+    monkeypatch.delenv("WORKSPACE_FOLDER", raising=False)
+    monkeypatch.delenv("ENGINE_WORKSPACE", raising=False)
+    monkeypatch.setattr(sys, "argv", ["spark-framework-engine.py"])
+    monkeypatch.chdir(engine_root)
+
+    with caplog.at_level("WARNING"):
+        ctx = _MODULE.WorkspaceLocator(engine_root=engine_root).resolve()
+
+    assert ctx.workspace_root == engine_root
+    assert "Current working directory matches engine_root" in caplog.text
+    assert "Falling back to cwd" in caplog.text

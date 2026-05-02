@@ -159,6 +159,10 @@ class WorkspaceLocator:
             if self._is_user_home(candidate):
                 continue
 
+            # Salta engine_root: non è mai un workspace utente valido.
+            if candidate.resolve() == self._engine_root.resolve():
+                continue
+
             if self._has_local_workspace_config(candidate):
                 _log.info("Workspace resolved via local workspace config: %s", candidate)
                 return candidate
@@ -209,6 +213,11 @@ class WorkspaceLocator:
             workspace_root = self._discover_from_cwd(cwd)
             if workspace_root is None:
                 workspace_root = cwd
+                if cwd == self._engine_root.resolve():
+                    _log.warning(
+                        "Current working directory matches engine_root; configure "
+                        "WORKSPACE_FOLDER or pass --workspace to target a user workspace."
+                    )
                 _log.warning("No workspace root available from MCP Roots, ENGINE_WORKSPACE or WORKSPACE_FOLDER.")
                 _log.warning("Falling back to cwd: %s", workspace_root)
 
