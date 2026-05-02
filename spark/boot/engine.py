@@ -14,6 +14,7 @@ Surgical changes vs. original hub (all logically equivalent at runtime):
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -247,6 +248,7 @@ class SparkFrameworkEngine:
         self._mcp = mcp
         self._ctx = context
         self._inventory = inventory
+        self._bootstrap_workspace_tool: Callable[..., Any] | None = None
         # Fase 3: directory di runtime isolata per workspace (engine-local).
         # Fallback: calcola in-process se non passata dal sequence builder.
         if runtime_dir is not None:
@@ -256,6 +258,42 @@ class SparkFrameworkEngine:
             self._runtime_dir = resolve_runtime_dir(context.engine_root, context.workspace_root)
         # v3.0: traccia URI alias deprecati gia' loggati per evitare spam.
         self._logged_alias_uris: set[str] = set()
+
+    def _minimal_bootstrap_required_paths(self) -> tuple[Path, ...]:
+        """Return the minimal workspace files required for SPARK agent discovery."""
+        github_root = self._ctx.github_root
+        return (
+            github_root / "agents" / "spark-assistant.agent.md",
+            github_root / "agents" / "spark-guide.agent.md",
+            github_root / "AGENTS.md",
+            github_root / "copilot-instructions.md",
+            github_root / "project-profile.md",
+        )
+
+    def ensure_minimal_bootstrap(self) -> dict[str, Any]:
+        """Bootstrap the minimal Layer 0 assets when the workspace is still empty."""
+        if self._ctx.workspace_root == self._ctx.engine_root:
+            _log.info(
+                "Skipping auto-bootstrap because workspace_root matches engine_root: %s",
+                self._ctx.workspace_root,
+            )
+            return {"success": True, "status": "skipped_engine_workspace"}
+
+        if self._bootstrap_workspace_tool is None:
+            return {"success": False, "status": "bootstrap_tool_unavailable"}
+
+        if all(path.is_file() for path in self._minimal_bootstrap_required_paths()):
+            return {"success": True, "status": "already_present"}
+
+        try:
+            return asyncio.run(self._bootstrap_workspace_tool())
+        except RuntimeError as exc:
+            _log.warning("Auto-bootstrap skipped: %s", exc)
+            return {
+                "success": False,
+                "status": "auto_bootstrap_skipped",
+                "error": str(exc),
+            }
 
     # ------------------------------------------------------------------
     # v3 lifecycle methods (install / update / remove store-based)
@@ -3799,10 +3837,14 @@ class SparkFrameworkEngine:
                         "ask, integrative, conservative, ask_later."
                     ),
                 }
-            engine_github_root = self._ctx.engine_root / ".github"
-            prompts_source_dir = engine_github_root / "prompts"
-            agent_source = engine_github_root / "agents" / "spark-assistant.agent.md"
-            guide_source = engine_github_root / "instructions" / "spark-assistant-guide.instructions.md"
+            bootstrap_source_root = self._ctx.engine_root / "packages" / "spark-base" / ".github"
+            if not bootstrap_source_root.is_dir():
+                bootstrap_source_root = self._ctx.engine_root / ".github"
+            prompts_source_dir = bootstrap_source_root / "prompts"
+            instructions_source_dir = bootstrap_source_root / "instructions"
+            agents_source_dir = bootstrap_source_root / "agents"
+            agent_source = agents_source_dir / "spark-assistant.agent.md"
+            guide_agent_source = agents_source_dir / "spark-guide.agent.md"
             workspace_github_root = self._ctx.github_root
             sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
             sentinel_rel = "agents/spark-assistant.agent.md"
@@ -4060,31 +4102,59 @@ class SparkFrameworkEngine:
                     result["note"] = "Bootstrap completed and spark-base installed successfully."
                 return result
 
-            prompt_sources = sorted(prompts_source_dir.glob("scf-*.prompt.md"))
+            prompt_sources = sorted(prompts_source_dir.glob("*.prompt.md"))
+            instruction_sources = sorted(instructions_source_dir.glob("*.instructions.md"))
+            root_sources = [
+                bootstrap_source_root / "AGENTS.md",
+                bootstrap_source_root / "copilot-instructions.md",
+                bootstrap_source_root / "project-profile.md",
+            ]
             bootstrap_targets: list[tuple[Path, Path]] = [
                 (source_path, workspace_github_root / "prompts" / source_path.name)
                 for source_path in prompt_sources
             ]
-            user_guide_source = engine_github_root / "agents" / "spark-guide.agent.md"
-            bootstrap_targets.append((user_guide_source, workspace_github_root / "agents" / "spark-guide.agent.md"))
+            bootstrap_targets.extend(
+                (
+                    source_path,
+                    workspace_github_root / "instructions" / source_path.name,
+                )
+                for source_path in instruction_sources
+            )
             bootstrap_targets.append(
-                (guide_source, workspace_github_root / "instructions" / "spark-assistant-guide.instructions.md")
+                (guide_agent_source, workspace_github_root / "agents" / "spark-guide.agent.md")
+            )
+            bootstrap_targets.extend(
+                (source_path, workspace_github_root / source_path.name)
+                for source_path in root_sources
             )
             bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
+
+            def _bootstrap_target_is_satisfied(source_path: Path, dest_path: Path) -> bool:
+                if not dest_path.is_file():
+                    return False
+                github_rel = dest_path.relative_to(workspace_github_root).as_posix()
+                owners = manifest.get_file_owners(github_rel)
+                if any(owner != _BOOTSTRAP_PACKAGE_ID for owner in owners):
+                    return True
+                return manifest._sha256(dest_path) == manifest._sha256(source_path)
 
             # Sentinel-based idempotency gate.
             if sentinel.is_file():
                 user_mod = manifest.is_user_modified(sentinel_rel)
                 if user_mod is False:
                     # Tracked with matching SHA — workspace already bootstrapped.
-                    return await _finalize_bootstrap_result({
-                        "success": True,
-                        "status": "already_bootstrapped",
-                        "files_written": [],
-                        "preserved": [],
-                        "workspace": str(self._ctx.workspace_root),
-                        "note": "Bootstrap assets already present and verified. Run /scf-list-available to inspect the package catalog.",
-                    })
+                    if all(
+                        _bootstrap_target_is_satisfied(source_path, dest_path)
+                        for source_path, dest_path in bootstrap_targets
+                    ):
+                        return await _finalize_bootstrap_result({
+                            "success": True,
+                            "status": "already_bootstrapped",
+                            "files_written": [],
+                            "preserved": [],
+                            "workspace": str(self._ctx.workspace_root),
+                            "note": "Bootstrap assets already present and verified. Run /scf-list-available to inspect the package catalog.",
+                        })
                 if user_mod is True:
                     # Sentinel tracked but modified by user — do not overwrite.
                     return {
@@ -4212,6 +4282,8 @@ class SparkFrameworkEngine:
                 "workspace": str(self._ctx.workspace_root),
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",
             })
+
+        self._bootstrap_workspace_tool = scf_bootstrap_workspace
 
         @_register_tool("scf_migrate_workspace")
         async def scf_migrate_workspace(

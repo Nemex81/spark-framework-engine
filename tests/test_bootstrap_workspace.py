@@ -71,7 +71,12 @@ class TestBootstrapWorkspace(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
-            expected_written_files = len(list((_ENGINE_PATH.parent / ".github" / "prompts").glob("scf-*.prompt.md"))) + 3
+            source_root = _ENGINE_PATH.parent / "packages" / "spark-base" / ".github"
+            expected_written_files = (
+                len(list((source_root / "prompts").glob("*.prompt.md")))
+                + len(list((source_root / "instructions").glob("*.instructions.md")))
+                + 5
+            )
 
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
 
@@ -80,6 +85,9 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "copilot-instructions.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "project-profile.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "AGENTS.md").is_file())
             self.assertEqual(len(result["files_written"]), expected_written_files)
 
     def test_bootstrap_repairs_missing_guide_when_agent_exists(self) -> None:
@@ -215,6 +223,24 @@ class TestBootstrapWorkspace(unittest.TestCase):
             second = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
             self.assertEqual(second["status"], "bootstrapped")
             self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
+
+    def test_bootstrap_repairs_missing_root_asset_when_sentinel_is_still_tracked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            _, mcp = self._build_engine(workspace_root)
+
+            first = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+            self.assertEqual(first["status"], "bootstrapped")
+
+            copilot_instructions = workspace_root / ".github" / "copilot-instructions.md"
+            copilot_instructions.unlink()
+
+            second = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
+
+            self.assertTrue(second["success"])
+            self.assertEqual(second["status"], "bootstrapped")
+            self.assertIn(".github/copilot-instructions.md", second["files_written"])
+            self.assertTrue(copilot_instructions.is_file())
 
     @unittest.skip("SKIP: install_base extended flow is dead code after early return in scf_bootstrap_workspace")
     def test_bootstrap_install_base_installs_spark_base_when_requested(self) -> None:

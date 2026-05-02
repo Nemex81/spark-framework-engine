@@ -34,6 +34,23 @@ def test_workspace_locator_uses_workspace_folder_for_existing_directory(
     assert ctx.github_root == project_root / ".github"
 
 
+def test_workspace_locator_uses_workspace_flag_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cli_root = tmp_path / "cli-project"
+    env_root = tmp_path / "env-project"
+    cli_root.mkdir()
+    env_root.mkdir()
+    monkeypatch.setenv("WORKSPACE_FOLDER", str(env_root))
+    monkeypatch.setattr(sys, "argv", ["spark-framework-engine.py", "--workspace", str(cli_root)])
+    monkeypatch.chdir(tmp_path)
+
+    ctx = _MODULE.WorkspaceLocator(engine_root=tmp_path).resolve()
+
+    assert ctx.workspace_root == cli_root
+    assert ctx.github_root == cli_root / ".github"
+
+
 def test_workspace_locator_discovers_workspace_from_local_vscode_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

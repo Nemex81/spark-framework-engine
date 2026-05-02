@@ -149,6 +149,11 @@ def _build_app(engine_root: Path) -> FastMCP:
     app = SparkFrameworkEngine(mcp, context, inventory, runtime_dir=runtime_dir)
     app.register_resources()
     app.register_tools()
+    bootstrap_result = app.ensure_minimal_bootstrap()
+    _log.info(
+        "[SPARK-ENGINE][INFO] Auto-bootstrap status: %s",
+        bootstrap_result.get("status", "unknown"),
+    )
     _log.info("Tools registered: 44 total")
 
     return mcp

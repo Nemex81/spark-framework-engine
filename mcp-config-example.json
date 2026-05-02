@@ -3,6 +3,9 @@
     "sparkFrameworkEngine": {
       "type": "stdio",
       "command": "python",
+      "env": {
+        "WORKSPACE_FOLDER": "${workspaceFolder}"
+      },
       "args": [
         "/path/to/spark-framework-engine/spark-framework-engine.py"
       ]

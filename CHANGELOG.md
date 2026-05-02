@@ -25,6 +25,9 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `scf_bootstrap_workspace` (commit `64b436f`): coprono INVARIANTE-4
   cross-owner preserve-senza-write, flusso esteso riattivato e sentinella
   `spark-assistant` come ultimo asset bootstrap. Suite: 296 → 299 passed.
+- `tests/test_boot_sequence.py` — test mirato sul boot sequence che verifica
+  il trigger di auto-bootstrap al primo avvio del server quando il workspace
+  utente è risolto correttamente.
 
 ### Changed
 
@@ -65,6 +68,16 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   (2 path: bootstrap legacy + bootstrap nuovo). La cross-owner protection
   in bootstrap viene preservata: file già di proprietà di altro pacchetto
   vengono scritti direttamente senza upsert manifest.
+- `spark/workspace/locator.py` — `WorkspaceLocator.resolve()` ora applica una
+  precedenza esplicita per `--workspace`, `ENGINE_WORKSPACE` e
+  `WORKSPACE_FOLDER`, così il bootstrap del primo avvio può puntare al
+  workspace utente anche quando il server è lanciato da una directory diversa.
+- `spark/boot/sequence.py` — `_build_app()` ora invoca un hook di
+  auto-bootstrap minimo dopo `register_tools()`, materializzando il Layer 0
+  nel workspace utente quando mancano i file essenziali (`spark-assistant`,
+  `spark-guide`, `AGENTS.md`, `copilot-instructions.md`, `project-profile.md`).
+- `mcp-config-example.json` — aggiunta `WORKSPACE_FOLDER=${workspaceFolder}`
+  al template stdio, per allineare il server MCP alla cartella aperta in VS Code.
 
 ### Fixed
 
@@ -79,6 +92,11 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   l'intero blocco post-sentinella; (3) sentinella
   `agents/spark-assistant.agent.md` spostata come ultimo elemento di
   `bootstrap_targets`, garantendo ordine di scrittura deterministico.
+- `spark/boot/engine.py` — il bootstrap minimo usa ora come sorgente primaria
+  il bundle locale `packages/spark-base/.github`, copia anche le istruzioni di
+  base, tutti i prompt `.prompt.md`, `AGENTS.md`, `copilot-instructions.md` e
+  `project-profile.md`, e ripara un bootstrap parziale anche quando la
+  sentinella è già tracciata ma mancano asset root fondamentali.
 
 ---
 

@@ -169,26 +169,39 @@ class WorkspaceLocator:
 
         return None
 
+    def _resolve_explicit_workspace(self) -> Path | None:
+        """Resolve an explicitly requested workspace from CLI or environment.
+
+        Precedence order:
+        1. ``--workspace`` CLI flag
+        2. ``ENGINE_WORKSPACE`` env var
+        3. ``WORKSPACE_FOLDER`` env var
+        """
+        cli_workspace = self._parse_workspace_flag()
+        if cli_workspace:
+            candidate = Path(cli_workspace).expanduser().resolve()
+            if candidate.is_dir():
+                _log.info("Workspace resolved via --workspace: %s", candidate)
+                return candidate
+
+        engine_workspace = os.environ.get("ENGINE_WORKSPACE")
+        if engine_workspace:
+            candidate = Path(engine_workspace).expanduser().resolve()
+            if candidate.is_dir():
+                _log.info("Workspace resolved via ENGINE_WORKSPACE: %s", candidate)
+                return candidate
+
+        workspace_folder = os.environ.get("WORKSPACE_FOLDER")
+        if workspace_folder:
+            candidate = Path(workspace_folder).expanduser().resolve()
+            if candidate.is_dir() and not self._is_user_home(candidate):
+                _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", candidate)
+                return candidate
+
+        return None
+
     def resolve(self) -> WorkspaceContext:
-        workspace_root: Path | None = None
-
-        # 2. ENGINE_WORKSPACE env var (optional)
-        if workspace_root is None:
-            engine_workspace = os.environ.get("ENGINE_WORKSPACE")
-            if engine_workspace:
-                candidate = Path(engine_workspace).expanduser().resolve()
-                if candidate.is_dir():
-                    workspace_root = candidate
-                    _log.info("Workspace resolved via ENGINE_WORKSPACE: %s", workspace_root)
-
-        # 3. WORKSPACE_FOLDER as alias (retrocompatibilità, non prioritaria)
-        if workspace_root is None:
-            workspace_folder = os.environ.get("WORKSPACE_FOLDER")
-            if workspace_folder:
-                candidate = Path(workspace_folder).expanduser().resolve()
-                if candidate.is_dir() and not self._is_user_home(candidate):
-                    workspace_root = candidate
-                    _log.info("Workspace resolved via WORKSPACE_FOLDER: %s", workspace_root)
+        workspace_root = self._resolve_explicit_workspace()
 
         # 4. Fallback: current working directory
         if workspace_root is None:

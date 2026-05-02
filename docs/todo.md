@@ -115,6 +115,18 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
 - **~~`_build_app` non deterministico~~:** risolto in Fase 2 (validation.py + SPARK_STRICT_BOOT feature flag). `[RISOLTO]`
 - **~~Riferimento obsoleto in FASE2~~:** piano aggiornato in chiusura Fase 2. `[RISOLTO]`
 
+### P3 — Bootstrap primo avvio da workspace utente `[RISOLTO 2026-05-02]`
+
+- **File:** `spark/workspace/locator.py`, `spark/boot/engine.py`, `spark/boot/sequence.py`, `mcp-config-example.json`
+- **Problema:** il server MCP non materializzava automaticamente il Layer 0 nel
+  workspace utente al primo avvio e la risoluzione del workspace dipendeva da
+  fallback fragili quando il processo veniva lanciato fuori dalla cartella progetto.
+- **Correzione applicata:** aggiunta precedenza esplicita per `--workspace` e env
+  `WORKSPACE_FOLDER`, hook di auto-bootstrap in `_build_app()`, bootstrap minimo
+  basato sul bundle locale `packages/spark-base/.github` con copia di agenti,
+  istruzioni, prompt, `AGENTS.md`, `copilot-instructions.md` e `project-profile.md`.
+- **Validazione:** `38 passed, 6 skipped` su suite focalizzata bootstrap/locator.
+
 ### P4 — Logica duplicata in `scf_bootstrap_workspace` (REFACTOR-FUTURO)
 
 - **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
