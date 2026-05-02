@@ -115,6 +115,22 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
 - **~~`_build_app` non deterministico~~:** risolto in Fase 2 (validation.py + SPARK_STRICT_BOOT feature flag). `[RISOLTO]`
 - **~~Riferimento obsoleto in FASE2~~:** piano aggiornato in chiusura Fase 2. `[RISOLTO]`
 
+### P4 — Logica duplicata in `scf_bootstrap_workspace` (REFACTOR-FUTURO)
+
+- **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
+- **Problema:** Il corpo della funzione contiene logica di loop bootstrap duplicata
+  (eredità del path pre-patch). Consolidare in un helper privato `_copy_bootstrap_targets`
+  per ridurre la duplicazione e migliorare la manutenibilità.
+- **Priorità:** BASSA. **Impatto:** leggibilità, non funzionale.
+
+### P5 — Payload non uniforme in `scf_bootstrap_workspace` (REFACTOR-FUTURO)
+
+- **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
+- **Problema:** I campi del dizionario di ritorno non sono uniformi tra tutti i rami
+  (rami vivi vs rami policy/authorization). Normalizzare verso uno schema fisso
+  con valori default espliciti per i campi assenti.
+- **Priorità:** BASSA. **Impatto:** API interna, non blocca nessun tool.
+
 ---
 
 ## Storico sessioni precedenti

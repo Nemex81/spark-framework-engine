@@ -21,6 +21,10 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   gateway e la scrittura tracciata; usati dai forward write di
   `scf_install_package`, `scf_approve_conflict`, `scf_reject_conflict` e
   `scf_bootstrap_workspace`.
+- `tests/test_bootstrap_workspace_extended.py` — +3 test per
+  `scf_bootstrap_workspace` (commit `64b436f`): coprono INVARIANTE-4
+  cross-owner preserve-senza-write, flusso esteso riattivato e sentinella
+  `spark-assistant` come ultimo asset bootstrap. Suite: 296 → 299 passed.
 
 ### Changed
 
@@ -67,6 +71,14 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `tests/test_engine_coherence.py` — regex `r"## \[(\d[^\]]+)\]"` sostituisce
   `r"## \[([^\]]+)\]"` per saltare la sezione `[Unreleased]` nel CHANGELOG
   e rilevare correttamente la versione più recente rilasciata (CORREZIONE [1]).
+- `spark/boot/engine.py` — `scf_bootstrap_workspace` (commit `64b436f`):
+  tre correzioni al bootstrap tool 28: (1) INVARIANTE-4 — scritture dirette
+  cross-owner convertite in preserve-senza-write via gateway, eliminando la
+  violazione di ownership per file owned da altri pacchetti; (2) flusso
+  esteso riattivato rimuovendo un `return` anticipato che rendeva dead code
+  l'intero blocco post-sentinella; (3) sentinella
+  `agents/spark-assistant.agent.md` spostata come ultimo elemento di
+  `bootstrap_targets`, garantendo ordine di scrittura deterministico.
 
 ---
 
