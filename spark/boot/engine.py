@@ -984,7 +984,8 @@ class SparkFrameworkEngine:
         async def scf_get_skill_resource(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF skill by name via skills:// URI."""
             uri = McpResourceRegistry.make_uri("skills", name)
-            ff = inventory.mcp_registry.resolve(uri)
+            registry = _ensure_registry()
+            ff = registry.resolve(uri)
             if ff is None:
                 return {
                     "success": False,
@@ -1001,7 +1002,8 @@ class SparkFrameworkEngine:
         async def scf_get_instruction_resource(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF instruction by name via instructions:// URI."""
             uri = McpResourceRegistry.make_uri("instructions", name)
-            ff = inventory.mcp_registry.resolve(uri)
+            registry = _ensure_registry()
+            ff = registry.resolve(uri)
             if ff is None:
                 return {
                     "success": False,
@@ -1018,7 +1020,8 @@ class SparkFrameworkEngine:
         async def scf_get_agent_resource(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF agent by name via agents:// URI."""
             uri = McpResourceRegistry.make_uri("agents", name)
-            ff = inventory.mcp_registry.resolve(uri)
+            registry = _ensure_registry()
+            ff = registry.resolve(uri)
             if ff is None:
                 return {
                     "success": False,
@@ -1035,7 +1038,8 @@ class SparkFrameworkEngine:
         async def scf_get_prompt_resource(name: str) -> dict[str, Any]:
             """Return full content and metadata for a single SCF prompt by name via prompts:// URI."""
             uri = McpResourceRegistry.make_uri("prompts", name)
-            ff = inventory.mcp_registry.resolve(uri)
+            registry = _ensure_registry()
+            ff = registry.resolve(uri)
             if ff is None:
                 return {
                     "success": False,
