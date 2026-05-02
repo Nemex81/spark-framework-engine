@@ -678,17 +678,6 @@ class SparkFrameworkEngine:
             except OSError:
                 return None
 
-        @_register_resource("agents://{name}")
-        async def resource_agent_by_name(name: str) -> str:
-            content = _registry_read("agents", name)
-            if content is not None:
-                return content
-            for ff in inventory.list_agents():
-                if ff.name.lower() == name.lower():
-                    return ff.path.read_text(encoding="utf-8", errors="replace")
-            return f"Agent '{name}' not found. Use agents://list to see available agents."
-
-
         @_register_resource("skills://list")
         async def resource_skills_list() -> str:
             return _fmt_list(inventory.list_skills(), "SCF Skills")
@@ -717,19 +706,6 @@ class SparkFrameworkEngine:
                 if ff.name.lower().removesuffix(".agent") == qlow:
                     return ff.path.read_text(encoding="utf-8", errors="replace")
             return f"Agent '{name}' not found. Use agents://list to see available agents."
-
-        # --- MCP Resource Handler: prompts://{name} ---
-        @_register_resource("prompts://{name}")
-        async def resource_prompt_by_name(name: str) -> str:
-            query = name.removesuffix(".prompt")
-            content = _registry_read("prompts", query)
-            if content is not None:
-                return content
-            qlow = query.lower()
-            for ff in inventory.list_prompts():
-                if ff.name.lower().removesuffix(".prompt") == qlow:
-                    return ff.path.read_text(encoding="utf-8", errors="replace")
-            return f"Prompt '{name}' not found. Use prompts://list."
 
         @_register_resource("instructions://list")
         async def resource_instructions_list() -> str:
@@ -889,7 +865,13 @@ class SparkFrameworkEngine:
                 # Boot tardivo: popola con engine-manifest se possibile.
                 try:
                     engine_manifest = EngineInventory(engine_root=self._ctx.engine_root).engine_manifest
-                except Exception:  # pragma: no cover - difensivo
+                except Exception as exc:
+                    # Lazy init fallita: logghiamo su stderr con dettaglio per diagnostica.
+                    _log.error(
+                        "[SPARK-ENGINE][ERROR] _ensure_registry: EngineInventory init failed: %s. "
+                        "Registry sarà vuoto — le risorse URI-based non saranno disponibili.",
+                        exc,
+                    )
                     engine_manifest = {}
                 inventory.populate_mcp_registry(engine_manifest=engine_manifest)
             assert inventory.mcp_registry is not None  # noqa: S101
