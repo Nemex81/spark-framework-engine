@@ -2,6 +2,12 @@
 spark: true
 name: Agent-CodeUI
 version: 1.0.0
+scf_owner: "scf-master-codecrafter"
+scf_version: "2.5.1"
+scf_file_role: "agent"
+scf_merge_strategy: "replace"
+scf_merge_priority: 20
+scf_protected: false
 description: Dispatcher per UI e accessibilita. Instrada richieste assistive verso agenti plugin.
 model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-Codex (copilot)']
 layer: master
