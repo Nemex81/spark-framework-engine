@@ -512,6 +512,9 @@ class SparkFrameworkEngine:
             Dict con ``success``, ``removed_files``, ``orphan_overrides``,
             ``store_path`` e report Phase 6.
         """
+        # Guard canonico: garantisce che il registry sia inizializzato prima dell'uso.
+        if self._inventory.mcp_registry is None:
+            self._v3_repopulate_registry()
         registry = self._inventory.mcp_registry
         # Lista override orfani PRIMA di toccare il registry, così possiamo
         # restituire all'utente i path pertinenti.
@@ -590,10 +593,12 @@ class SparkFrameworkEngine:
             Dict con ``success``, ``override_blocked`` (lista URI risorse non
             sovrascritte) e ``files_updated``.
         """
-        registry = self._inventory.mcp_registry
         # Re-popoliamo per allineare il registry con eventuali override
         # workspace creati dopo l'install (necessario per has_override()).
         self._v3_repopulate_registry()
+        # Guard canonico: accediamo al registry dopo la repopulate per garantire non-None.
+        if self._inventory.mcp_registry is None:
+            self._v3_repopulate_registry()
         registry = self._inventory.mcp_registry
         # Risorse con override attivo: NON le sovrascriveremo nello store?
         # NOTA: nello v3 store le risorse del pacchetto sono "canoniche".
