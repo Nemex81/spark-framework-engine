@@ -299,6 +299,78 @@ class SparkFrameworkEngine:
                 "error": str(exc),
             }
 
+    async def install_package_for_onboarding(
+        self, package_id: str
+    ) -> dict[str, Any]:
+        """Esegue l'installazione di un pacchetto v3 nel contesto di onboarding.
+
+        Wrapper minimale per ``_install_package_v3`` che risolve la dipendenza
+        dal registry SCF e costruisce il contesto di installazione senza
+        passare per le closure di ``register_tools``.
+        Supporta solo pacchetti v3 (``min_engine_version >= "3.0.0"``).
+        I pacchetti legacy non vengono installati per non compromettere l'avvio.
+
+        Args:
+            package_id: ID del pacchetto da installare (es. ``"spark-base"``).
+
+        Returns:
+            Dict con ``success: bool`` e informazioni sull'installazione.
+        """
+        from spark.core.utils import _is_v3_package  # noqa: PLC0415
+        from spark.registry.client import RegistryClient  # noqa: PLC0415
+
+        # Funzione locale per costruire un risultato consistente senza closure.
+        def _simple_result(success: bool, error: str | None = None, **kw: Any) -> dict[str, Any]:
+            out: dict[str, Any] = {"success": success, "package": package_id}
+            if error:
+                out["error"] = error
+            out.update(kw)
+            return out
+
+        registry_client = RegistryClient(self._ctx.github_root)
+
+        # Recupera lista pacchetti dal registry remoto
+        try:
+            packages = registry_client.list_packages()
+        except Exception as exc:  # noqa: BLE001
+            return _simple_result(False, error=f"Registry unavailable: {exc}")
+
+        pkg = next((p for p in packages if p.get("id") == package_id), None)
+        if pkg is None:
+            return _simple_result(False, error=f"Package '{package_id}' not in registry.")
+
+        # Scarica il manifest del pacchetto
+        try:
+            pkg_manifest: dict[str, Any] = registry_client.fetch_package_manifest(pkg["repo_url"])
+        except Exception as exc:  # noqa: BLE001
+            return _simple_result(False, error=f"Cannot fetch manifest: {exc}")
+
+        # Solo pacchetti v3: onboarding non installa pacchetti legacy
+        if not _is_v3_package(pkg_manifest):
+            return _simple_result(
+                False,
+                error=f"Package '{package_id}' is legacy (v2); skipped in onboarding.",
+            )
+
+        pkg_version = str(pkg_manifest.get("version", pkg.get("latest_version", "unknown"))).strip()
+        min_engine_version = str(pkg_manifest.get("min_engine_version", "")).strip()
+        dependencies: list[str] = [
+            str(d).strip() if isinstance(d, str) else str(d.get("id", "")).strip()
+            for d in pkg_manifest.get("dependencies", [])
+            if d
+        ]
+
+        return await self._install_package_v3(
+            package_id=package_id,
+            pkg=pkg,
+            pkg_manifest=pkg_manifest,
+            pkg_version=pkg_version,
+            min_engine_version=min_engine_version,
+            dependencies=dependencies,
+            conflict_mode="abort",
+            build_install_result=_simple_result,
+        )
+
     # ------------------------------------------------------------------
     # v3 lifecycle methods (install / update / remove store-based)
     # ------------------------------------------------------------------

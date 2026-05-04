@@ -181,6 +181,17 @@ def _build_app(engine_root: Path) -> FastMCP:
         "[SPARK-ENGINE][INFO] Auto-bootstrap status: %s",
         bootstrap_result.get("status", "unknown"),
     )
+
+    # Esegui onboarding completo al primo avvio (idempotente)
+    from spark.boot.onboarding import OnboardingManager  # noqa: PLC0415
+    onboarding = OnboardingManager(context, inventory, app)
+    if onboarding.is_first_run():
+        onboarding_result = onboarding.run_onboarding()
+        _log.info(
+            "[SPARK-ENGINE][INFO] Onboarding completato: %s",
+            onboarding_result.get("status", "unknown"),
+        )
+
     _log.info("Tools registered: 44 total")
 
     return mcp
