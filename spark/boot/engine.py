@@ -349,6 +349,158 @@ class SparkFrameworkEngine:
                     )
         self._inventory.populate_mcp_registry(engine_manifest, package_manifests)
 
+    def _install_workspace_files_v3(
+        self,
+        package_id: str,
+        pkg_version: str,
+        pkg_manifest: Mapping[str, Any],
+        manifest: ManifestManager,
+    ) -> dict[str, Any]:
+        """Scrive nel workspace solo i file dichiarati in ``workspace_files``.
+
+        Categoria A del refactoring v3: file referenziati staticamente da
+        Copilot/Cline (es. ``copilot-instructions.md``, instructions globali,
+        ``project-profile.md``). I file Categoria B (prompts, instructions
+        operative, agents, skills) restano nello store centrale e sono
+        serviti via MCP.
+
+        Idempotente: se il file esiste già con sha identico, gateway aggiorna
+        solo l'ownership nel manifest. Se l'utente ha modificato il file
+        (sha mismatch su entry tracciata), viene preservato.
+
+        Args:
+            package_id: ID del pacchetto.
+            pkg_version: versione installata.
+            pkg_manifest: package-manifest.json (deve contenere
+                opzionalmente ``workspace_files`` e ``file_policies``).
+            manifest: ManifestManager attivo del workspace.
+
+        Returns:
+            ``{"success": bool, "files_written": [...], "preserved": [...],
+              "errors": [...]}``. ``success=True`` anche con preserved
+            non vuoti (semantica di idempotenza). ``success=False`` solo
+            se sorgente mancante o write fallita.
+        """
+        workspace_files = pkg_manifest.get("workspace_files") or []
+        if not isinstance(workspace_files, list) or not workspace_files:
+            # Schema 2.x o pacchetto puramente Cat. B: nulla da scrivere.
+            return {
+                "success": True,
+                "files_written": [],
+                "preserved": [],
+                "errors": [],
+            }
+        store = PackageResourceStore(self._ctx.engine_root)
+        package_root = store.packages_root / package_id
+        file_policies = pkg_manifest.get("file_policies") or {}
+        if not isinstance(file_policies, dict):
+            file_policies = {}
+        files_written: list[str] = []
+        preserved: list[str] = []
+        errors: list[str] = []
+        for entry in workspace_files:
+            if not isinstance(entry, str):
+                errors.append(f"invalid workspace_files entry: {entry!r}")
+                continue
+            github_rel = entry.removeprefix(".github/")
+            if ".." in Path(github_rel).parts:
+                errors.append(f"unsafe workspace_files path: {entry}")
+                continue
+            source_path = package_root / entry
+            if not source_path.is_file():
+                errors.append(
+                    f"workspace_files source missing in store: {entry}"
+                )
+                continue
+            # Preservation gate: se il file è già presente nel workspace ed è
+            # tracciato come modificato dall'utente da un altro owner,
+            # non sovrascrivere.
+            existing_owners = manifest.get_file_owners(github_rel)
+            other_owner_modified = any(
+                owner != package_id
+                and owner != "scf-engine-bootstrap"
+                and manifest.is_user_modified(github_rel) is True
+                for owner in existing_owners
+            )
+            if other_owner_modified:
+                preserved.append(entry)
+                continue
+            try:
+                content = source_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                errors.append(f"{entry}: cannot read source ({exc})")
+                continue
+            policy_meta = file_policies.get(entry) or {}
+            merge_strategy = policy_meta.get("merge_strategy") if isinstance(policy_meta, dict) else None
+            try:
+                _gateway_write_text(
+                    self._ctx.workspace_root,
+                    github_rel,
+                    content,
+                    manifest,
+                    package_id,
+                    pkg_version,
+                    merge_strategy,
+                )
+            except OSError as exc:
+                errors.append(f"{entry}: write failed ({exc})")
+                continue
+            files_written.append(entry)
+        return {
+            "success": len(errors) == 0,
+            "files_written": files_written,
+            "preserved": preserved,
+            "errors": errors,
+        }
+
+    def _remove_workspace_files_v3(
+        self,
+        package_id: str,
+        pkg_manifest: Mapping[str, Any],
+        manifest: ManifestManager,
+    ) -> dict[str, Any]:
+        """Rimuove dal workspace i file ``workspace_files`` non modificati dall'utente.
+
+        Args:
+            package_id: ID del pacchetto da rimuovere.
+            pkg_manifest: package-manifest.json letto dallo store
+                PRIMA della rmtree (deve contenere ``workspace_files``).
+            manifest: ManifestManager attivo del workspace.
+
+        Returns:
+            ``{"removed": [...], "preserved": [...], "errors": [...]}``.
+        """
+        workspace_files = pkg_manifest.get("workspace_files") or []
+        if not isinstance(workspace_files, list) or not workspace_files:
+            return {"removed": [], "preserved": [], "errors": []}
+        gateway = WorkspaceWriteGateway(self._ctx.workspace_root, manifest)
+        removed: list[str] = []
+        preserved: list[str] = []
+        errors: list[str] = []
+        for entry in workspace_files:
+            if not isinstance(entry, str):
+                continue
+            github_rel = entry.removeprefix(".github/")
+            target = self._ctx.github_root / github_rel
+            if not target.is_file():
+                continue
+            owners = manifest.get_file_owners(github_rel)
+            # Non toccare se l'unica ownership tracciata è di un altro pacchetto.
+            non_package_owners = [o for o in owners if o != package_id]
+            if non_package_owners and package_id not in owners:
+                preserved.append(entry)
+                continue
+            # Preservazione user-modified.
+            if manifest.is_user_modified(github_rel) is True:
+                preserved.append(entry)
+                continue
+            try:
+                gateway.delete(github_rel, package_id)
+                removed.append(entry)
+            except OSError as exc:
+                errors.append(f"{entry}: delete failed ({exc})")
+        return {"removed": removed, "preserved": preserved, "errors": errors}
+
     async def _install_package_v3(
         self,
         package_id: str,
@@ -461,6 +613,41 @@ class SparkFrameworkEngine:
         )
         manifest.save(new_entries)
 
+        # v3 FIX 3 — scriviamo i workspace_files (Cat. A) nel workspace
+        # utente. Categoria B (prompts/agents/skills/instructions operative)
+        # resta nello store ed è servita via MCP.
+        ws_result = self._install_workspace_files_v3(
+            package_id=package_id,
+            pkg_version=pkg_version,
+            pkg_manifest=pkg_manifest,
+            manifest=manifest,
+        )
+        if not ws_result["success"]:
+            # Compensazione: rollback dello store per coerenza.
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] workspace_files write failed for %s: %s",
+                package_id,
+                "; ".join(ws_result["errors"]),
+            )
+            try:
+                _remove_package_v3_from_store(engine_root, package_id)
+            except OSError as exc:
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] Rollback store failed for %s: %s",
+                    package_id,
+                    exc,
+                )
+            # Ripristina manifest senza la sentinella appena aggiunta.
+            manifest.save(existing_entries)
+            return build_install_result(
+                False,
+                error="Cannot write workspace_files: " + "; ".join(ws_result["errors"]),
+                package=package_id,
+                version=pkg_version,
+                installation_mode="v3_store",
+                store_path=store_result["store_path"],
+            )
+
         # Re-popoliamo il registry MCP per esporre subito le risorse
         # del pacchetto appena installato (idempotente).
         self._v3_repopulate_registry()
@@ -491,6 +678,8 @@ class SparkFrameworkEngine:
             installation_mode="v3_store",
             store_path=store_result["store_path"],
             files_installed=store_result["files"],
+            workspace_files_written=ws_result["files_written"],
+            workspace_files_preserved=ws_result["preserved"],
             phase6_report=phase6_report,
             conflict_mode=conflict_mode,
         )
@@ -519,6 +708,29 @@ class SparkFrameworkEngine:
         # Lista override orfani PRIMA di toccare il registry, così possiamo
         # restituire all'utente i path pertinenti.
         orphan_overrides = _list_orphan_overrides_for_package(registry, package_id)
+
+        # v3 FIX 5 — leggi pkg_manifest dallo store PRIMA della rmtree per
+        # poter rimuovere i workspace_files (Cat. A) dal workspace utente.
+        store = PackageResourceStore(self._ctx.engine_root)
+        pkg_manifest_path = store.packages_root / package_id / "package-manifest.json"
+        pkg_manifest_for_cleanup: dict[str, Any] = {}
+        if pkg_manifest_path.is_file():
+            try:
+                pkg_manifest_for_cleanup = json.loads(
+                    pkg_manifest_path.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError) as exc:
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] Cannot read store manifest "
+                    "for cleanup of %s: %s",
+                    package_id,
+                    exc,
+                )
+        ws_cleanup = self._remove_workspace_files_v3(
+            package_id=package_id,
+            pkg_manifest=pkg_manifest_for_cleanup,
+            manifest=manifest,
+        )
 
         # Rimuoviamo dallo store fisico.
         store_result = _remove_package_v3_from_store(self._ctx.engine_root, package_id)
@@ -568,6 +780,8 @@ class SparkFrameworkEngine:
             "store_path": store_result.get("store_path"),
             "store_removed": store_result.get("removed", False),
             "files_removed_from_manifest": list(v3_entry.get("files", []) or []),
+            "workspace_files_removed": ws_cleanup["removed"],
+            "workspace_files_preserved": ws_cleanup["preserved"],
             "registry_uris_unregistered": unregistered,
             "orphan_overrides": orphan_overrides,
             "phase6_report": phase6_report,
