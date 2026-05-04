@@ -149,6 +149,29 @@ def _build_app(engine_root: Path) -> FastMCP:
     app = SparkFrameworkEngine(mcp, context, inventory, runtime_dir=runtime_dir)
     app.register_resources()
     app.register_tools()
+
+    # v3.0 FIX — Boot-time registry repopulate.
+    # Senza questa chiamata, ``populate_mcp_registry`` viene invocata solo con
+    # ``engine_manifest`` (sopra) e i pacchetti installati nel deposito
+    # ``engine_root/packages/<pkg>/`` non risultano registrati nel
+    # ``McpResourceRegistry`` finché non viene eseguita un'operazione
+    # install/remove (che chiama ``_v3_repopulate_registry``). Conseguenza
+    # pre-fix: ``scf_get_agent``/``scf_get_skill``/etc. ritornano risorse
+    # solo engine-side dopo un riavvio del server. Riusiamo il metodo già
+    # collaudato dell'engine per coerenza con il flusso lifecycle.
+    try:
+        app._v3_repopulate_registry()
+        if inventory.mcp_registry is not None:
+            _log.info(
+                "[SPARK-ENGINE][INFO] MCP registry repopulated at boot: %d URI totali",
+                len(inventory.mcp_registry.list_all()),
+            )
+    except (OSError, ValueError) as exc:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Boot registry repopulate failed: %s",
+            exc,
+        )
+
     bootstrap_result = app.ensure_minimal_bootstrap()
     _log.info(
         "[SPARK-ENGINE][INFO] Auto-bootstrap status: %s",

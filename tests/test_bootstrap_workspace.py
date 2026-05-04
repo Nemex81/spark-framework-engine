@@ -68,27 +68,43 @@ class TestBootstrapWorkspace(unittest.TestCase):
         )
 
     def test_bootstrap_copies_prompts_agent_and_guide(self) -> None:
+        # Post v3 FIX 2: il bootstrap copia SOLO il perimetro Cat. A definito
+        # in ``workspace_files`` del manifest spark-base + 3 sentinel di
+        # discovery (AGENTS.md, spark-guide.agent.md, spark-assistant.agent.md).
+        # Prompts e instructions operative NON vengono più copiati nel
+        # workspace: sono Cat. B serviti via MCP. Il nome del test resta per
+        # compat storica ma il contratto verifica il nuovo perimetro.
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
-            source_root = _ENGINE_PATH.parent / "packages" / "spark-base" / ".github"
-            expected_written_files = (
-                len(list((source_root / "prompts").glob("*.prompt.md")))
-                + len(list((source_root / "instructions").glob("*.instructions.md")))
-                + 5
-            )
 
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
 
             self.assertTrue(result["success"])
             self.assertEqual(result["status"], "bootstrapped")
-            self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
-            self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
-            self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
+            # File Cat. A obbligatori (workspace_files del manifest).
             self.assertTrue((workspace_root / ".github" / "copilot-instructions.md").is_file())
             self.assertTrue((workspace_root / ".github" / "project-profile.md").is_file())
+            self.assertTrue(
+                (workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file()
+            )
+            self.assertTrue(
+                (workspace_root / ".github" / "instructions" / "framework-guard.instructions.md").is_file()
+            )
+            # Sentinel di discovery sempre presenti.
             self.assertTrue((workspace_root / ".github" / "AGENTS.md").is_file())
-            self.assertEqual(len(result["files_written"]), expected_written_files)
+            self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
+            # Cat. B NON deve finire nel workspace: i prompt non vengono
+            # copiati durante il bootstrap.
+            prompts_dir = workspace_root / ".github" / "prompts"
+            if prompts_dir.is_dir():
+                copied_prompts = list(prompts_dir.glob("*.prompt.md"))
+                self.assertEqual(
+                    copied_prompts,
+                    [],
+                    f"Bootstrap should not copy prompts (Cat. B), found: {copied_prompts}",
+                )
 
     def test_bootstrap_repairs_missing_guide_when_agent_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

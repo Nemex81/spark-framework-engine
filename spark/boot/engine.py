@@ -4093,32 +4093,75 @@ class SparkFrameworkEngine:
                     result["note"] = "Bootstrap completed and spark-base installed successfully."
                 return result
 
-            prompt_sources = sorted(prompts_source_dir.glob("*.prompt.md"))
-            instruction_sources = sorted(instructions_source_dir.glob("*.instructions.md"))
-            root_sources = [
-                bootstrap_source_root / "AGENTS.md",
-                bootstrap_source_root / "copilot-instructions.md",
-                bootstrap_source_root / "project-profile.md",
+            # v3.0 FIX — Bootstrap perimeter restriction (Cat. A only).
+            # Pre-fix: copiavamo TUTTI i prompt e TUTTE le instructions di spark-base
+            # nel workspace utente, mescolando Cat. A (file referenziati staticamente
+            # da Copilot/Cline: copilot-instructions.md, instructions globali,
+            # project-profile.md, sentinel di discovery) con Cat. B (risorse
+            # caricabili on-demand via MCP: prompts e instructions operative).
+            # Post-fix: copiamo solo le entry dichiarate in ``workspace_files`` del
+            # manifest spark-base + 3 sentinel di discovery (AGENTS.md + 2 agenti
+            # gateway). Se il manifest manca o non dichiara ``workspace_files``,
+            # fallback a una whitelist hardcoded equivalente.
+            _SPARK_BASE_FALLBACK_WORKSPACE_FILES: list[str] = [
+                ".github/copilot-instructions.md",
+                ".github/instructions/framework-guard.instructions.md",
+                ".github/instructions/git-policy.instructions.md",
+                ".github/instructions/model-policy.instructions.md",
+                ".github/instructions/personality.instructions.md",
+                ".github/instructions/project-reset.instructions.md",
+                ".github/instructions/spark-assistant-guide.instructions.md",
+                ".github/instructions/verbosity.instructions.md",
+                ".github/instructions/workflow-standard.instructions.md",
+                ".github/project-profile.md",
             ]
-            bootstrap_targets: list[tuple[Path, Path]] = [
-                (source_path, workspace_github_root / "prompts" / source_path.name)
-                for source_path in prompt_sources
+            # Sentinel di discovery sempre richiesti (anche se non in workspace_files).
+            # ORDINE CRITICO: ``agents/spark-assistant.agent.md`` deve essere
+            # SCRITTO PER ULTIMO. È la sentinella di idempotenza del bootstrap:
+            # se una scrittura precedente fallisce, l'assenza della sentinella
+            # forza un nuovo bootstrap completo. Vedi
+            # ``test_bootstrap_writes_sentinel_last``.
+            _SPARK_BASE_BOOTSTRAP_SENTINELS: list[str] = [
+                ".github/AGENTS.md",
+                ".github/agents/spark-guide.agent.md",
+                ".github/agents/spark-assistant.agent.md",
             ]
-            bootstrap_targets.extend(
-                (
-                    source_path,
-                    workspace_github_root / "instructions" / source_path.name,
-                )
-                for source_path in instruction_sources
-            )
-            bootstrap_targets.append(
-                (guide_agent_source, workspace_github_root / "agents" / "spark-guide.agent.md")
-            )
-            bootstrap_targets.extend(
-                (source_path, workspace_github_root / source_path.name)
-                for source_path in root_sources
-            )
-            bootstrap_targets.append((agent_source, workspace_github_root / "agents" / "spark-assistant.agent.md"))
+
+            def _load_bootstrap_workspace_files() -> list[str]:
+                manifest_path = bootstrap_source_root.parent / "package-manifest.json"
+                workspace_files: list[str] = []
+                if manifest_path.is_file():
+                    try:
+                        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError) as exc:
+                        _log.warning(
+                            "Bootstrap: unable to read spark-base manifest, "
+                            "using fallback whitelist: %s",
+                            exc,
+                        )
+                        payload = {}
+                    declared = payload.get("workspace_files") or []
+                    if isinstance(declared, list):
+                        workspace_files = [
+                            entry for entry in declared if isinstance(entry, str)
+                        ]
+                if not workspace_files:
+                    workspace_files = list(_SPARK_BASE_FALLBACK_WORKSPACE_FILES)
+                # Rimuovi eventuali sentinel duplicati e appendili in coda
+                # nell'ordine canonico (assistant agent ultimo).
+                sentinel_set = set(_SPARK_BASE_BOOTSTRAP_SENTINELS)
+                without_sentinels = [
+                    entry for entry in workspace_files if entry not in sentinel_set
+                ]
+                return without_sentinels + list(_SPARK_BASE_BOOTSTRAP_SENTINELS)
+
+            bootstrap_files: list[str] = _load_bootstrap_workspace_files()
+            bootstrap_targets: list[tuple[Path, Path]] = []
+            for entry in bootstrap_files:
+                rel = entry.removeprefix(".github/")
+                source_path = bootstrap_source_root / rel
+                dest_path = workspace_github_root / rel
+                bootstrap_targets.append((source_path, dest_path))
 
             def _bootstrap_target_is_satisfied(source_path: Path, dest_path: Path) -> bool:
                 if not dest_path.is_file():
