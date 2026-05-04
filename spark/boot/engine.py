@@ -282,6 +282,10 @@ class SparkFrameworkEngine:
         if self._bootstrap_workspace_tool is None:
             return {"success": False, "status": "bootstrap_tool_unavailable"}
 
+        # Sentinel gate: la presenza simultanea di tutti i path Cat. A elencati in
+        # ``_minimal_bootstrap_required_paths`` (incluso ``AGENTS.md`` come sentinella
+        # di discovery) determina se il workspace è "già bootstrapped"; la cancellazione
+        # manuale di uno qualunque di questi path forza un nuovo auto-bootstrap al boot.
         if all(path.is_file() for path in self._minimal_bootstrap_required_paths()):
             return {"success": True, "status": "already_present"}
 
@@ -415,6 +419,7 @@ class SparkFrameworkEngine:
             # Preservation gate: se il file è già presente nel workspace ed è
             # tracciato come modificato dall'utente da un altro owner,
             # non sovrascrivere.
+            # NOTE: ``scf-engine-bootstrap`` viene escluso perché è un owner-shadow generato da auto-bootstrap (Cat. A sentinella) e non rappresenta una claim reale di pacchetto; in scenari multi-owner [scf-engine-bootstrap, <pkg>] il gate scatta correttamente sull'owner di pacchetto se l'utente ha modificato il file.
             existing_owners = manifest.get_file_owners(github_rel)
             other_owner_modified = any(
                 owner != package_id
@@ -488,6 +493,15 @@ class SparkFrameworkEngine:
             # Non toccare se l'unica ownership tracciata è di un altro pacchetto.
             non_package_owners = [o for o in owners if o != package_id]
             if non_package_owners and package_id not in owners:
+                preserved.append(entry)
+                continue
+            # File non tracciato nel manifest: preserva per sicurezza e logga warning.
+            if not owners:
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] _remove_workspace_files_v3: "
+                    "file %s non tracciato nel manifest, preservato per sicurezza.",
+                    entry,
+                )
                 preserved.append(entry)
                 continue
             # Preservazione user-modified.
@@ -2091,6 +2105,15 @@ class SparkFrameworkEngine:
 
             if not isinstance(raw_policies, dict):
                 return normalized
+
+            # Deprecation hint: manifest puramente schema 2.x (file_policies senza
+            # files_metadata) — sarà rimosso in v4.0.
+            if not raw_files_metadata and raw_policies:
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] package-manifest schema 2.x rilevato "
+                    "(files/file_policies senza files_metadata): "
+                    "aggiornare a schema 3.x con workspace_files + files_metadata."
+                )
 
             for raw_path, raw_policy in raw_policies.items():
                 if not isinstance(raw_path, str) or not isinstance(raw_policy, str):

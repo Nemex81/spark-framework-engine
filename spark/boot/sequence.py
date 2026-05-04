@@ -159,6 +159,10 @@ def _build_app(engine_root: Path) -> FastMCP:
     # pre-fix: ``scf_get_agent``/``scf_get_skill``/etc. ritornano risorse
     # solo engine-side dopo un riavvio del server. Riusiamo il metodo già
     # collaudato dell'engine per coerenza con il flusso lifecycle.
+    # DEPRECATION (Round 3): il supporto per manifest schema 2.x privi di
+    # ``workspace_files`` resta abilitato qui per retrocompat (``_v3_repopulate_registry``
+    # tollera manifest legacy), ma sarà rimosso in v4.0; tutti i nuovi pacchetti
+    # devono dichiarare ``schema_version: "3.0"`` con ``workspace_files`` esplicito.
     try:
         app._v3_repopulate_registry()
         if inventory.mcp_registry is not None:
