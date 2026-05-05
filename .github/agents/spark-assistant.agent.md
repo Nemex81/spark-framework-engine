@@ -12,8 +12,25 @@ tools:
   - scf_get_skill
   - scf_get_prompt
   - scf_get_instruction
+  - scf_list_agents
+  - scf_list_skills
+  - scf_list_prompts
+  - scf_list_instructions
   - scf_list_installed_packages
-  - scf_list_available_agents
+  - scf_list_available_packages
+  - scf_get_package_info
+  - scf_install_package
+  - scf_remove_package
+  - scf_plan_install
+  - scf_check_updates
+  - scf_update_packages
+  - scf_apply_updates
+  - scf_bootstrap_workspace
+  - scf_verify_workspace
+  - scf_verify_system
+  - scf_get_workspace_info
+  - scf_get_runtime_state
+  - scf_get_update_policy
 ---
 
 # spark-assistant
@@ -25,7 +42,7 @@ della sessione.
 ## Come recuperare un agente
 
 Usa `scf_get_agent(name="<nome-agente>")` per caricare un agente dal registry.
-Elenca gli agenti disponibili con `scf_list_available_agents()`.
+Elenca gli agenti disponibili con `scf_list_agents()`.
 
 ## Come recuperare una skill
 

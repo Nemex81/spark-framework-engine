@@ -12,9 +12,31 @@ scf_merge_priority: 10
 <!-- NON modificare i marker SCF. Il contenuto tra i marker è gestito dal sistema. -->
 <!-- Il testo fuori dai marker è tuo: SPARK non lo tocca mai in nessuna modalità. -->
 
-# Copilot Instructions — Workspace
+# Copilot Instructions — spark-framework-engine
 
-<!-- Le tue istruzioni custom personali vanno QUI, sopra i blocchi SCF -->
+## Istruzioni attive
+
+Per caricare istruzioni specifiche nel contesto corrente:
+
+- `scf_get_instruction(name="spark-engine-maintenance")` — convenzioni motore, naming tool, versioning
+- `scf_get_instruction(name="mcp-context")` — regole transport MCP e stdout/stderr
+- `scf_get_instruction(name="python")` — standard Python (disponibile con `scf-pycode-crafter`)
+
+## Agenti per questo repository
+
+| Agente | Ambito |
+|--------|--------|
+| `@spark-engine-maintainer` | audit coerenza engine, tool MCP, CHANGELOG, pre-release |
+| `@spark-guide` | orientamento, routing verso agente corretto, workspace info |
+| `@spark-assistant` | installazione/aggiornamento pacchetti SCF, bootstrap workspace |
+| `@Agent-Git` | commit, push, tag (unico agente autorizzato a operazioni git) |
+
+## Regole operative engine
+
+- Transport stdio: mai `print()` su stdout — log esclusivamente su `stderr`
+- Tool pubblici: decorator `@_register_tool("scf_*")` + docstring in inglese
+- Contatore tool: aggiornare log `Tools registered: N total` dopo ogni aggiunta/rimozione
+- Pre-commit: `python -m py_compile` + `pytest -q --ignore=tests/test_integration_live.py`
 
 <!-- SCF:BEGIN:spark-framework-engine@2.3.2 -->
 ---

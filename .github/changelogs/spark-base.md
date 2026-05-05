@@ -14,7 +14,11 @@ scf_merge_priority: 10
 
 ## [Unreleased]
 
-### Fixed
+### Changed
+
+- `spark-assistant.agent.md`: espande frontmatter `tools:` da 6 a 23 tool MCP reali; corregge nome `scf_list_available_agents` → `scf_list_agents` nel corpo.
+- `spark-guide.agent.md`: corregge 3 nomi tool errati nel frontmatter (`scf_list_available_agents` → `scf_list_agents`, `scf_workspace_info` → `scf_get_workspace_info`, `scf_get_registry` → `scf_list_available_packages`); aggiunge 5 tool discovery; allinea nomi nel corpo.
+- `copilot-instructions.md`: sostituisce sezione utente vuota con guida operativa engine-specifica (istruzioni attive, routing agenti, regole operative). Blocchi SCF invariati.
 
 - Corretti i riferimenti cross-package negli agenti base verso skill distribuite come directory (`clean-architecture`, `docs-manager`, `framework-index`, `framework-query`, `project-doc-bootstrap`, `validate-accessibility`, `changelog-entry`).
 - Rimossi i riferimenti rotti a `tests.instructions.md` e `project.instructions.md` dai flussi documentali base per allinearli agli asset realmente distribuiti nel layer `spark-base`.

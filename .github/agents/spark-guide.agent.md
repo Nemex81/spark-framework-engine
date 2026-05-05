@@ -12,10 +12,15 @@ description: >
   operazioni distruttive né accede al registry SCF in scrittura.
 tools:
   - scf_list_installed_packages
-  - scf_list_available_agents
-  - scf_workspace_info
+  - scf_list_agents
+  - scf_get_workspace_info
   - scf_bootstrap_workspace
-  - scf_get_registry
+  - scf_list_available_packages
+  - scf_get_agent
+  - scf_get_skill
+  - scf_get_prompt
+  - scf_get_instruction
+  - scf_get_framework_version
 ---
 
 # spark-guide
@@ -35,7 +40,7 @@ tools:
 
 - **Orientamento**: spiega cosa è SPARK, cosa fanno i pacchetti installati,
   quali agenti e skill sono disponibili.
-- **Diagnosi leggera**: usa `scf_workspace_info` per verificare lo stato del
+- **Diagnosi leggera**: usa `scf_get_workspace_info` per verificare lo stato del
   workspace e riferire all'utente in modo chiaro.
 - **Routing operativo**: quando l'utente vuole installare, aggiornare o
   rimuovere pacchetti, passa il task a `spark-assistant` via
@@ -55,7 +60,7 @@ tools:
 
 ## Flusso — Richiesta informativa
 
-1. Usa `scf_list_available_agents` per rispondere a domande sugli agenti.
+1. Usa `scf_list_agents` per rispondere a domande sugli agenti.
 2. Usa `scf_get_skill` e `scf_get_prompt` per rispondere a domande su
    skill e prompt disponibili.
 3. Usa `scf_list_installed_packages` per rispondere a domande sullo stato.
@@ -66,7 +71,7 @@ tools:
 - Tono diretto, chiaro, privo di gergo interno SCF non necessario per il task.
 - Non avviare operazioni distruttive: delegale sempre a `spark-assistant`
   con conferma già raccolta.
-- Se `scf_workspace_info` indica workspace non inizializzato, informa l'utente
+- Se `scf_get_workspace_info` indica workspace non inizializzato, informa l'utente
   e passa immediatamente a `spark-assistant` per il bootstrap.
 - Non tentare workaround su errori del motore: blocca e indirizza a
   `spark-engine-maintainer`.
