@@ -4089,22 +4089,40 @@ class SparkFrameworkEngine:
             conflict_mode: str = "abort",
             update_mode: str = "",
             migrate_copilot_instructions: bool = False,
+            force: bool = False,
+            dry_run: bool = False,
         ) -> dict[str, Any]:
-            """Bootstrap only the Layer 0 gateway files into this workspace.
+            """Bootstrap the Layer 0 gateway files into this workspace.
 
-            Copies exactly the following files from the engine to the workspace:
-            - agents/spark-assistant.agent.md
-            - agents/spark-guide.agent.md
-            - instructions/spark-assistant-guide.instructions.md (if present)
-            - prompts/scf-*.prompt.md (all matching)
+            Copies the files declared in ``workspace_files`` of the spark-base manifest
+            plus three discovery sentinels (AGENTS.md, spark-guide, spark-assistant)
+            from the engine to the workspace.
 
-            If a file exists in the workspace and its sha256 differs from the engine source,
-            it is NOT overwritten and a warning is logged to sys.stderr.
+            If a file exists and its sha256 differs from the source, it is NOT overwritten
+            (reported in ``files_protected``) and a warning is logged to sys.stderr.
+            Pass ``force=True`` to overwrite even user-modified files.
+            Pass ``dry_run=True`` to simulate without writing any files.
             Idempotence is guaranteed via the spark-assistant.agent.md sentinel.
 
-            Returns a status-oriented payload with fields such as `status`,
-            `files_written`, `preserved` and `note`, plus optional install and
-            authorization metadata for extended flows.
+            Args:
+                install_base: If True, also installs spark-base after bootstrap.
+                conflict_mode: Conflict resolution mode for the install_base flow.
+                update_mode: Update policy mode for the install_base flow.
+                migrate_copilot_instructions: If True, migrate copilot-instructions.md.
+                force: If True, overwrite even user-modified files (default False).
+                dry_run: If True, simulate without writing any files (default False).
+
+            Returns:
+                A dict with at minimum these fields:
+                  status (str): operation status code.
+                  files_written (list): paths actually written (backward-compat).
+                  files_copied (list): paths written or would-be-written (dry_run).
+                  files_skipped (list): paths already present and unmodified.
+                  files_protected (list): user-modified paths skipped (need force=True).
+                  sentinel_present (bool): True if spark-assistant.agent.md exists.
+                  message (str): human-readable description of the operation outcome.
+                  preserved (list): all skipped paths (backward-compat superset).
+                  note (str): alias for message (backward-compat).
             """
             if install_base and conflict_mode not in _SUPPORTED_CONFLICT_MODES:
                 return {
@@ -4328,6 +4346,12 @@ class SparkFrameworkEngine:
                 result["policy_created"] = policy_created
                 if policy_created:
                     result["policy_path"] = str(policy_path)
+                # v3.1 — New fields: backfill defaults for any caller path.
+                result.setdefault("files_copied", result.get("files_written", []))
+                result.setdefault("files_skipped", [])
+                result.setdefault("files_protected", [])
+                result.setdefault("sentinel_present", sentinel.is_file())
+                result.setdefault("message", result.get("note", ""))
                 if not legacy_bootstrap_mode:
                     result["authorization_required"] = True
                     result["github_write_authorized"] = True
@@ -4490,26 +4514,47 @@ class SparkFrameworkEngine:
                         _bootstrap_target_is_satisfied(source_path, dest_path)
                         for source_path, dest_path in bootstrap_targets
                     ):
+                        _all_bootstrap_rels = [
+                            dest_path.relative_to(self._ctx.workspace_root).as_posix()
+                            for _, dest_path in bootstrap_targets
+                        ]
                         return await _finalize_bootstrap_result({
                             "success": True,
                             "status": "already_bootstrapped",
                             "files_written": [],
+                            "files_copied": [],
+                            "files_skipped": _all_bootstrap_rels,
+                            "files_protected": [],
+                            "sentinel_present": True,
+                            "message": "Bootstrap assets already present and verified.",
                             "preserved": [],
                             "workspace": str(self._ctx.workspace_root),
                             "note": "Bootstrap assets already present and verified. Run /scf-list-available to inspect the package catalog.",
                         })
                 if user_mod is True:
-                    # Sentinel tracked but modified by user — do not overwrite.
-                    return {
-                        "success": True,
-                        "status": "user_modified",
-                        "files_written": [],
-                        "preserved": [sentinel_rel],
-                        "workspace": str(self._ctx.workspace_root),
-                        "install_base_requested": install_base,
-                        "note": "Sentinel file has been modified by user. No files overwritten.",
-                    }
-                # user_mod is None → sentinel exists but not tracked; fall through to copy.
+                    # Sentinel tracked but modified by user.
+                    # With force=False: do not overwrite — return early.
+                    # With force=True: fall through to the copy loop to overwrite.
+                    if not force:
+                        return {
+                            "success": True,
+                            "status": "user_modified",
+                            "files_written": [],
+                            "files_copied": [],
+                            "files_skipped": [],
+                            "files_protected": [sentinel_rel],
+                            "sentinel_present": True,
+                            "message": "Sentinel file has been modified by user. No files overwritten. Use force=True to override.",
+                            "preserved": [sentinel_rel],
+                            "workspace": str(self._ctx.workspace_root),
+                            "install_base_requested": install_base,
+                            "note": "Sentinel file has been modified by user. No files overwritten.",
+                        }
+                    _log.warning(
+                        "Bootstrap sentinel force-overwrite requested (force=True): %s",
+                        sentinel_rel,
+                    )
+                # user_mod is None or force=True → fall through to copy.
 
             missing_sources = [
                 str(source_path)
@@ -4521,6 +4566,11 @@ class SparkFrameworkEngine:
                     "success": False,
                     "status": "error",
                     "files_written": [],
+                    "files_copied": [],
+                    "files_skipped": [],
+                    "files_protected": [],
+                    "sentinel_present": sentinel.is_file(),
+                    "message": f"Bootstrap sources missing from engine repository: {missing_sources}",
                     "preserved": [],
                     "workspace": str(self._ctx.workspace_root),
                     "install_base_requested": install_base,
@@ -4528,6 +4578,9 @@ class SparkFrameworkEngine:
                 }
 
             files_written: list[str] = []
+            files_copied: list[str] = []  # v3.1: written or would-be-written (dry_run)
+            files_skipped: list[str] = []  # v3.1: already present and unmodified
+            files_protected: list[str] = []  # v3.1: user-modified, need force=True
             preserved: list[str] = []
             written_paths: list[Path] = []
             identical_paths: list[Path] = []
@@ -4540,10 +4593,18 @@ class SparkFrameworkEngine:
                         if manifest._sha256(dest_path) == manifest._sha256(source_path):
                             _log.info("Bootstrap file already matches source: %s", rel_path)
                             identical_paths.append(dest_path)
-                        else:
+                            files_skipped.append(rel_path)  # v3.1: unmodified
+                            continue
+                        # Content differs from source.
+                        if not force:
                             _log.warning("Bootstrap file preserved (existing different content): %s", rel_path)
                             preserved.append(rel_path)
-                        continue
+                            files_protected.append(rel_path)  # v3.1: user-modified
+                            continue
+                        # force=True: fall through to overwrite existing file.
+                        _log.warning(
+                            "Bootstrap file force-overwritten (force=True): %s", rel_path,
+                        )
 
                     dest_path.parent.mkdir(parents=True, exist_ok=True)
                     # Preserve cross-owner ownership: skip gateway upsert if
@@ -4559,18 +4620,21 @@ class SparkFrameworkEngine:
                         )
                         preserved.append(rel_path)
                         continue
-                    _gateway_write_bytes(
-                        self._ctx.workspace_root,
-                        github_rel,
-                        source_path.read_bytes(),
-                        manifest,
-                        _BOOTSTRAP_PACKAGE_ID,
-                        ENGINE_VERSION,
-                    )
-                    written_paths.append(dest_path)
-                    files_written.append(rel_path)
+                    if not dry_run:
+                        _gateway_write_bytes(
+                            self._ctx.workspace_root,
+                            github_rel,
+                            source_path.read_bytes(),
+                            manifest,
+                            _BOOTSTRAP_PACKAGE_ID,
+                            ENGINE_VERSION,
+                        )
+                        written_paths.append(dest_path)
+                        files_written.append(rel_path)
+                    files_copied.append(rel_path)  # v3.1: copied or would-be-copied
                     _log.info(
-                        "[SPARK-ENGINE][INFO] Bootstrapped: %s",
+                        "[SPARK-ENGINE][INFO] %s: %s",
+                        "dry_run" if dry_run else "Bootstrapped",
                         github_rel,
                     )
             except OSError as exc:
@@ -4589,13 +4653,18 @@ class SparkFrameworkEngine:
                     "success": False,
                     "status": "error",
                     "files_written": [],
+                    "files_copied": files_copied,
+                    "files_skipped": files_skipped,
+                    "files_protected": files_protected,
+                    "sentinel_present": sentinel.is_file(),
+                    "message": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                     "preserved": preserved,
                     "workspace": str(self._ctx.workspace_root),
                     "install_base_requested": install_base,
                     "note": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 }
 
-            if written_paths or identical_paths:
+            if not dry_run and (written_paths or identical_paths):
                 bootstrap_manifest_targets = [
                     (dest_path.relative_to(workspace_github_root).as_posix(), dest_path)
                     for dest_path in written_paths + identical_paths
@@ -4621,6 +4690,15 @@ class SparkFrameworkEngine:
                 "success": True,
                 "status": "bootstrapped",
                 "files_written": files_written,
+                "files_copied": files_copied,
+                "files_skipped": files_skipped,
+                "files_protected": files_protected,
+                "sentinel_present": sentinel.is_file(),
+                "message": (
+                    "Bootstrap simulated (dry_run=True). No files were written."
+                    if dry_run
+                    else "Bootstrap completed. Run /scf-list-available to inspect the package catalog."
+                ),
                 "preserved": preserved,
                 "workspace": str(self._ctx.workspace_root),
                 "note": "Bootstrap completed. Run /scf-list-available to inspect the package catalog.",

@@ -10,6 +10,20 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Added
 
+- `scf_bootstrap_workspace` — nuovi parametri `force: bool = False` e
+  `dry_run: bool = False` (v3.1 extension). Con `force=True` sovrascrive anche
+  i file modificati dall'utente. Con `dry_run=True` simula il bootstrap senza
+  scrivere file.
+- `scf_bootstrap_workspace` — nuovi campi nella response: `files_copied`
+  (percorsi scritti o che sarebbero stati scritti in dry_run), `files_skipped`
+  (già presenti e invariati), `files_protected` (modificati dall'utente, richiedono
+  force=True), `sentinel_present` (bool), `message` (stringa descrittiva).
+  Tutti i return path esistenti mantengono backward compatibility (`files_written`,
+  `preserved`, `note`).
+- `tests/test_bootstrap_workspace_extended.py` — +7 test: `force`/`dry_run`,
+  `files_skipped`/`files_protected`, presenza nuovi campi v3.1 in tutti i path di
+  successo. Suite: 306 → 313 passed.
+
 - `WorkspaceWriteGateway` in `spark/manifest/gateway.py` — gateway centralizzato
   per scritture su `<workspace>/.github/**`. Espone `write()`, `write_bytes()`,
   `delete()` che aggiornano atomicamente il manifest dopo ogni write.
