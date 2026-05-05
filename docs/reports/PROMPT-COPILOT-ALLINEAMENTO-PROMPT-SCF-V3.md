@@ -119,6 +119,12 @@ I valori validi sono: `replace`, `preserve`, `manual`, `auto`,
 `assisted`. Il prompt deve presentarli con descrizione minima
 di ciascuno, non solo citare `replace`.
 
+> **ERRATA (2026-05-05):** `preserve` non è un conflict_mode valido
+> nell'engine. Il valore corretto è `abort`. Costante verificata in
+> `spark/merge/validators.py` — `SUPPORTED_CONFLICT_MODES = {"abort",
+> "replace", "manual", "auto", "assisted"}`. L'implementazione dei
+> prompt usa già i valori corretti.
+
 **P4 — Update flusso duale:**
 Distinguere tra update singolo (`scf_update_package(package_id)`)
 e batch (`scf_check_updates()` → `scf_apply_updates()`).
