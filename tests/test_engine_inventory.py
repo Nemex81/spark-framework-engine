@@ -11,9 +11,6 @@ from unittest.mock import MagicMock, patch
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
 
-for _mod in ("mcp", "mcp.server", "mcp.server.fastmcp"):
-    sys.modules.setdefault(_mod, MagicMock())
-
 _spec = importlib.util.spec_from_file_location("spark_framework_engine", _ENGINE_PATH)
 _module = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
 sys.modules["spark_framework_engine"] = _module

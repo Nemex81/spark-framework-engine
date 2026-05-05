@@ -18,10 +18,6 @@ from unittest.mock import MagicMock
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
 
-# Provide mock stubs for mcp so the module loads without the real package.
-for _mod in ("mcp", "mcp.server", "mcp.server.fastmcp"):
-    sys.modules.setdefault(_mod, MagicMock())
-
 _spec = importlib.util.spec_from_file_location("spark_framework_engine", _ENGINE_PATH)
 _module = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
 # Register in sys.modules before exec so @dataclass can resolve the module namespace.

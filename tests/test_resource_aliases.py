@@ -14,9 +14,6 @@ from unittest.mock import MagicMock
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
 _ENGINE_DIR = _ENGINE_PATH.parent
 
-for _mod in ("mcp", "mcp.server", "mcp.server.fastmcp"):
-    sys.modules.setdefault(_mod, MagicMock())
-
 _spec = importlib.util.spec_from_file_location("spark_framework_engine", _ENGINE_PATH)
 _module = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
 sys.modules["spark_framework_engine"] = _module
@@ -94,16 +91,10 @@ def _build(tmp: Path):  # noqa: ANN202
 
 
 def _run(coro):  # noqa: ANN001
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 class TestResourceHandlersRegistry(unittest.TestCase):
-    def setUp(self) -> None:
-        try:
-            asyncio.get_event_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-
     def test_agent_handler_via_registry(self) -> None:
         with TemporaryDirectory() as tmp:
             _, mcp, _ = _build(Path(tmp))

@@ -13,10 +13,7 @@ from unittest.mock import MagicMock
 _ENGINE_PATH = Path(__file__).parent.parent / "spark-framework-engine.py"
 _ENGINE_DIR = _ENGINE_PATH.parent
 
-for _mod in ("mcp", "mcp.server", "mcp.server.fastmcp"):
-    sys.modules.setdefault(_mod, MagicMock())
-
-# Inject FastMCP-like dummy that records tool registrations.
+# The fastmcp stub is initialized by conftest.py stub_mcp_modules at session start.
 _fake_fastmcp = sys.modules["mcp.server.fastmcp"]
 
 
@@ -85,16 +82,10 @@ def _build_workspace(tmp: Path, *, authorized: bool = True) -> tuple[Any, _StubM
 
 
 def _run(coro):  # noqa: ANN001
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 class TestOverrideTools(unittest.TestCase):
-    def setUp(self) -> None:
-        try:
-            asyncio.get_event_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-
     def test_list_overrides_empty(self) -> None:
         with TemporaryDirectory() as tmp:
             _, mcp = _build_workspace(Path(tmp))
