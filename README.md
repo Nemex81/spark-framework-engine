@@ -7,8 +7,8 @@ come Resources e Tools consumabili da GitHub Copilot in Agent mode.
 Il motore legge il `.github/` del progetto attivo dinamicamente —
 non contiene dati di dominio, si adatta a qualsiasi progetto.
 
-> **Versione corrente:** 3.0.0 (28 aprile 2026). Per la migrazione da 2.x
-> consultare [`docs/MIGRATION-GUIDE-v3.md`](docs/MIGRATION-GUIDE-v3.md).
+> **Versione corrente:** 3.1.0 (05 maggio 2026). Per le note di migrazione
+> consultare il [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -248,13 +248,15 @@ e serve on-demand al modello AI (in Agent mode) tutto il contenuto SCF trovato.
 
 ---
 
-## Resources Disponibili (15)
+## Resources Disponibili (19)
 
 ```
 agents://list             agents://{name}
 skills://list             skills://{name}
 instructions://list       instructions://{name}
 prompts://list            prompts://{name}
+engine-skills://list      engine-skills://{name}       (alias deprecato → skills://)
+engine-instructions://list engine-instructions://{name} (alias deprecato → instructions://)
 scf://global-instructions
 scf://project-profile
 scf://model-policy
@@ -264,9 +266,21 @@ scf://workspace-info
 scf://runtime-state
 ```
 
-## Tools Disponibili (35)
+> Il conteggio 19 si riferisce alle resources engine-side registrate staticamente.
+> Il numero effettivo a runtime è superiore perché i pacchetti installati registrano
+> risorse aggiuntive al boot tramite `_v3_repopulate_registry()`.
+
+## Tools Disponibili (44)
 
 ```
+scf_list_overrides(resource_type=None)
+scf_read_resource(uri, source="auto")
+scf_get_skill_resource(name)
+scf_get_instruction_resource(name)
+scf_get_agent_resource(name)
+scf_get_prompt_resource(name)
+scf_override_resource(uri, content)
+scf_drop_override(uri)
 scf_list_agents           scf_get_agent(name)
 scf_list_skills           scf_get_skill(name)
 scf_list_instructions     scf_get_instruction(name)
@@ -280,7 +294,8 @@ scf_get_runtime_state()
 scf_update_runtime_state(patch)
 scf_get_update_policy()
 scf_set_update_policy(auto_update, default_mode=None, mode_per_package=None, mode_per_file_role=None)
-scf_bootstrap_workspace(install_base=False)
+scf_bootstrap_workspace(install_base=False, conflict_mode="abort", update_mode="")
+scf_migrate_workspace(dry_run=True, force=False)
 scf_list_available_packages()
 scf_get_package_info(package_id)
 scf_list_installed_packages()
@@ -302,7 +317,7 @@ scf_reject_conflict(session_id, conflict_id)
 
 Se il workspace e stato inizializzato con una versione precedente del sistema ownership-aware, il motore entra in modalita migrazione controllata.
 
-- Se manca `.github/runtime/spark-user-prefs.json`, il primo `scf_update_package(...)` o `scf_bootstrap_workspace(...)` restituisce `action_required: configure_update_policy` e propone la configurazione iniziale della policy.
+- Se manca `.github/user-prefs.json`, il primo `scf_update_package(...)` o `scf_bootstrap_workspace(...)` restituisce `action_required: configure_update_policy` e propone la configurazione iniziale della policy.
 - I file provenienti da pacchetti legacy che non hanno metadata `scf_*` vengono trattati in modo retrocompatibile come `scf_merge_strategy: replace`.
 - Se `.github/copilot-instructions.md` esiste senza marker SCF completi, il motore non inietta marker automaticamente: restituisce `action_required: migrate_copilot_instructions` e attende una conferma esplicita.
 - La migrazione del file richiede sempre autorizzazione attiva per scrivere sotto `.github/`.
@@ -319,7 +334,7 @@ FAQ rapida:
 (`file`, `default_missing`, `default_corrupt`) e configurazione effettiva.
 
 `scf_set_update_policy(auto_update, default_mode=None, mode_per_package=None, mode_per_file_role=None)`
-aggiorna `.github/runtime/spark-user-prefs.json` senza toccare i file dei pacchetti e
+aggiorna `.github/user-prefs.json` senza toccare i file dei pacchetti e
 prepara il comportamento di installazione, update e bootstrap esteso.
 
 `scf_bootstrap_workspace(install_base=False, conflict_mode="abort", update_mode="")` copia nel workspace utente il set base di bootstrap:
@@ -346,6 +361,12 @@ configurazione iniziale della policy.
 Se `install_base=True`, l'eventuale creazione o aggiornamento di `.github/copilot-instructions.md`
 avviene nel flusso di installazione del pacchetto tramite merge delle sezioni distribuite dal package,
 non tramite copia del file assemblato del motore.
+
+**Nota payload:** il dizionario di ritorno non è uniforme tra tutti i rami di esecuzione.
+I campi garantiti in ogni ramo sono: `success`, `status`, `files_written`, `preserved` e `workspace`.
+I campi estesi (`action_required`, `authorization_required`, `github_write_authorized`,
+`diff_summary`, `phase6_assets`, `base_install`, `policy_created`) sono presenti solo
+nei rami pertinenti (flusso autorizzazione, bootstrap esteso, installazione base).
 
 `scf_get_package_info(package_id)` espone anche i campi del `package-manifest.json`
 schema `2.0`, inclusi `min_engine_version`, `dependencies`, `conflicts`,
@@ -422,11 +443,11 @@ lasciando il file in fallback manuale con marker di conflitto.
 
 ## Gestione Update Workspace
 
-Il nuovo sistema di ownership e update policy si appoggia a tre file runtime sotto `.github/runtime/`:
+Il nuovo sistema di ownership e update policy usa i seguenti file runtime:
 
-- `spark-user-prefs.json` per la policy del workspace
-- `orchestrator-state.json` per l'autorizzazione sessione alle scritture protette
-- `backups/<timestamp>/` per i backup automatici dei percorsi sostituiti
+- `.github/user-prefs.json` — policy update del workspace
+- `.github/runtime/orchestrator-state.json` — autorizzazione sessione alle scritture protette
+- `{engine_root}/runtime/{hash[:12]}/` — directory engine-local per snapshot, sessioni di merge e backup (path calcolato da `resolve_runtime_dir` in `spark/boot/validation.py`; sovrascrivibile con la variabile d'ambiente `SPARK_RUNTIME_DIR`)
 
 ### Flusso a 6 step
 
