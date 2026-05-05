@@ -4124,10 +4124,23 @@ class SparkFrameworkEngine:
                   preserved (list): all skipped paths (backward-compat superset).
                   note (str): alias for message (backward-compat).
             """
+            base_result: dict[str, Any] = {
+                "status": "unknown",
+                "message": "",
+                "files_copied": [],
+                "files_skipped": [],
+                "files_protected": [],
+                "sentinel_present": False,
+            }
             if install_base and conflict_mode not in _SUPPORTED_CONFLICT_MODES:
                 return {
+                    **base_result,
                     "success": False,
                     "status": "error",
+                    "message": (
+                        f"Unsupported conflict_mode '{conflict_mode}'. "
+                        "Supported modes: abort, replace, manual, auto, assisted."
+                    ),
                     "files_written": [],
                     "preserved": [],
                     "workspace": str(self._ctx.workspace_root),
@@ -4142,8 +4155,13 @@ class SparkFrameworkEngine:
             allowed_bootstrap_modes = {"", "ask", "integrative", "conservative", "ask_later"}
             if normalized_bootstrap_mode not in allowed_bootstrap_modes:
                 return {
+                    **base_result,
                     "success": False,
                     "status": "error",
+                    "message": (
+                        f"Unsupported update_mode '{update_mode}'. Supported modes: "
+                        "ask, integrative, conservative, ask_later."
+                    ),
                     "files_written": [],
                     "preserved": [],
                     "workspace": str(self._ctx.workspace_root),
@@ -4223,8 +4241,10 @@ class SparkFrameworkEngine:
                 if policy_source != "file":
                     if normalized_bootstrap_mode == "":
                         return {
+                            **base_result,
                             "success": True,
                             "status": "policy_configuration_required",
+                            "message": "Configure the initial workspace update policy before running the extended bootstrap flow.",
                             "files_written": [],
                             "preserved": [],
                             "workspace": str(self._ctx.workspace_root),
@@ -4245,8 +4265,10 @@ class SparkFrameworkEngine:
                         )
                         if not github_write_authorized:
                             return {
+                                **base_result,
                                 "success": True,
                                 "status": "authorization_required",
+                                "message": "Authorize writes under .github before migrating this legacy workspace.",
                                 "files_written": [],
                                 "preserved": [],
                                 "workspace": str(self._ctx.workspace_root),
@@ -4271,9 +4293,15 @@ class SparkFrameworkEngine:
                     install_context = _get_package_install_context("spark-base")
                     if install_context.get("success") is False:
                         return {
+                            **base_result,
                             **install_context,
                             "status": "error",
+                            "message": install_context.get("note", ""),
                             "files_written": [],
+                            "files_copied": [],
+                            "files_skipped": [],
+                            "files_protected": [],
+                            "sentinel_present": False,
                             "preserved": [],
                             "workspace": str(self._ctx.workspace_root),
                             "install_base_requested": install_base,
@@ -4291,8 +4319,10 @@ class SparkFrameworkEngine:
                     )
                     if remote_fetch_errors:
                         return {
+                            **base_result,
                             "success": False,
                             "status": "error",
+                            "message": "Cannot build the spark-base bootstrap diff preview.",
                             "files_written": [],
                             "preserved": [],
                             "workspace": str(self._ctx.workspace_root),
@@ -4319,8 +4349,10 @@ class SparkFrameworkEngine:
                 github_write_authorized = bool(orchestrator_state.get("github_write_authorized", False))
                 if not github_write_authorized:
                     return {
+                        **base_result,
                         "success": True,
                         "status": "authorization_required",
+                        "message": "Authorize writes under .github before running the extended bootstrap flow.",
                         "files_written": [],
                         "preserved": [],
                         "workspace": str(self._ctx.workspace_root),

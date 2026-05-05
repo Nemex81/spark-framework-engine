@@ -127,21 +127,29 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
   istruzioni, prompt, `AGENTS.md`, `copilot-instructions.md` e `project-profile.md`.
 - **Validazione:** `38 passed, 6 skipped` su suite focalizzata bootstrap/locator.
 
-### P4 — Logica duplicata in `scf_bootstrap_workspace` (REFACTOR-FUTURO)
+### P4 — ~~Logica duplicata in `scf_bootstrap_workspace`~~ (NO-OP 2026-05-05)
 
 - **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
-- **Problema:** Il corpo della funzione contiene logica di loop bootstrap duplicata
-  (eredità del path pre-patch). Consolidare in un helper privato `_copy_bootstrap_targets`
-  per ridurre la duplicazione e migliorare la manutenibilità.
-- **Priorità:** BASSA. **Impatto:** leggibilità, non funzionale.
+- **Problema originale:** Il corpo della funzione conterrebbe logica di loop bootstrap duplicata
+  (eredità del path pre-patch). Consolidare in un helper privato `_copy_bootstrap_targets`.
+- **Verifica 2026-05-05:** Problema NON presente nel codice attuale. Esiste un solo loop di copia
+  (riga 4589 circa). L'altra occorrenza (riga 4515) è un'espressione generatore inside `all(...)`
+  per il gate di idempotenza — logica read-only, semanticamente incompatibile.
+  Il P4 si riferiva a una versione precedente del codice già consolidata.
+- **Stato:** CHIUSO — NO-OP.
 
-### P5 — Payload non uniforme in `scf_bootstrap_workspace` (REFACTOR-FUTURO)
+### P5 — ~~Payload non uniforme in `scf_bootstrap_workspace`~~ (RISOLTO 2026-05-05)
 
 - **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
-- **Problema:** I campi del dizionario di ritorno non sono uniformi tra tutti i rami
-  (rami vivi vs rami policy/authorization). Normalizzare verso uno schema fisso
-  con valori default espliciti per i campi assenti.
-- **Priorità:** BASSA. **Impatto:** API interna, non blocca nessun tool.
+- **Problema:** I campi del dizionario di ritorno non erano uniformi tra tutti i rami
+  (rami early-return vs ramo principale via `_finalize_bootstrap_result`).
+- **Soluzione applicata 2026-05-05:** Aggiunta di `base_result: dict[str, Any]` come prima
+  istruzione utile della funzione (fornisce defaults `files_copied`, `files_skipped`,
+  `files_protected`, `sentinel_present`, `message`). Tutti i 7 rami early-return aggiornati
+  con `**base_result` + campo `message` esplicito. Il ramo principale (`_finalize_bootstrap_result`)
+  NON toccato. Nessun import aggiunto.
+- **Validazione:** 313 passed, 9 skipped (baseline invariata).
+- **Stato:** RISOLTO.
 
 ### Verifica 2026-05-05 — `scf_bootstrap_workspace` audit completo
 
