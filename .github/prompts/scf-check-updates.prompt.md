@@ -5,7 +5,7 @@ scf_file_role: "prompt"
 name: scf-check-updates
 scf_merge_priority: 10
 scf_merge_strategy: "replace"
-scf_version: "1.2.0"
+scf_version: "1.2.1"
 type: prompt
 spark: true
 scf_owner: "spark-base"
@@ -29,4 +29,5 @@ Formato risposta:
 - Elenco per stato.
 - Sezione `Piano di update` con ordine previsto e dipendenze intra-plan.
 - Sezione `Blocchi` se il tool restituisce impedimenti all'applicazione.
-- Prossimo passo suggerito: usare `/scf-update` per applicare gli aggiornamenti.
+- Prossimo passo: usa `/scf-update` per applicare tutti gli aggiornamenti.
+  Per aggiornare un singolo pacchetto, usa `/scf-update` specificando il `package_id`.
