@@ -80,6 +80,49 @@ non un contenitore.
 3. Applica con `scf_apply_updates` solo dopo conferma esplicita dell'utente.
 4. Se il tool restituisce `batch_conflicts`, blocca e mostra i package bloccati.
 
+## Flusso D — Caricamento automatico instruction contestuali
+
+Prima di rispondere a qualsiasi richiesta operativa, applica questo
+pattern in base al contesto rilevato:
+
+**Task di sviluppo (codice, architettura, refactoring):**
+Chiama `scf_get_instruction(name="workflow-standard")` per applicare
+le regole di workflow attive del progetto corrente.
+
+**Operazioni git (commit, branch, merge, tag, push):**
+Chiama `scf_get_instruction(name="git-policy")` per applicare
+la policy git del progetto corrente.
+
+**Decisioni architetturali o modifiche strutturali:**
+Chiama `scf_get_instruction(name="framework-guard")` per verificare
+i vincoli architetturali prima di proporre qualsiasi modifica.
+
+**Task Python specifici (file .py, test, MCP):**
+Chiama `scf_get_instruction(name="python")` se disponibile,
+poi `scf_get_instruction(name="mcp-context")` per task engine.
+
+**Regola generale:**
+Usa `scf_list_instructions()` per scoprire le instruction disponibili
+nel workspace corrente prima di assumere quali esistano.
+Il contenuto restituito da `scf_get_instruction` va applicato
+immediatamente nella sessione corrente come contesto operativo.
+
+## Flusso E — Diagnostica sistema
+
+1. Stato workspace: `scf_get_workspace_info()` per panoramica completa.
+2. Integrità pacchetti: `scf_verify_workspace()` per rilevare
+   discrepanze tra manifest e file fisici.
+3. Stato motore: `scf_verify_system()` per verificare tool registrati
+   e versione engine.
+4. Runtime: `scf_get_runtime_state()` per leggere lo stato runtime
+   corrente incluso `github_write_authorized`.
+5. Se `scf_verify_system()` segnala errori motore: blocca ogni
+   operazione e indirizza a `spark-engine-maintainer` con il
+   messaggio esatto restituito dal tool.
+6. Se `scf_verify_workspace()` rileva file mancanti o SHA non
+   corrispondenti: proponi `scf_install_package` o
+   `scf_apply_updates` per ripristinare l'integrità.
+
 ## Regole operative
 
 - Tono diretto, tecnico, orientato all'azione.
