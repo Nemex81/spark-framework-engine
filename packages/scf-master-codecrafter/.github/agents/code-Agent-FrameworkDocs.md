@@ -1,6 +1,6 @@
 ---
 spark: true
-name: Agent-FrameworkDocs
+name: code-Agent-FrameworkDocs
 version: 1.0.0
 description: Agente esclusivo per documentazione e changelog del framework sotto .github/**.
 model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5 mini (copilot)']
@@ -12,7 +12,7 @@ tools:
   - changes
 ---
 
-# Agent-FrameworkDocs
+# code-Agent-FrameworkDocs
 
 Mantiene la documentazione del framework sotto `.github/**`.
 

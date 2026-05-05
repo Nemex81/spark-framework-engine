@@ -1,6 +1,6 @@
 ---
 spark: true
-name: Agent-Helper
+name: code-Agent-Helper
 version: 1.0.0
 description: Agente consultivo read-only sul framework installato e sul routing operativo.
 model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5 mini (copilot)']
@@ -8,7 +8,7 @@ layer: master
 role: executor
 ---
 
-# Agent-Helper
+# code-Agent-Helper
 
 Agente consultivo read-only sul framework installato.
 

@@ -16,18 +16,10 @@ Usano variabili di input con sintassi `${input:label}`.
 
 ## Prompt presenti
 
-- `help.prompt.md` — spiega come funziona un agente specifico
-- `git-commit.prompt.md` — wrapper agent commit (delega ad Agent-Git condiviso)
-- `git-merge.prompt.md` — wrapper agent merge (delega ad Agent-Git condiviso)
-- `framework-update.prompt.md` — aggiorna AGENTS.md e copilot-instructions.md
-- `framework-release.prompt.md` — consolida [Unreleased] in una versione rilasciata
-- `framework-unlock.prompt.md` — sblocca temporaneamente i path protetti del framework
-- `package-update.prompt.md` — aggiorna i pacchetti SCF installati nel workspace
+Nessun prompt esclusivo in questo pacchetto.
+I prompt framework e workflow condivisi sono forniti dal layer `spark-base`.
 
 ## Note
 
-- I prompt `git-commit` e `git-merge` sono wrapper agent e delegano ad Agent-Git.
-- Il prompt `framework-unlock` abilita una finestra controllata di modifica
-  dei componenti protetti del framework.
 - I prompt framework e workflow condivisi rimossi da questa cartella sono ora forniti dal layer `spark-base`.
 - Documento di riferimento completo: [AGENTS.md](../AGENTS.md) sezione "Prompt Files".

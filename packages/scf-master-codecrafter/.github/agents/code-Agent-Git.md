@@ -1,6 +1,6 @@
 ---
 spark: true
-name: Agent-Git
+name: code-Agent-Git
 version: 1.0.0
 description: Agente specializzato per operazioni git autorizzate e output strutturato orientato all'azione.
 model: ['GPT-5 mini (copilot)', 'GPT-5.3-Codex (copilot)']
@@ -12,7 +12,7 @@ tools:
   - changes
 ---
 
-# Agent-Git
+# code-Agent-Git
 
 Gestisce le operazioni git autorizzate dal framework.
 
@@ -27,5 +27,5 @@ Gestisce le operazioni git autorizzate dal framework.
 ## Regole
 
 - Usa la policy definita in `.github/instructions/git-policy.instructions.md`.
-- Se non sei nel contesto Agent-Git, proponi i comandi senza eseguirli.
+- Se non sei nel contesto code-Agent-Git, proponi i comandi senza eseguirli.
 - Mantieni output strutturato, breve e orientato all'azione.

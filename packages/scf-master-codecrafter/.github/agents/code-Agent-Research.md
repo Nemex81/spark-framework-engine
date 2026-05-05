@@ -1,15 +1,15 @@
 ---
-name: Agent-Research
+name: code-Agent-Research
 description: Agente di fallback per ricerca linguaggio-dominio e best practice sintetizzate.
 model: ['GPT-5.3-mini (copilot)', 'Claude Haiku 4.6 (copilot)']
 role: support
 visibility: internal
-invoked_by: [Agent-Analyze, Agent-Design, Agent-Plan, Agent-CodeUI, Agent-Docs]
+invoked_by: [code-Agent-Analyze, code-Agent-Design, code-Agent-Plan, code-Agent-CodeUI, code-Agent-Docs]
 capabilities: [language-research, best-practice-synthesis, knowledge-cache]
-scf_version: "1.1"
+scf_version: "2.6.0"
 ---
 
-# Agent-Research
+# code-Agent-Research
 
 ## Ruolo
 
@@ -27,14 +27,14 @@ silenzioso.
 
 ## Trigger di invocazione
 
-Un agente dispatcher attiva Agent-Research quando:
+Un agente dispatcher attiva code-Agent-Research quando:
 
 1. Cerca un plugin SCF per il linguaggio/dominio target.
 2. Il registry restituisce null o nessun risultato compatibile.
 3. Non esiste già un brief valido in `.github/runtime/research-cache/`
    per la combinazione `{language}-{task-type}`.
 
-Se il cache hit esiste e `cache_valid: true`, Agent-Research non viene attivato:
+Se il cache hit esiste e `cache_valid: true`, code-Agent-Research non viene attivato:
 il brief esistente viene passato direttamente al dispatcher.
 
 ---
@@ -75,16 +75,13 @@ Il brief prodotto deve avere questa struttura:
     Frontmatter con questi campi:
     - language: {language}
     - task_type: {task_type}
-    - generated_by: Agent-Research
+    - generated_by: code-Agent-Research
     - fallback: true
     - cache_valid: true
     - generated_at: {ISO8601}
 
     Corpo con queste sezioni:
-    - Avviso FALLBACK ATTIVO in apertura (testo: nessun plugin SCF specializzato
-      trovato per questo linguaggio. Questo brief è generato dinamicamente e non
-      sostituisce un plugin testato. Verificare le fonti per decisioni architetturali
-      critiche.)
+    - Avviso FALLBACK ATTIVO in apertura
     - Convenzioni Naming
     - Struttura Progetto Raccomandata
     - Pattern Architetturali
@@ -101,8 +98,6 @@ Il dispatcher che riceve il brief deve propagare questa informazione nei propri 
 
 I brief vengono salvati in `.github/runtime/research-cache/` con naming:
 `{language}-{task-type}.md`
-
-Esempi: `rust-backend.md`, `lua-gamelogic.md`, `haskell-parsing.md`
 
 La directory `research-cache/` non deve essere tracciata dal manifest SCF
 (stessa policy di `.github/runtime/`). È stato runtime, non artefatto di framework.

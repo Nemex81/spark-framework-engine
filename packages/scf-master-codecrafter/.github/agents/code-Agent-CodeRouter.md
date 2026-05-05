@@ -1,19 +1,19 @@
 ---
-scf_merge_strategy: "replace"
+spark: true
 name: code-Agent-CodeRouter
-fallback: Agent-Research
 version: 1.0.0
 scf_owner: "scf-master-codecrafter"
-role: dispatcher
-delegates_to_capabilities: [code, code-ui, routing]
+scf_version: "2.6.0"
 scf_file_role: "agent"
-scf_version: "2.2.0"
-layer: master
+scf_merge_strategy: "replace"
 scf_merge_priority: 20
 scf_protected: false
-spark: true
-model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-Codex (copilot)']
 description: Dispatcher per implementazione. Instrada richieste code e code-ui verso agenti plugin.
+model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-Codex (copilot)']
+layer: master
+role: dispatcher
+delegates_to_capabilities: [code, code-ui, routing]
+fallback: code-Agent-Research
 ---
 
 # code-Agent-CodeRouter
@@ -44,4 +44,4 @@ Il tipo classificato determina quale capability cercare in scf://agents-index.
 2. Leggi l'indice agenti via `scf://agents-index`.
 3. Cerca prima un agente plugin con capability `code`, `code-ui` o `routing`.
 4. Se nessun plugin copre `code`, usa `code-Agent-Code` come executor generico del layer master.
-5. Usa `Agent-Research` solo quando mancano competenze implementative sufficienti o serve un brief esterno aggiuntivo.
+5. Usa `code-Agent-Research` solo quando mancano competenze implementative sufficienti o serve un brief esterno aggiuntivo.

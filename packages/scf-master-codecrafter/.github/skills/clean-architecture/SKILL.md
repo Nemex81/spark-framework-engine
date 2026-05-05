@@ -1,4 +1,4 @@
-﻿---
+---
 name: clean-architecture
 hosted_by: engine
 mcp_resource: "engine-skills://clean-architecture"

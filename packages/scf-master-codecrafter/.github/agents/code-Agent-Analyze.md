@@ -1,16 +1,16 @@
 ---
 spark: true
-name: Agent-Analyze
+name: code-Agent-Analyze
 version: 1.0.0
-description: Dispatcher per analisi e discovery read-only con fallback controllato ad Agent-Research.
+description: Dispatcher per analisi e discovery read-only con fallback controllato ad code-Agent-Research.
 model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5.3-mini (copilot)']
 layer: master
 role: dispatcher
 delegates_to_capabilities: [analyze]
-fallback: Agent-Research
+fallback: code-Agent-Research
 ---
 
-# Agent-Analyze
+# code-Agent-Analyze
 
 Dispatcher per analisi e discovery read-only.
 
@@ -19,4 +19,4 @@ Dispatcher per analisi e discovery read-only.
 - Per analisi su tool MCP, prompt framework o codice engine, considera `.github/instructions/mcp-context.instructions.md`.
 
 Instrada verso agenti plugin che dichiarano capability `analyze`.
-Se nessun plugin e disponibile, usa Agent-Research come fallback controllato.
+Se nessun plugin e disponibile, usa code-Agent-Research come fallback controllato.
