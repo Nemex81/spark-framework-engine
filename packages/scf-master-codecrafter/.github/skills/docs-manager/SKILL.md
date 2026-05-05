@@ -1,4 +1,4 @@
-﻿---
+---
 name: docs-manager
 hosted_by: engine
 mcp_resource: "engine-skills://docs-manager"

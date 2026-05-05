@@ -1,7 +1,7 @@
 ---
 spark: true
 scf_file_role: "config"
-scf_version: "2.3.0"
+scf_version: "2.6.0"
 scf_merge_strategy: "merge_sections"
 scf_protected: false
 scf_owner: "scf-master-codecrafter"
@@ -48,11 +48,9 @@ Quando il task tocca tool MCP o codice engine, mantieni separati `stdout` e `std
 
 ## Routing degli agenti
 
-- Agenti condivisi da `spark-base`: scoperti tramite `scf://agents-index`.
-	Coprono orchestrazione, git, release, framework docs, onboarding, ricerca,
-	analyze, plan, docs e validate.
 - Agente executor master: `code-Agent-Code` — implementazione codice.
-- Agenti dispatcher master: `code-Agent-Design`, `code-Agent-CodeUI`, `code-Agent-CodeRouter`.
+- Agenti dispatcher master: `code-Agent-CodeRouter`, `code-Agent-CodeUI`, `code-Agent-Design`, `code-Agent-Analyze`, `code-Agent-Docs`, `code-Agent-Plan`.
+- Agenti specializzati master: `code-Agent-FrameworkDocs` (docs framework), `code-Agent-Git` (git), `code-Agent-Helper` (consultivo), `code-Agent-Research` (fallback ricerca).
 - Agenti plugin (language-specific): dichiarano `plugin`, `capabilities`, `languages`
 	e vengono scoperti via `AGENTS-{plugin-id}.md` o tramite `scf://agents-index`.
 

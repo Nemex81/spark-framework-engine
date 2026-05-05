@@ -4,7 +4,7 @@ name: code-Agent-Code
 scf_protected: false
 capabilities: [code, implementation, fallback]
 version: 2.1.0
-scf_version: "2.2.0"
+scf_version: "2.6.0"
 scf_file_role: "agent"
 layer: master
 scf_merge_strategy: "replace"
@@ -38,6 +38,6 @@ Executor generico per richieste di implementazione quando non e disponibile un p
 ## Regole
 
 - Non sostituire i plugin linguaggio-specifici quando esistono e sono adatti al task.
-- Non usare Agent-Research come fallback automatico per scrivere codice: usalo solo per colmare gap di contesto.
+- Non usare code-Agent-Research come fallback automatico per scrivere codice: usalo solo per colmare gap di contesto.
 - Non fare refactor non richiesti.
 - Mantieni output leggibile, tecnico e orientato al task.
