@@ -81,7 +81,10 @@ Il brief prodotto deve avere questa struttura:
     - generated_at: {ISO8601}
 
     Corpo con queste sezioni:
-    - Avviso FALLBACK ATTIVO in apertura
+    - Avviso FALLBACK ATTIVO in apertura (testo: nessun plugin SCF specializzato
+      trovato per questo linguaggio. Questo brief è generato dinamicamente e non
+      sostituisce un plugin testato. Verificare le fonti per decisioni architetturali
+      critiche.)
     - Convenzioni Naming
     - Struttura Progetto Raccomandata
     - Pattern Architetturali
@@ -98,6 +101,8 @@ Il dispatcher che riceve il brief deve propagare questa informazione nei propri 
 
 I brief vengono salvati in `.github/runtime/research-cache/` con naming:
 `{language}-{task-type}.md`
+
+Esempi: `rust-backend.md`, `lua-gamelogic.md`, `haskell-parsing.md`
 
 La directory `research-cache/` non deve essere tracciata dal manifest SCF
 (stessa policy di `.github/runtime/`). È stato runtime, non artefatto di framework.
@@ -118,6 +123,7 @@ La directory `research-cache/` non deve essere tracciata dal manifest SCF
 - NON produrre output privo del frontmatter con `fallback: true`.
 - NON omettere il blocco warning nel corpo del brief.
 - NON salvare il brief fuori da `.github/runtime/research-cache/`.
-- NON essere invocato per linguaggi per cui esiste già un plugin SCF nel registry.
-- SE la ricerca produce risultati incerti, dichiararlo con nota `[UNCERTAIN]`
-  nella sezione "Errori Frequenti".
+- NON essere invocato per linguaggi per cui esiste già un plugin SCF
+  nel registry.
+- SE la ricerca produce risultati incerti, dichiararlo con nota
+  `[UNCERTAIN]` nella sezione "Errori Frequenti".
