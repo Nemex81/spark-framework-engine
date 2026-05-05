@@ -1,8 +1,7 @@
-# SPARK Framework Engine — TODO Coordinatore
-
+﻿# SPARK Framework Engine — TODO Coordinatore
 - **Sessione attiva:** Ciclo di refactoring modulare SPARK — COMPLETATO
 - **Ultimo aggiornamento:** 2026-05-05
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA — Refactoring-Estrazione Fase 1 COMPLETATA — Refactoring-Estrazione Fase 2 COMPLETATA
 - **Baseline test:** 0 failed / 313 passed / 9 skipped / 42 warnings (verificata 2026-05-05)
 
 ## Documenti di riferimento
@@ -56,11 +55,11 @@ Riferimento fisso per invariante diagnostico Fase 2+.
 
 ---
 
-## Fase 1 — Stabilizzazione (ATTIVA)
+## Fase 1 — Stabilizzazione (COMPLETATA)
 
 | Step | Operazione | Rischio | Stato | Note |
 |------|-----------|---------|-------|------|
-| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [x] | rinomina completata, import aggiornati | 
+| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [x] | rinomina completata, import aggiornati |
 | 1.2 | Hardening `engine_root` obbligatorio in `WorkspaceLocator` e `EngineInventory` | BASSO | [x] | commit fd4b552 |
 | 1.3 | Censimento marker `# FASE1-RIASSEGNA` | MEDIO | [x] | 0 marker trovati nel codice Python |
 | 1.4 | Analisi e fix 27 failure pre-esistenti (gruppi: bootstrap, lifecycle, locator) | ALTO | [x] | commit 95d0299, 2ccfc90 |
@@ -68,7 +67,6 @@ Riferimento fisso per invariante diagnostico Fase 2+.
 | 1.6 | Rimozione `pytest_out.txt` + aggiornamento `.gitignore` | BASSO | [x] | commit f1ed7b6 |
 | 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | [x] | baseline generata, 13013 bytes |
 | 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | [x] | audit documentale 2026-05-01 |
-
 **Invariante globale Fase 1:** la suite test non deve scendere sotto 0 failed / 282
 passed / 8 skipped dopo ogni step.
 
@@ -86,12 +84,36 @@ passed / 8 skipped dopo ogni step.
 
 ---
 
+## Sessione 2026-05-05 — Refactoring estrattivo (COMPLETATO)
+
+| Fase | Obiettivo | File introdotto | Stato |
+|------|-----------|-----------------|-------|
+| Refactoring Fase 1 | Estrazione ``spark/boot/install_helpers.py`` | ``spark/boot/install_helpers.py`` | COMPLETATA |
+| Refactoring Fase 2 | Estrazione ``spark/boot/lifecycle.py`` | ``spark/boot/lifecycle.py`` | COMPLETATA |
+
+### Refactoring Fase 1 — Estrazione `spark/boot/install_helpers.py` (DONE 2026-05-05)
+
+- **File:** `spark/boot/install_helpers.py` (nuovo)
+- **Operazione:** 21 funzioni estratte dalla closure `register_tools()` (13 pure + 8 shim).
+  `engine.py` alleggerito di circa 500 righe.
+- **Validazione:** 313 passed, 9 skipped (baseline invariata).
+- **Stato:** DONE.
+
+### Refactoring Fase 2 — Estrazione `spark/boot/lifecycle.py` (DONE 2026-05-05)
+
+- **File:** `spark/boot/lifecycle.py` (nuovo)
+- **Operazione:** `_V3LifecycleMixin` con 8 metodi v3 lifecycle estratti da
+  `SparkFrameworkEngine`. `engine.py` da ~5169 a 4002 righe (-22.6%).
+- **Validazione:** 313 passed, 9 skipped (baseline invariata).
+- **Stato:** DONE.
+
+---
+
 ## Anomalie note — Backlog completo
 
 ### ~~P0~~ RISOLTO — Causa dei 27 failure pre-esistenti (risolto in Step 1.4, commit 2ccfc90)
 
 I 27 failure erano divisi in 3 gruppi, tutti risolti:
-
 - **Gruppo A — Bootstrap (8 failure):** fix routing ManifestManager, scrittura
   manifest/snapshot nel bootstrap semplice, fixture test con `engine_root` reale;
   6+2 test marcati `@unittest.skip` (dead code early return). `[RISOLTO Step 1.4]`
@@ -151,6 +173,22 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
 - **Validazione:** 313 passed, 9 skipped (baseline invariata).
 - **Stato:** RISOLTO.
 
+### P6 — Fase 3 — Promozione oggetti closure a attributi di istanza (IN ATTESA DI CONFERMA)
+
+- **File:** `spark/boot/engine.py` — `SparkFrameworkEngine.__init__()` + `register_tools()`
+- **Descrizione:** `register_tools()` crea localmente manifest, registry, merge_engine,
+  snapshots, sessions come variabili di closure. Gli 8 shim in `install_helpers.py`
+  dipendono da questo ciclo di vita. La Fase 3 prevede la promozione di questi oggetti
+  a `self._manifest`, `self._registry` ecc. in `SparkFrameworkEngine.__init__()`,
+  eliminando gli shim e rendendo la logica testabile in isolamento.
+- **Prerequisito:** nessuno — il sistema e' stabile senza questa fase.
+- **Trigger consigliato:** solo se viene aggiunto un secondo entry point all'engine
+  (es. client Flutter o CLI diretta).
+- **Rischio:** ALTO — tocca `__init__` e centinaia di riferimenti interni.
+  Richiede ciclo di validazione dedicato.
+- **Priorita':** BASSA.
+- **Stato:** IN ATTESA DI CONFERMA DA LUCA.
+
 ### Verifica 2026-05-05 — `scf_bootstrap_workspace` audit completo
 
 - **Audit richiesto da:** Coordinatore SPARK Council (Perplexity) — proposta "tool non ancora implementato"
@@ -159,7 +197,7 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
   mai sovrascritti. Risposta MCP strutturata con tutti i campi richiesti. No stdout contaminato.
   `spark-assistant.agent.md` presente in `spark-base/.github/agents/`. Baseline 313 passed.
 - **Azioni eseguite:** nessuna modifica al codice. Aggiornamento date e baseline in questo file.
-- **Anomalie censite (già in P4/P5):** loop body duplicato e payload non uniforme — backlog BASSA priorità invariato.
+- **Anomalie censite (gia' in P4/P5):** loop body duplicato e payload non uniforme — backlog BASSA priorita' invariato.
 
 ---
 
