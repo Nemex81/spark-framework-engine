@@ -1,9 +1,9 @@
 # SPARK Framework Engine — TODO Coordinatore
 
 - **Sessione attiva:** Ciclo di refactoring modulare SPARK — COMPLETATO
-- **Ultimo aggiornamento:** 2026-05-02
+- **Ultimo aggiornamento:** 2026-05-05
 - **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA
-- **Baseline test:** 0 failed / 296 passed / 8 skipped (post-Fase 4-BIS commit a2a32ac)
+- **Baseline test:** 0 failed / 313 passed / 9 skipped / 42 warnings (verificata 2026-05-05)
 
 ## Documenti di riferimento
 
@@ -142,6 +142,16 @@ I 27 failure erano divisi in 3 gruppi, tutti risolti:
   (rami vivi vs rami policy/authorization). Normalizzare verso uno schema fisso
   con valori default espliciti per i campi assenti.
 - **Priorità:** BASSA. **Impatto:** API interna, non blocca nessun tool.
+
+### Verifica 2026-05-05 — `scf_bootstrap_workspace` audit completo
+
+- **Audit richiesto da:** Coordinatore SPARK Council (Perplexity) — proposta "tool non ancora implementato"
+- **Esito verifica:** SCENARIO C — Tool presente e completo (tool #37, riga 4086, engine.py).
+  Parametri `force`/`dry_run` presenti. Idempotenza via sentinella verificata. File user_protected
+  mai sovrascritti. Risposta MCP strutturata con tutti i campi richiesti. No stdout contaminato.
+  `spark-assistant.agent.md` presente in `spark-base/.github/agents/`. Baseline 313 passed.
+- **Azioni eseguite:** nessuna modifica al codice. Aggiornamento date e baseline in questo file.
+- **Anomalie censite (già in P4/P5):** loop body duplicato e payload non uniforme — backlog BASSA priorità invariato.
 
 ---
 
