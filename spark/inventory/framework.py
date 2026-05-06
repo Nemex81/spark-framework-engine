@@ -39,6 +39,23 @@ class FrameworkInventory:
         self.mcp_registry: McpResourceRegistry | None = None
         self.resource_store: PackageResourceStore | None = None
 
+    def _build_resolver(self) -> "ResourceResolver | None":
+        """Costruisce ResourceResolver se registry e store sono popolati.
+
+        Returns:
+            ResourceResolver pronto all'uso, o None se registry non ancora
+            popolato (compatibilità con invocazioni pre-populate_mcp_registry).
+        """
+        from spark.registry.resolver import ResourceResolver  # noqa: PLC0415
+
+        if self.mcp_registry is None or self.resource_store is None:
+            return None
+        return ResourceResolver(
+            registry=self.mcp_registry,
+            store=self.resource_store,
+            workspace_github_root=self._ctx.github_root,
+        )
+
     def populate_mcp_registry(
         self,
         engine_manifest: Mapping[str, Any] | None = None,
@@ -179,8 +196,10 @@ class FrameworkInventory:
             return None
         return None
 
-    def _build_framework_file(self, path: Path, category: str) -> FrameworkFile:
-        name = path.stem
+    def _build_framework_file(
+        self, path: Path, category: str, *, name: str | None = None
+    ) -> FrameworkFile:
+        resolved_name = name if name is not None else path.stem
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -194,7 +213,7 @@ class FrameworkInventory:
                 summary = stripped[:160]
                 break
         return FrameworkFile(
-            name=name, path=path, category=category, summary=summary, metadata=metadata
+            name=resolved_name, path=path, category=category, summary=summary, metadata=metadata
         )
 
     def _list_by_pattern(self, directory: Path, glob_pattern: str, category: str) -> list[FrameworkFile]:
@@ -206,6 +225,16 @@ class FrameworkInventory:
         )
 
     def list_agents(self) -> list[FrameworkFile]:
+        resolver = self._build_resolver()
+        if resolver is not None:
+            return sorted(
+                [
+                    self._build_framework_file(path, "agent", name=name)
+                    for name, path, _source in resolver.enumerate_merged("agents")
+                ],
+                key=lambda ff: ff.name,
+            )
+        # Fallback filesystem se resolver non disponibile.
         return self._list_by_pattern(self._ctx.github_root / "agents", "*.md", "agent")
 
     def list_skills(self) -> list[FrameworkFile]:
@@ -215,7 +244,20 @@ class FrameworkInventory:
         Format 2 (standard): .github/skills/skill-name/SKILL.md
 
         On name collisions, the legacy flat format takes precedence.
+        When ResourceResolver is available (post populate_mcp_registry), it handles
+        deduplication automatically including skills from the store.
         """
+        resolver = self._build_resolver()
+        if resolver is not None:
+            return sorted(
+                [
+                    self._build_framework_file(path, "skill", name=name)
+                    for name, path, _source in resolver.enumerate_merged("skills")
+                ],
+                key=lambda ff: ff.name,
+            )
+
+        # Fallback filesystem se resolver non disponibile.
         skills_root = self._ctx.github_root / "skills"
 
         # Pass 1: legacy flat format.
@@ -240,11 +282,30 @@ class FrameworkInventory:
                     if key not in seen:
                         standard.append(named_ff)
                         seen.add(key)
+                    else:
+                        # Il formato flat (.skill.md) ha già occupato il nome — logga la collisione.
+                        _log.warning(
+                            "[SPARK-ENGINE][WARNING] Skill name collision: '%s' "
+                            "flat format (.skill.md) wins over subdirectory version. "
+                            "Subdirectory skill at '%s' ignored.",
+                            key,
+                            skill_dir,
+                        )
 
         combined = flat + standard
         return sorted(combined, key=lambda ff: ff.name)
 
     def list_instructions(self) -> list[FrameworkFile]:
+        resolver = self._build_resolver()
+        if resolver is not None:
+            return sorted(
+                [
+                    self._build_framework_file(path, "instruction", name=name)
+                    for name, path, _source in resolver.enumerate_merged("instructions")
+                ],
+                key=lambda ff: ff.name,
+            )
+        # Fallback filesystem se resolver non disponibile.
         return self._list_by_pattern(self._ctx.github_root / "instructions", "*.instructions.md", "instruction")
 
     def list_prompts(self) -> list[FrameworkFile]:
@@ -257,6 +318,16 @@ class FrameworkInventory:
         and prompts://{name}, not as native MCP Prompt artefacts. Known portability
         constraint of the v1 design.
         """
+        resolver = self._build_resolver()
+        if resolver is not None:
+            return sorted(
+                [
+                    self._build_framework_file(path, "prompt", name=name)
+                    for name, path, _source in resolver.enumerate_merged("prompts")
+                ],
+                key=lambda ff: ff.name,
+            )
+        # Fallback filesystem se resolver non disponibile.
         return self._list_by_pattern(self._ctx.github_root / "prompts", "*.prompt.md", "prompt")
 
     def get_project_profile(self) -> FrameworkFile | None:

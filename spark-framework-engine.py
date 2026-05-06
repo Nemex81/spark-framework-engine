@@ -117,6 +117,7 @@ from spark.registry import (  # noqa: E402,F401
     McpResourceRegistry,
     PackageResourceStore,
     RegistryClient,
+    ResourceResolver,
     _V3_STORE_INSTALLATION_MODE,
     _build_package_raw_url_base,
     _resource_filename_candidates,
@@ -134,6 +135,7 @@ from spark.workspace import (  # noqa: E402,F401
 )
 from spark.packages import (  # noqa: E402,F401
     _build_registry_package_summary,
+    _get_deployment_modes,
     _get_registry_min_engine_version,
     _install_package_v3_into_store,
     _list_orphan_overrides_for_package,

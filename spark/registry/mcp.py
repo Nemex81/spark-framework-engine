@@ -117,6 +117,46 @@ class McpResourceRegistry:
             if entry.get("resource_type") == resource_type
         )
 
+    def list_resolved(self, resource_type: str) -> list[tuple[str, Path]]:
+        """Elenca coppie (uri, resolved_path) per le risorse di un tipo.
+
+        Ritorna solo le entry che hanno un path fisico risolto (engine o override).
+        Utile per iterare su tutte le risorse disponibili senza accedere
+        a FrameworkInventory (evita import circolare).
+
+        Args:
+            resource_type: tipo risorsa (agents, skills, instructions, prompts).
+
+        Returns:
+            Lista di tuple (uri, path) — path è il risultato di resolve(uri).
+            Ordinata per uri.
+        """
+        result: list[tuple[str, Path]] = []
+        for uri in self.list_by_type(resource_type):
+            path = self.resolve(uri)
+            if path is not None and path.is_file():
+                result.append((uri, path))
+        return result
+
+    def list_overrides(self, resource_type: str) -> list[tuple[str, Path]]:
+        """Elenca coppie (uri, override_path) per le risorse con override attivo.
+
+        Args:
+            resource_type: tipo risorsa (agents, skills, instructions, prompts).
+
+        Returns:
+            Lista di tuple (uri, override_path) per le entry con override.
+            Ordinata per uri.
+        """
+        result: list[tuple[str, Path]] = []
+        for uri, entry in sorted(self._entries.items()):
+            if entry.get("resource_type") != resource_type:
+                continue
+            override: Path | None = entry.get("override")
+            if override is not None and override.is_file():
+                result.append((uri, override))
+        return result
+
     def list_all(self) -> list[str]:
         return sorted(self._entries.keys())
 

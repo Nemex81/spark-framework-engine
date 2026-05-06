@@ -276,6 +276,60 @@ class _V3LifecycleMixin:
             "errors": [],
         }
 
+    def _install_standalone_files_v3(
+        self,
+        package_id: str,
+        pkg_version: str,
+        pkg_manifest: Mapping[str, Any],
+        manifest: ManifestManager,
+    ) -> dict[str, Any]:
+        """Copia nel workspace i file dichiarati in ``deployment_modes.standalone_files``.
+
+        A differenza di ``_install_workspace_files_v3`` (che opera su
+        ``workspace_files`` della Categoria A), questo metodo gestisce i file
+        di Categoria B che il pacchetto dichiara esplicitamente come
+        standalone, cioè file che devono risiedere fisicamente nel workspace
+        oltre che nello store MCP centrale.
+
+        Delega interamente a ``_install_workspace_files_v3`` usando un manifest
+        sintetico che mappa ``standalone_files`` su ``workspace_files``.
+
+        Args:
+            package_id: ID del pacchetto.
+            pkg_version: versione installata.
+            pkg_manifest: package-manifest.json (deve contenere
+                ``deployment_modes.standalone_files``).
+            manifest: ManifestManager attivo del workspace.
+
+        Returns:
+            Stesso formato di ``_install_workspace_files_v3``:
+            ``{"success": bool, "files_written": [...], "preserved": [...],
+              "errors": [...]}``. Se ``standalone_files`` è vuoto o assente,
+            ritorna success=True con tutte le liste vuote.
+        """
+        from spark.packages import _get_deployment_modes  # noqa: PLC0415
+
+        modes = _get_deployment_modes(pkg_manifest)
+        standalone_files = modes.get("standalone_files") or []
+        if not standalone_files:
+            return {
+                "success": True,
+                "files_written": [],
+                "preserved": [],
+                "errors": [],
+            }
+
+        synthetic_manifest: dict[str, Any] = {
+            "workspace_files": standalone_files,
+            "file_policies": pkg_manifest.get("file_policies") or {},
+        }
+        return self._install_workspace_files_v3(
+            package_id=package_id,
+            pkg_version=pkg_version,
+            pkg_manifest=synthetic_manifest,
+            manifest=manifest,
+        )
+
     def _remove_workspace_files_v3(
         self,
         package_id: str,

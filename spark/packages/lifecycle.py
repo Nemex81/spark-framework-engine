@@ -19,6 +19,34 @@ from spark.registry.v3_store import _build_package_raw_url_base
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
 
 
+def _get_deployment_modes(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Legge e normalizza la sezione deployment_modes dal manifest pacchetto.
+
+    Retrocompatibile: se la sezione è assente o malformata, ritorna i
+    valori di fallback v3 (mcp_store=True, standalone_copy=False).
+
+    Args:
+        manifest: dict del package-manifest.json letto dallo store.
+
+    Returns:
+        Dict normalizzato con chiavi: mcp_store (bool), standalone_copy
+        (bool), standalone_files (list[str]).
+    """
+    _FALLBACK: dict[str, Any] = {
+        "mcp_store": True,
+        "standalone_copy": False,
+        "standalone_files": [],
+    }
+    raw = manifest.get("deployment_modes")
+    if not isinstance(raw, dict):
+        return _FALLBACK.copy()
+    return {
+        "mcp_store": bool(raw.get("mcp_store", True)),
+        "standalone_copy": bool(raw.get("standalone_copy", False)),
+        "standalone_files": list(raw.get("standalone_files") or []),
+    }
+
+
 def _install_package_v3_into_store(
     engine_root: Path,
     package_id: str,

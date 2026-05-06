@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from spark.packages.lifecycle import (
+    _get_deployment_modes,
     _install_package_v3_into_store,
     _list_orphan_overrides_for_package,
     _remove_package_v3_from_store,
@@ -17,6 +18,7 @@ from spark.packages.registry_summary import (
 
 __all__ = [
     "_build_registry_package_summary",
+    "_get_deployment_modes",
     "_get_registry_min_engine_version",
     "_install_package_v3_into_store",
     "_list_orphan_overrides_for_package",

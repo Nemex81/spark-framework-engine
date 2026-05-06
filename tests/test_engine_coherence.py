@@ -4,6 +4,11 @@ from pathlib import Path
 
 _ENGINE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "engine.py"
 _SEQUENCE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "sequence.py"
+_TOOLS_RESOURCES_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_resources.py"
+_TOOLS_OVERRIDE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_override.py"
+_TOOLS_BOOTSTRAP_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_bootstrap.py"
+_TOOLS_POLICY_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_policy.py"
+_TOOLS_PACKAGES_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages.py"
 _CONSTANTS = Path(__file__).parent.parent / "spark" / "core" / "constants.py"
 _CHANGELOG = Path(__file__).parent.parent / "CHANGELOG.md"
 
@@ -16,11 +21,27 @@ def test_tool_counter_consistency():
 
     NOTA: a partire da v3.0 il pattern di registrazione tool usa
     l'helper @_register_tool("name") invece di @self._mcp.tool diretto.
+    NOTA D.1+: i tool factory (tools_resources.py e successivi) contribuiscono
+    al conteggio totale; vengono inclusi nel source concatenato.
     """
+
+    def _read(p: Path) -> str:
+        return p.read_text(encoding="utf-8") if p.exists() else ""
+
     source = (
         _ENGINE_PATH.read_text(encoding="utf-8")
         + "\n"
         + _SEQUENCE_PATH.read_text(encoding="utf-8")
+        + "\n"
+        + _read(_TOOLS_RESOURCES_PATH)
+        + "\n"
+        + _read(_TOOLS_OVERRIDE_PATH)
+        + "\n"
+        + _read(_TOOLS_BOOTSTRAP_PATH)
+        + "\n"
+        + _read(_TOOLS_POLICY_PATH)
+        + "\n"
+        + _read(_TOOLS_PACKAGES_PATH)
     )
 
     actual = len(re.findall(r"@_register_tool\(", source))

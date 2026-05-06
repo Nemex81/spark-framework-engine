@@ -22,6 +22,7 @@ WorkspaceContext: Any = _module.WorkspaceContext
 FrameworkInventory: Any = _module.FrameworkInventory
 
 import spark.boot.engine as boot_engine
+import spark.boot.tools_bootstrap as _tools_bootstrap
 
 
 class _FakeMCP:
@@ -136,7 +137,7 @@ async def test_bootstrap_writes_sentinel_last(
         return target
 
     with patch.object(
-        boot_engine,
+        _tools_bootstrap,
         "_gateway_write_bytes",
         side_effect=_record_gateway_write_bytes,
     ):

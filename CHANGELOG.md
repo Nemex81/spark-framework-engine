@@ -10,11 +10,20 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Added
 
-- _Nessuna voce._
+- `spark/boot/tools_packages.py` — nuovo modulo factory per i 15 tool package
+  lifecycle e conflict resolution: `scf_list_available_packages`,
+  `scf_get_package_info`, `scf_list_installed_packages`, `scf_install_package`,
+  `scf_check_updates`, `scf_update_package`, `scf_update_packages`,
+  `scf_apply_updates`, `scf_plan_install`, `scf_remove_package`,
+  `scf_get_package_changelog`, `scf_resolve_conflict_ai`, `scf_approve_conflict`,
+  `scf_reject_conflict`, `scf_finalize_update`. Factory `register_package_tools(engine, mcp, tool_names)`.
 
 ### Changed
 
-- _Nessuna voce._
+- `spark/boot/engine.py` — `register_tools()` ridotto ad assembler puro (5 chiamate
+  factory): registra sequenzialmente `register_resource_tools`, `register_override_tools`,
+  `register_policy_tools`, `register_package_tools`, `register_bootstrap_tools`.
+  Zero tool definiti inline. (Fase D.5 — Deframmentazione engine.py completata.)
 
 ### Fixed
 
