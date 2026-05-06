@@ -1,223 +1,287 @@
-﻿# SPARK Framework Engine — TODO Coordinatore
-- **Sessione attiva:** Ottimizzazioni Prestazionali v3 — COMPLETATA
-- **Ultimo aggiornamento:** 2026-05-06
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA — Refactoring-Estrazione Fase 1 COMPLETATA — Refactoring-Estrazione Fase 2 COMPLETATA — Ottimizzazioni Prestazionali v3 COMPLETATA
-- **Baseline test:** 0 failed / 313 passed / 9 skipped / 42 warnings (verificata 2026-05-06)
+# TODO — SPARK Dual-Mode Package Contract
 
-## Documenti di riferimento
+> Generato da Copilot Agent (spark-engine-maintainer) il 2026-05-06 UTC.
+> Strategia: Dual-Mode Package Contract v1.0
+> Stato: IN PIANIFICAZIONE
+>
+> Baseline test di riferimento: 313 passed / 9 skipped / 0 failed
+> Comando regressione: `C:/Users/nemex/Envs/audiomaker311/Scripts/python.exe -m pytest -q --ignore=tests/test_integration_live.py`
 
-- Design: `docs/REFACTORING-DESIGN.md`
-- Prospetto tecnico: `docs/REFACTORING-TECHNICAL-BRIEF.md`
-- Piano operativo Fase 0: `docs/coding plans/FASE0-PIANO-TECNICO.md`
-- Piano operativo Fase 1: `docs/coding plans/FASE1-PIANO-TECNICO.md`
-- Piano operativo Fase 2: `docs/coding plans/FASE2-PIANO-TECNICO.md`
-- Piano operativo Fase 3: `docs/coding plans/FASE3-PIANO-TECNICO.md`
-- Piano operativo Fase 4: `docs/coding plans/FASE4-PIANO-TECNICO.md`
-- Piano operativo Fase 5: `docs/coding plans/FASE5-PIANO-TECNICO.md`
+## Legenda stati
 
----
+- [ ] Da fare
+- [~] In corso
+- [x] Completato
+- [!] Bloccato (vedi note)
 
-## ✅ PREREQUISITO ZERO — Baseline diagnostica runtime (SODDISFATTO)
+***
 
-Baseline generata: `docs/reports/baseline-verify-workspace.json` (13013 bytes).
-Output reale di `scf_verify_workspace` con motore live post-Step 1.1 (2026-05-01).
-Riferimento fisso per invariante diagnostico Fase 2+.
+## Fase A — Schema manifest v4.0 + Collision warning + ResourceResolver
 
----
+> Prerequisito per tutte le fasi successive. Zero breaking change.
+> Rischio complessivo: BASSO.
 
-## Fase 0 — Modularizzazione (COMPLETATA)
+### Task A.1 — Collision warning in list_skills()
 
-| Step | Modulo | Rischio | File TODO | Stato |
-|------|--------|---------|-----------|-------|
-| 01 | `core` | BASSO | [fase0-step-01-core.md](todolist/fase0-step-01-core.md) | [x] |
-| 02 | `merge` | MEDIO | [fase0-step-02-merge.md](todolist/fase0-step-02-merge.md) | [x] |
-| 03 | `manifest` | MEDIO | [fase0-step-03-manifest.md](todolist/fase0-step-03-manifest.md) | [x] |
-| 04 | `registry` | MEDIO | [fase0-step-04-registry.md](todolist/fase0-step-04-registry.md) | [x] |
-| 05 | `workspace` | ALTO | [fase0-step-05-workspace.md](todolist/fase0-step-05-workspace.md) | [x] |
-| 06 | `packages` | MEDIO | [fase0-step-06-packages.md](todolist/fase0-step-06-packages.md) | [x] |
-| 07 | `assets` | BASSO | [fase0-step-07-assets.md](todolist/fase0-step-07-assets.md) | [x] |
-| 08 | `boot` + `inventory` | ALTO | [fase0-step-08-boot.md](todolist/fase0-step-08-boot.md) | [x] |
-| 09 | `cleanup hub` | BASSO | [fase0-step-09-cleanup.md](todolist/fase0-step-09-cleanup.md) | [x] |
+File: `spark/inventory/framework.py` — funzione `FrameworkInventory.list_skills()`
 
-### Deviazioni strutturali introdotte in Fase 0 (documentate, non bloccanti)
+- [ ] Nel ramo Pass 2 (standard subdirectory format), aggiungere `else` al blocco
+  `if key not in seen` con `_log.warning("[SPARK-ENGINE][WARNING] Skill name
+  collision: '%s' flat format (.skill.md) wins over subdirectory version.", key)`
+- [ ] Verificare che il warning sia emesso su `sys.stderr` tramite `_log` (non print)
+- [ ] Eseguire `pytest tests/ -q --ignore=tests/test_integration_live.py` — baseline
+  313 passed deve rimanere invariata
 
-- **`spark/inventory/` non previsto:** Copilot ha estratto `FrameworkInventory` e
-  `EngineInventory` in un package separato `spark/inventory/{framework,engine}.py`
-  invece di `spark/workspace/inventory.py` come dichiarato nel piano originale.
-  Il codice è corretto e funzionante. Il grafo in `REFACTORING-DESIGN.md` va aggiornato
-  (Step 1.8).
-- **`spark/workspace/update_policy.py` (ex `policy.py`):** Rinomina
-  completata in Step 1.1 (2026-05-01). Deviazione risolta.
-- **Marker `# FASE1-RIASSEGNA` mai materializzati nel codice Python:** i marker erano
-  citati nel piano ma non sono mai stati inseriti come commenti inline. Verificato con
-  grep exhaustivo in Fase 1 Step 1.3. Step chiuso a zero modifiche.
-- **`engine_root` obbligatorio:** hardening completato in Step 1.2 (commit fd4b552).
+### Task A.2 — Helper _get_deployment_modes in packages/lifecycle.py
 
----
+File: `spark/packages/lifecycle.py`
 
-## Fase 1 — Stabilizzazione (COMPLETATA)
+- [ ] Aggiungere funzione standalone `_get_deployment_modes(manifest: Mapping[str, Any])
+  -> dict[str, Any]` che legge `deployment_modes` dal manifest dict
+- [ ] Ritornare dict normalizzato: `{"mcp_store": bool, "standalone_copy": bool,
+  "standalone_files": list[str]}` con fallback espliciti (mcp_store=True,
+  standalone_copy=False, standalone_files=[]) quando la sezione è assente o malformata
+- [ ] Aggiungere export in `spark/packages/__init__.py`
+- [ ] Aggiungere test unitario in `tests/` per i casi: assente, parziale, malformato
 
-| Step | Operazione | Rischio | Stato | Note |
-|------|-----------|---------|-------|------|
-| 1.1 | Rinomina `policy.py` → `update_policy.py` + aggiorna import | BASSO | [x] | rinomina completata, import aggiornati |
-| 1.2 | Hardening `engine_root` obbligatorio in `WorkspaceLocator` e `EngineInventory` | BASSO | [x] | commit fd4b552 |
-| 1.3 | Censimento marker `# FASE1-RIASSEGNA` | MEDIO | [x] | 0 marker trovati nel codice Python |
-| 1.4 | Analisi e fix 27 failure pre-esistenti (gruppi: bootstrap, lifecycle, locator) | ALTO | [x] | commit 95d0299, 2ccfc90 |
-| 1.5 | Fix log count hardcoded 40/44 in `spark/boot/sequence.py` | BASSO | [x] | incluso fix Step 1.4 |
-| 1.6 | Rimozione `pytest_out.txt` + aggiornamento `.gitignore` | BASSO | [x] | commit f1ed7b6 |
-| 1.7 | Generazione baseline runtime `baseline-verify-workspace.json` | BASSO | [x] | baseline generata, 13013 bytes |
-| 1.8 | Aggiornamento `docs/REFACTORING-DESIGN.md` grafo Sezione 6 | BASSO | [x] | audit documentale 2026-05-01 |
-**Invariante globale Fase 1:** la suite test non deve scendere sotto 0 failed / 282
-passed / 8 skipped dopo ogni step.
+### Task A.3 — Modulo spark/registry/resolver.py
 
----
+File: `spark/registry/resolver.py` (NUOVO)
 
-## Fasi successive
+- [ ] Creare classe `ResourceResolver` con costruttore:
+  `__init__(self, registry: McpResourceRegistry, store: PackageResourceStore,
+  workspace_github_root: Path)`
+- [ ] Implementare `resolve(resource_type: str, name: str) -> Path | None` con
+  cascata: override (via registry.has_override + registry.resolve) →
+  workspace_physical (via workspace_github_root / resource_type) → store
+  (via registry.resolve_engine)
+- [ ] Implementare `enumerate_merged(resource_type: str) ->
+  list[tuple[str, Path, str]]` che restituisce (name, resolved_path, source)
+  per tutte le risorse da workspace fisico + store, deduplicando per nome con
+  stessa priorità di `resolve()` (source: "override" | "workspace" | "store")
+- [ ] Aggiungere export in `spark/registry/__init__.py`
+- [ ] Nessuna dipendenza da `FrameworkInventory` (evitare import circolare)
+- [ ] Aggiungere test unitario coprendo cascata, dedup e fallback path
 
-| Fase | Obiettivo | Piano | Stato |
-|------|-----------|-------|-------|
-| Fase 2 | Boot deterministico | [FASE2-PIANO-TECNICO.md](coding%20plans/FASE2-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 3 autorizzata |
-| Fase 3 | Separazione runtime | [FASE3-PIANO-TECNICO.md](coding%20plans/FASE3-PIANO-TECNICO.md) | COMPLETATA — apertura Fase 4 autorizzata |
-| Fase 4 | Gateway e workspace minimale | [FASE4-PIANO-TECNICO.md](coding%20plans/FASE4-PIANO-TECNICO.md) | COMPLETATA (SHA: d047cb0, ff966dc) |
-| Fase 5 | Consolidamento finale e verifica contratti | [FASE5-PIANO-TECNICO.md](coding%20plans/FASE5-PIANO-TECNICO.md) | COMPLETATA (SHA: a2a32ac) |
-| Fase 4-BIS | Chiusura INVARIANTE-4 — gateway forward writes | [FASE5-PIANO-TECNICO.md § Chiusura](coding%20plans/FASE5-PIANO-TECNICO.md) | COMPLETATA (SHA: a2a32ac, 2026-05-01) |
+### Task A.4 — Integrazione ResourceResolver in FrameworkInventory
 
----
+File: `spark/inventory/framework.py`
 
-## Sessione 2026-05-05 — Refactoring estrattivo (COMPLETATO)
+- [ ] Aggiungere metodo privato `_build_resolver() -> ResourceResolver | None` che
+  costruisce un `ResourceResolver` se `self.mcp_registry` e `self.resource_store`
+  sono popolati (non None), altrimenti ritorna None
+- [ ] Aggiornare `list_agents()`, `list_skills()`, `list_instructions()`,
+  `list_prompts()` per tentare `_build_resolver()`: se disponibile usare
+  `resolver.enumerate_merged(resource_type)` per costruire la lista di
+  `FrameworkFile`; fallback a `_list_by_pattern()` se resolver è None
+- [ ] Il tipo di ritorno `list[FrameworkFile]` rimane invariato — costruire
+  `FrameworkFile` dalla tupla `(name, path, source)` del resolver
+- [ ] Verificare che `scf_list_agents` e `agents://{name}` restituiscano contenuti
+  coerenti per lo stesso agente post-A.4
+- [ ] Aggiornare o aggiungere test per `list_agents` con resolver popolato
 
-| Fase | Obiettivo | File introdotto | Stato |
-|------|-----------|-----------------|-------|
-| Refactoring Fase 1 | Estrazione ``spark/boot/install_helpers.py`` | ``spark/boot/install_helpers.py`` | COMPLETATA |
-| Refactoring Fase 2 | Estrazione ``spark/boot/lifecycle.py`` | ``spark/boot/lifecycle.py`` | COMPLETATA |
+***
 
-### Refactoring Fase 1 — Estrazione `spark/boot/install_helpers.py` (DONE 2026-05-05)
+## Fase B — deployment_mode in scf_install_package
 
-- **File:** `spark/boot/install_helpers.py` (nuovo)
-- **Operazione:** 21 funzioni estratte dalla closure `register_tools()` (13 pure + 8 shim).
-  `engine.py` alleggerito di circa 500 righe.
-- **Validazione:** 313 passed, 9 skipped (baseline invariata).
-- **Stato:** DONE.
+> Dipende da Fase A (Task A.2 per `_get_deployment_modes`).
+> Rischio complessivo: BASSO.
 
-### Refactoring Fase 2 — Estrazione `spark/boot/lifecycle.py` (DONE 2026-05-05)
+### Task B.1 — _install_standalone_files_v3 in lifecycle.py
 
-- **File:** `spark/boot/lifecycle.py` (nuovo)
-- **Operazione:** `_V3LifecycleMixin` con 8 metodi v3 lifecycle estratti da
-  `SparkFrameworkEngine`. `engine.py` da ~5169 a 4002 righe (-22.6%).
-- **Validazione:** 313 passed, 9 skipped (baseline invariata).
-- **Stato:** DONE.
+File: `spark/boot/lifecycle.py` — classe `_V3LifecycleMixin`
 
-### Ottimizzazioni Prestazionali v3 — 8 OPT (COMPLETATA 2026-05-06)
+- [ ] Aggiungere metodo `_install_standalone_files_v3(self, package_id, pkg_version,
+  pkg_manifest, manifest) -> dict[str, Any]` con stessa firma di
+  `_install_workspace_files_v3`
+- [ ] Internamente: chiamare `_get_deployment_modes(pkg_manifest)` per ottenere
+  `standalone_files`; se lista vuota → ritornare `{"success": True, "files_written":
+  [], "preserved": [], "errors": []}`
+- [ ] Per ogni file in `standalone_files`: lookup in store via `PackageResourceStore`,
+  applica sha-check idempotente identica a `_install_workspace_files_v3`, scrivi
+  via `WorkspaceWriteGateway`
+- [ ] Il metodo è idempotente: stessa logica preservation gate di
+  `_install_workspace_files_v3`
+- [ ] Aggiungere test unitario parametrizzato: standalone_files presente / assente /
+  con sha-match (idempotenza)
 
-- **Commit:** `0c9d7ec` `perf(install): optimize v3 package installation (manifest cache, batch writes, parallel downloads)`
-- **File toccati:** `spark/manifest/manifest.py`, `spark/manifest/gateway.py`,
-  `spark/boot/lifecycle.py`, `spark/packages/lifecycle.py`, `spark/assets/phase6.py`
-- **OPT-1:** Cache mtime-validata in `ManifestManager.load()` — evita relettura JSON su accessi ripetuti.
-- **OPT-2:** Accumulo `pending_writes` in `_install_workspace_files_v3` — singola flush fisica invece di scrittura per file.
-- **OPT-3:** Download parallelo in `_install_package_v3_into_store` — `ThreadPoolExecutor(max_workers=8)` al posto del loop seriale.
-- **OPT-4:** Singola `manifest.upsert_many()` dopo batch writes — elimina N round-trip al file manifest.
-- **OPT-5:** SHA-sentinel skip in `_install_workspace_files_v3` — file invariati non vengono riscritti.
-- **OPT-6:** Hint `freshly_installed` in `_v3_repopulate_registry` — evita rilettura da disco del pacchetto appena installato.
-- **OPT-7:** `sha256_hint` in `ManifestManager._build_entry()` — evita ricalcolo SHA su contenuto già noto.
-- **OPT-8:** `WorkspaceWriteGateway.write_many()` — N scritture fisiche + singola `upsert_many()` al manifest.
-- **Validazione:** 313 passed, 9 skipped (baseline invariata dopo fix cache mtime).
-- **Stato:** DONE.
+### Task B.2 — Parametro deployment_mode in scf_install_package
 
----
+File: `spark/boot/engine.py` — closure `scf_install_package` dentro `register_tools()`
 
-## Anomalie note — Backlog completo
+- [ ] Aggiungere `deployment_mode: str = "auto"` come parametro tra `update_mode`
+  e `migrate_copilot_instructions`
+- [ ] Aggiungere validazione: valori ammessi `"auto"`, `"store"`, `"copy"`;
+  errore MCP-friendly per valori non supportati
+- [ ] Logica dispatch: `"store"` → comportamento v3 attuale (skip standalone);
+  `"copy"` → chiama `self._install_standalone_files_v3` dopo
+  `_install_workspace_files_v3`; `"auto"` → legge `_get_deployment_modes(pkg_manifest).
+  standalone_copy` e decide
+- [ ] Includere `standalone_files_written` nel dict di ritorno del tool quando
+  `deployment_mode != "store"`
+- [ ] Verificare che tutti i caller interni esistenti (`scf_bootstrap_workspace`,
+  `scf_update_packages`, ecc.) non passino `deployment_mode` → ricevono default
+  `"auto"` → comportamento invariato
 
-### ~~P0~~ RISOLTO — Causa dei 27 failure pre-esistenti (risolto in Step 1.4, commit 2ccfc90)
+***
 
-I 27 failure erano divisi in 3 gruppi, tutti risolti:
-- **Gruppo A — Bootstrap (8 failure):** fix routing ManifestManager, scrittura
-  manifest/snapshot nel bootstrap semplice, fixture test con `engine_root` reale;
-  6+2 test marcati `@unittest.skip` (dead code early return). `[RISOLTO Step 1.4]`
-- **Gruppo B — Lifecycle v3 (15 failure):** root cause — `scf_install_package`
-  chiamava il vecchio metodo istanza `_install_package_v3_into_store`. Cambiato
-  a `self._install_package_v3`. Fix cascata: idempotenza, auth, manifest path,
-  RegistryClient inline. `[RISOLTO Step 1.4]`
-- **Gruppo C — Altri (4 failure):** locator guard `_is_user_home`, spark-init adopt
-  log, tool counter 44. `[RISOLTO Step 1.4/1.5]`
+## Fase C — Logging gap + scf_verify_workspace esteso
 
-### P1 — Non bloccanti, da trattare nei prossimi step
+> Dipende da Fase A (Task A.3 per ResourceResolver disponibile).
+> Indipendente da Fase B.
+> Rischio complessivo: BASSO.
 
-- **~~Log count hardcoded 40/44:~~** risolto in Step 1.5. `[RISOLTO]`
-- **`packages/diff.py` placeholder:** helper di diff sono inner function di
-  `register_tools`. Non estratti in Fase 0. Da valutare se estrarre in Fase 2
-  (modifica logica).
-- **~~Metodo istanza residuo `_install_package_v3_into_store`~~:** rimosso in Fase 2 Step 2.0. `[RISOLTO]`
+### Task C.1 — Source divergence report in scf_verify_workspace
 
-### P2 — Da trattare in Fase 2
+File: `spark/boot/engine.py` — closure `scf_verify_workspace` dentro `register_tools()`
 
-- **~~`_build_app` non deterministico~~:** risolto in Fase 2 (validation.py + SPARK_STRICT_BOOT feature flag). `[RISOLTO]`
-- **~~Riferimento obsoleto in FASE2~~:** piano aggiornato in chiusura Fase 2. `[RISOLTO]`
+- [ ] Dopo le verifiche esistenti, aggiungere blocco `source_divergence`:
+  costruire un `ResourceResolver` dal registry e store disponibili
+- [ ] Enumerare risorse in store (via `registry.list_all()` filtrate per tipo)
+  e risorse in workspace fisico (via `inventory.list_agents()` ecc.)
+- [ ] Classificare: `only_in_store` (store non presenti nel workspace fisico),
+  `only_in_workspace` (workspace non registrate nello store), `divergent_content`
+  (hash diverso store vs workspace per stessa risorsa)
+- [ ] Emettere `_log.warning("[SPARK-ENGINE][WARNING] Source divergence: ...")` per
+  ogni coppia divergente su stderr
+- [ ] Aggiungere campo `"source_divergence"` al dict di ritorno (non breaking: campo
+  nuovo opzionale)
 
-### P3 — Bootstrap primo avvio da workspace utente `[RISOLTO 2026-05-02]`
+***
 
-- **File:** `spark/workspace/locator.py`, `spark/boot/engine.py`, `spark/boot/sequence.py`, `mcp-config-example.json`
-- **Problema:** il server MCP non materializzava automaticamente il Layer 0 nel
-  workspace utente al primo avvio e la risoluzione del workspace dipendeva da
-  fallback fragili quando il processo veniva lanciato fuori dalla cartella progetto.
-- **Correzione applicata:** aggiunta precedenza esplicita per `--workspace` e env
-  `WORKSPACE_FOLDER`, hook di auto-bootstrap in `_build_app()`, bootstrap minimo
-  basato sul bundle locale `packages/spark-base/.github` con copia di agenti,
-  istruzioni, prompt, `AGENTS.md`, `copilot-instructions.md` e `project-profile.md`.
-- **Validazione:** `38 passed, 6 skipped` su suite focalizzata bootstrap/locator.
+## Fase D — Deframmentazione engine.py
 
-### P4 — ~~Logica duplicata in `scf_bootstrap_workspace`~~ (NO-OP 2026-05-05)
+> Dipende da Fase A e B (boundary tool stabilizzate).
+> Refactoring puro: nessun tool cambia nome, firma o comportamento.
+> Rischio complessivo: MEDIO (D.3 e D.5 ALTO per complessità logica).
 
-- **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
-- **Problema originale:** Il corpo della funzione conterrebbe logica di loop bootstrap duplicata
-  (eredità del path pre-patch). Consolidare in un helper privato `_copy_bootstrap_targets`.
-- **Verifica 2026-05-05:** Problema NON presente nel codice attuale. Esiste un solo loop di copia
-  (riga 4589 circa). L'altra occorrenza (riga 4515) è un'espressione generatore inside `all(...)`
-  per il gate di idempotenza — logica read-only, semanticamente incompatibile.
-  Il P4 si riferiva a una versione precedente del codice già consolidata.
-- **Stato:** CHIUSO — NO-OP.
+### Task D.0 — Prerequisito: conversione closure vars → instance attrs
 
-### P5 — ~~Payload non uniforme in `scf_bootstrap_workspace`~~ (RISOLTO 2026-05-05)
+File: `spark/boot/engine.py`
 
-- **File:** `spark/boot/engine.py` — `scf_bootstrap_workspace`
-- **Problema:** I campi del dizionario di ritorno non erano uniformi tra tutti i rami
-  (rami early-return vs ramo principale via `_finalize_bootstrap_result`).
-- **Soluzione applicata 2026-05-05:** Aggiunta di `base_result: dict[str, Any]` come prima
-  istruzione utile della funzione (fornisce defaults `files_copied`, `files_skipped`,
-  `files_protected`, `sentinel_present`, `message`). Tutti i 7 rami early-return aggiornati
-  con `**base_result` + campo `message` esplicito. Il ramo principale (`_finalize_bootstrap_result`)
-  NON toccato. Nessun import aggiunto.
-- **Validazione:** 313 passed, 9 skipped (baseline invariata).
-- **Stato:** RISOLTO.
+- [ ] Aggiungere metodo privato `_init_runtime_objects() -> None` in
+  `SparkFrameworkEngine`
+- [ ] Spostare in `_init_runtime_objects()` la creazione di: `ManifestManager` →
+  `self._manifest`, `RegistryClient` → `self._registry_client`, `MergeEngine` →
+  `self._merge_engine`, `SnapshotManager` → `self._snapshots`,
+  `MergeSessionManager` → `self._sessions`
+- [ ] Preservare `self._sessions.cleanup_expired_sessions()` in `_init_runtime_objects()`
+- [ ] In `register_tools()`: sostituire la creazione locale con
+  `self._init_runtime_objects()` e aggiungere alias locali `manifest = self._manifest`
+  ecc. per mantenere i tool closure invariati nel breve termine
+- [ ] Aggiungere type hints per i nuovi attributi in `__init__`
+- [ ] Eseguire suite completa — baseline 313 passed deve rimanere invariata
 
-### P6 — Fase 3 — Promozione oggetti closure a attributi di istanza (IN ATTESA DI CONFERMA)
+### Task D.1 — Estrazione tools_resources.py (13 tool)
 
-- **File:** `spark/boot/engine.py` — `SparkFrameworkEngine.__init__()` + `register_tools()`
-- **Descrizione:** `register_tools()` crea localmente manifest, registry, merge_engine,
-  snapshots, sessions come variabili di closure. Gli 8 shim in `install_helpers.py`
-  dipendono da questo ciclo di vita. La Fase 3 prevede la promozione di questi oggetti
-  a `self._manifest`, `self._registry` ecc. in `SparkFrameworkEngine.__init__()`,
-  eliminando gli shim e rendendo la logica testabile in isolamento.
-- **Prerequisito:** nessuno — il sistema e' stabile senza questa fase.
-- **Trigger consigliato:** solo se viene aggiunto un secondo entry point all'engine
-  (es. client Flutter o CLI diretta).
-- **Rischio:** ALTO — tocca `__init__` e centinaia di riferimenti interni.
-  Richiede ciclo di validazione dedicato.
-- **Priorita':** BASSA.
-- **Stato:** IN ATTESA DI CONFERMA DA LUCA.
+File: `spark/boot/tools_resources.py` (NUOVO)
 
-### Verifica 2026-05-05 — `scf_bootstrap_workspace` audit completo
+- [ ] Creare funzione factory `register_resource_tools(engine: SparkFrameworkEngine,
+  mcp: FastMCP, tool_names: list[str]) -> None`
+- [ ] Spostare i 13 tool: scf_read_resource, scf_get_skill_resource,
+  scf_get_instruction_resource, scf_get_agent_resource, scf_get_prompt_resource,
+  scf_list_agents, scf_get_agent, scf_list_skills, scf_get_skill,
+  scf_list_instructions, scf_get_instruction, scf_list_prompts, scf_get_prompt
+- [ ] Spostare helpers locali usati solo da questi tool: `_parse_resource_uri`,
+  `_ensure_registry`, `_ff_to_dict`
+- [ ] In `engine.py register_tools()`: sostituire le 13 definizioni con
+  `register_resource_tools(self, self._mcp, tool_names)`
+- [ ] Verificare suite test completa post-estrazione
 
-- **Audit richiesto da:** Coordinatore SPARK Council (Perplexity) — proposta "tool non ancora implementato"
-- **Esito verifica:** SCENARIO C — Tool presente e completo (tool #37, riga 4086, engine.py).
-  Parametri `force`/`dry_run` presenti. Idempotenza via sentinella verificata. File user_protected
-  mai sovrascritti. Risposta MCP strutturata con tutti i campi richiesti. No stdout contaminato.
-  `spark-assistant.agent.md` presente in `spark-base/.github/agents/`. Baseline 313 passed.
-- **Azioni eseguite:** nessuna modifica al codice. Aggiornamento date e baseline in questo file.
-- **Anomalie censite (gia' in P4/P5):** loop body duplicato e payload non uniforme — backlog BASSA priorita' invariato.
+### Task D.2 — Estrazione tools_override.py (3 tool)
 
----
+File: `spark/boot/tools_override.py` (NUOVO)
 
-## Storico sessioni precedenti
+- [ ] Creare funzione factory `register_override_tools(engine, mcp, tool_names) -> None`
+- [ ] Spostare: scf_list_overrides, scf_override_resource, scf_drop_override
+- [ ] Verificare suite test completa post-estrazione
 
-Le sessioni implementative precedenti (v3.0.0 Dual-Client, SCF 3-Way Merge,
-spark-base, File Ownership, Gateway Pattern) sono archiviate in `docs/archivio/`.
+### Task D.3 — Estrazione tools_bootstrap.py (4 tool)
+
+File: `spark/boot/tools_bootstrap.py` (NUOVO)
+
+- [ ] Creare funzione factory `register_bootstrap_tools(engine, mcp, tool_names) -> None`
+- [ ] Spostare: scf_verify_workspace, scf_verify_system, scf_bootstrap_workspace,
+  scf_migrate_workspace
+- [ ] Preservare il pattern `engine._bootstrap_workspace_tool = scf_bootstrap_workspace`
+  che è richiesto da `ensure_minimal_bootstrap()`
+- [ ] Rischio ALTO: scf_bootstrap_workspace ha logica complessa e callback injection
+- [ ] Verificare suite test completa post-estrazione con focus su test_bootstrap_workspace*
+
+### Task D.4 — Estrazione tools_policy.py (9 tool)
+
+File: `spark/boot/tools_policy.py` (NUOVO)
+
+- [ ] Creare funzione factory `register_policy_tools(engine, mcp, tool_names) -> None`
+- [ ] Spostare: scf_get_project_profile, scf_get_global_instructions, scf_get_model_policy,
+  scf_get_framework_version, scf_get_workspace_info, scf_get_runtime_state,
+  scf_update_runtime_state, scf_get_update_policy, scf_set_update_policy
+- [ ] Verificare suite test completa post-estrazione
+
+### Task D.5 — Estrazione tools_packages.py (15 tool) + riduzione engine.py
+
+File: `spark/boot/tools_packages.py` (NUOVO) + `spark/boot/engine.py` (riduzione)
+
+- [ ] Creare funzione factory `register_package_tools(engine, mcp, tool_names) -> None`
+- [ ] Spostare tutti i 15 tool packages + conflict lifecycle: scf_list_available_packages,
+  scf_get_package_info, scf_list_installed_packages, scf_install_package,
+  scf_check_updates, scf_update_package, scf_update_packages, scf_apply_updates,
+  scf_plan_install, scf_remove_package, scf_get_package_changelog,
+  scf_resolve_conflict_ai, scf_approve_conflict, scf_reject_conflict,
+  scf_finalize_update
+- [ ] Spostare tutti gli shim e helpers di install_helpers (con self.* per closure vars)
+- [ ] Ridurre `engine.py` ad assembler puro ~200 righe con le 5 chiamate factory:
+  register_resource_tools, register_override_tools, register_bootstrap_tools,
+  register_policy_tools, register_package_tools
+- [ ] Aggiornare contatore in `spark/boot/sequence.py`:
+  `_log.info("Tools registered: 44 total")` — verificare che sia ancora 44
+- [ ] Rischio ALTO: tocca scf_install_package e conflict resolution — suite completa
+  obbligatoria
+
+***
+
+## Anomalie parallele aperte
+
+> Task secondari emersi durante l'analisi, gestiti in parallelo
+> senza bloccare il flusso principale.
+
+### AP.1 — scf_get_agent vs scf_get_agent_resource divergenza silenziosa (get singolo)
+
+- [ ] Dopo Fase A (A.4 integrazione ResourceResolver), verificare che `scf_get_agent(name)`
+  e `scf_get_agent_resource(name)` restituiscano lo stesso contenuto per agenti
+  installati via v3 store
+- [ ] Se divergono ancora, aggiungere warning nel risultato del tool:
+  `"source_warning": "agent found in workspace but not in store — consider
+  registering an override"` o viceversa
+- [ ] Aggiornare test di integrazione per coprire il caso store-vs-workspace
+
+### AP.2 — scf_list_agents omette agenti Cat.B post v3 install
+
+- [ ] Aggiungere test esplicito: dopo install di spark-base in un workspace vuoto,
+  verificare che `scf_list_agents` includa Agent-Analyze, Agent-Git ecc. (agenti
+  Cat.B solo nello store)
+- [ ] Il test deve fallire PRIMA di A.4 e passare DOPO A.4 (test di regressione
+  intenzionale che documenta il fix)
+
+### AP.3 — Contatore "Tools registered: 44 total" non automatico
+
+- [ ] Valutare aggiunta di un assertion automatica in `register_tools()`:
+  `assert len(tool_names) == 44, f"Expected 44 tools, got {len(tool_names)}"` emessa
+  come warning (non eccezione) su stderr se il contatore diverge
+- [ ] Alternativa: generare il log dal contatore reale `len(tool_names)` invece di
+  hardcoded "44"
+
+***
+
+## Note tecniche
+
+- Baseline regressione: 313 passed / 9 skipped — da verificare dopo ogni Task.
+- Zero `print()` in tutto il codice prodotto. Logging esclusivamente via `_log.*` su `sys.stderr`.
+- Ogni nuovo metodo pubblico o modulo: type hints completi obbligatori.
+- ManifestManager è l'unico punto di scrittura del manifest workspace — invariante da non violare.
+- `_install_standalone_files_v3` (B.1) deve replicare il preservation gate di
+  `_install_workspace_files_v3` per evitare sovrascrittura di file utente modificati.
+- La conversione closure vars → instance attrs (D.0) è prerequisito BLOCCANTE per D.1–D.5.
+  Eseguire i task in ordine: D.0 → D.1 → D.2 → D.3 → D.4 → D.5.
+- `scf_bootstrap_workspace` inietta se stessa in `self._bootstrap_workspace_tool` — questo
+  pattern deve essere preservato in D.3 per non rompere `ensure_minimal_bootstrap()`.
