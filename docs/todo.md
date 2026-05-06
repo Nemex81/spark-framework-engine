@@ -1,8 +1,8 @@
 ﻿# SPARK Framework Engine — TODO Coordinatore
-- **Sessione attiva:** Ciclo di refactoring modulare SPARK — COMPLETATO
-- **Ultimo aggiornamento:** 2026-05-05
-- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA — Refactoring-Estrazione Fase 1 COMPLETATA — Refactoring-Estrazione Fase 2 COMPLETATA
-- **Baseline test:** 0 failed / 313 passed / 9 skipped / 42 warnings (verificata 2026-05-05)
+- **Sessione attiva:** Ottimizzazioni Prestazionali v3 — COMPLETATA
+- **Ultimo aggiornamento:** 2026-05-06
+- **Stato piano:** Fase 0 COMPLETATA — Fase 1 COMPLETATA — Fase 2 COMPLETATA — Fase 3 COMPLETATA — Fase 4 COMPLETATA — Fase 5 COMPLETATA — Fase 4-BIS COMPLETATA — Refactoring-Estrazione Fase 1 COMPLETATA — Refactoring-Estrazione Fase 2 COMPLETATA — Ottimizzazioni Prestazionali v3 COMPLETATA
+- **Baseline test:** 0 failed / 313 passed / 9 skipped / 42 warnings (verificata 2026-05-06)
 
 ## Documenti di riferimento
 
@@ -105,6 +105,22 @@ passed / 8 skipped dopo ogni step.
 - **Operazione:** `_V3LifecycleMixin` con 8 metodi v3 lifecycle estratti da
   `SparkFrameworkEngine`. `engine.py` da ~5169 a 4002 righe (-22.6%).
 - **Validazione:** 313 passed, 9 skipped (baseline invariata).
+- **Stato:** DONE.
+
+### Ottimizzazioni Prestazionali v3 — 8 OPT (COMPLETATA 2026-05-06)
+
+- **Commit:** `0c9d7ec` `perf(install): optimize v3 package installation (manifest cache, batch writes, parallel downloads)`
+- **File toccati:** `spark/manifest/manifest.py`, `spark/manifest/gateway.py`,
+  `spark/boot/lifecycle.py`, `spark/packages/lifecycle.py`, `spark/assets/phase6.py`
+- **OPT-1:** Cache mtime-validata in `ManifestManager.load()` — evita relettura JSON su accessi ripetuti.
+- **OPT-2:** Accumulo `pending_writes` in `_install_workspace_files_v3` — singola flush fisica invece di scrittura per file.
+- **OPT-3:** Download parallelo in `_install_package_v3_into_store` — `ThreadPoolExecutor(max_workers=8)` al posto del loop seriale.
+- **OPT-4:** Singola `manifest.upsert_many()` dopo batch writes — elimina N round-trip al file manifest.
+- **OPT-5:** SHA-sentinel skip in `_install_workspace_files_v3` — file invariati non vengono riscritti.
+- **OPT-6:** Hint `freshly_installed` in `_v3_repopulate_registry` — evita rilettura da disco del pacchetto appena installato.
+- **OPT-7:** `sha256_hint` in `ManifestManager._build_entry()` — evita ricalcolo SHA su contenuto già noto.
+- **OPT-8:** `WorkspaceWriteGateway.write_many()` — N scritture fisiche + singola `upsert_many()` al manifest.
+- **Validazione:** 313 passed, 9 skipped (baseline invariata dopo fix cache mtime).
 - **Stato:** DONE.
 
 ---

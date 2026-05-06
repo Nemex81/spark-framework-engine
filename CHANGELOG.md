@@ -97,6 +97,32 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `mcp-config-example.json` — aggiunta `WORKSPACE_FOLDER=${workspaceFolder}`
   al template stdio, per allineare il server MCP alla cartella aperta in VS Code.
 
+### Performance (OPT-1 — OPT-8)
+
+- **OPT-1** `ManifestManager.load()` (`spark/manifest/manifest.py`) — cache
+  in-memory validata con `st_mtime`. Elimina reletture ridondanti del JSON
+  durante batch di install/update sullo stesso file manifest.
+- **OPT-2** `_install_workspace_files_v3` (`spark/boot/lifecycle.py`) —
+  accumulo `pending_writes` pre-loop; scrittura fisica e `upsert_many()` in
+  un'unica flush dopo il loop. Elimina N round-trip al manifest per file.
+- **OPT-3** `_install_package_v3_into_store` (`spark/packages/lifecycle.py`) —
+  download parallelo dei file pacchetto via `ThreadPoolExecutor(max_workers=8)`
+  al posto del loop seriale `fetch_raw_file`.
+- **OPT-4** `WorkspaceWriteGateway.write_many()` (`spark/manifest/gateway.py`) —
+  nuovo metodo batch: N scritture fisiche + singola `upsert_many()` al manifest.
+- **OPT-5** SHA-sentinel skip in `_install_workspace_files_v3` — file con SHA
+  invariato rispetto allo snapshot pre-loop non vengono riscritti né
+  re-upsertati nel manifest.
+- **OPT-6** `_v3_repopulate_registry` (`spark/boot/lifecycle.py`) — parametro
+  opzionale `freshly_installed: dict | None`; se fornito evita rilettura da
+  disco del manifest del pacchetto appena installato.
+- **OPT-7** `ManifestManager._build_entry()` — parametro opzionale
+  `sha256_hint: str | None`; se fornito usa l'hint invece di ricalcolare SHA
+  sul file destinazione.
+- **OPT-8** `_apply_phase6_assets` (`spark/assets/phase6.py`) — accumulo
+  `pending_gateway_writes` per `AGENTS.md`, `AGENTS-{pkg}.md` e
+  `project-profile.md`; flush unica via `gateway.write_many()`.
+
 ### Fixed
 
 - `tests/test_engine_coherence.py` — regex `r"## \[(\d[^\]]+)\]"` sostituisce
