@@ -1,4 +1,4 @@
----
+﻿---
 name: task-scope-guard
 hosted_by: engine
 mcp_resource: "engine-skills://task-scope-guard"

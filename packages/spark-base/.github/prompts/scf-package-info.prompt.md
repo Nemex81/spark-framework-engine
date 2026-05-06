@@ -5,7 +5,7 @@ scf_file_role: "prompt"
 name: scf-package-info
 scf_merge_priority: 10
 scf_merge_strategy: "replace"
-scf_version: "1.2.0"
+scf_version: "1.2.1"
 type: prompt
 spark: true
 scf_owner: "spark-base"
@@ -21,6 +21,8 @@ Istruzioni operative:
 Mostra sempre:
 - metadati package: id, description, repo_url, latest_version, status, tags
 - metadati manifest: version, file_count, categorie
+- `installation_mode`: indica se il pacchetto sara installato come `v2_workspace`
+  (file copiati in `.github/`) o `v3_store` (risorse via MCP, nessun file locale)
 - elenco file installabili
 
 Se il pacchetto e deprecato, evidenzialo chiaramente.
