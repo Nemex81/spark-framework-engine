@@ -18,7 +18,10 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Fixed
 
-- _Nessuna voce._
+- `README.md`: corretto link rotto a `SCF-PROJECT-DESIGN.md` — punta ora al percorso
+  corretto `docs/archivio/SCF-PROJECT-DESIGN.md` con nota "(archiviato)".
+- `README.md`: corretto conteggio prompt bootstrap da "9" a "13" (`scf-*.prompt.md`
+  copiati da `packages/spark-base/package-manifest.json`).
 
 ---
 

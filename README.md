@@ -131,7 +131,7 @@ aggiorna `.github/user-prefs.json` senza toccare i file dei pacchetti e
 prepara il comportamento di installazione, update e bootstrap esteso.
 
 `scf_bootstrap_workspace(install_base=False, conflict_mode="abort", update_mode="", migrate_copilot_instructions=False, force=False, dry_run=False)` copia nel workspace utente il set base di bootstrap:
-gli 9 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
+i 13 prompt `scf-*.prompt.md`, gli agenti `spark-assistant.agent.md` e
 `spark-guide.agent.md`, e l'instruction `spark-assistant-guide.instructions.md`.
 Se il workspace e gia bootstrap-pato ma manca qualche asset base, il tool copia
 solo i file mancanti.
@@ -312,7 +312,7 @@ best-effort `integrate` prima di toccare il workspace.
 ## Architettura SCF
 
 Questo motore è il Livello 1 dell’ecosistema SPARK Code Framework.
-Per la documentazione completa del progetto vedi [SCF-PROJECT-DESIGN.md](SCF-PROJECT-DESIGN.md).
+Per la documentazione completa del progetto vedi [SCF-PROJECT-DESIGN.md](docs/archivio/SCF-PROJECT-DESIGN.md) (documento di progettazione originale, archiviato).
 
 ```
 Livello 1 — spark-framework-engine   ← questo repo (motore universale)
@@ -330,6 +330,6 @@ I file `.github/` di questo repo seguono lo stesso schema ownership che il motor
 
 ## Progetto Correlati
 
-- [SCF-PROJECT-DESIGN.md](SCF-PROJECT-DESIGN.md) — documento di progettazione completo
+- [SCF-PROJECT-DESIGN.md](docs/archivio/SCF-PROJECT-DESIGN.md) — documento di progettazione originale (archiviato)
 - `scf-registry` — in sviluppo
 - `scf-pack-gamedev` — in sviluppo
