@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from spark.core.constants import ENGINE_VERSION
+from spark.core.utils import _sha256_text
 from spark.inventory import EngineInventory
 from spark.manifest import ManifestManager, WorkspaceWriteGateway
 from spark.packages import (
@@ -69,14 +70,28 @@ class _V3LifecycleMixin:
             return False
         return bool(payload.get("github_write_authorized", False))
 
-    def _v3_repopulate_registry(self) -> None:
-        """Ricostruisce il registry MCP dopo install/remove/update v3."""
+    def _v3_repopulate_registry(
+        self,
+        freshly_installed: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Ricostruisce il registry MCP dopo install/remove/update v3.
+
+        Args:
+            freshly_installed: manifest già in memoria per i pacchetti appena
+                installati, indicizzato per ``package_id``. Quando presente,
+                evita la ri-lettura del file ``package-manifest.json`` dallo
+                store per quei pacchetti (OPT-6).
+        """
         engine_manifest = EngineInventory(engine_root=self._ctx.engine_root).engine_manifest  # type: ignore[attr-defined]
         manifest = ManifestManager(self._ctx.github_root)  # type: ignore[attr-defined]
         store = PackageResourceStore(self._ctx.engine_root)  # type: ignore[attr-defined]
         installed = manifest.get_installed_versions()
         package_manifests: dict[str, dict[str, Any]] = {}
         for pkg_id in installed:
+            # OPT-6: usa il manifest già in memoria quando disponibile.
+            if freshly_installed and pkg_id in freshly_installed:
+                package_manifests[pkg_id] = freshly_installed[pkg_id]
+                continue
             pkg_manifest_path = store.packages_root / pkg_id / "package-manifest.json"
             if pkg_manifest_path.is_file():
                 try:
@@ -136,9 +151,23 @@ class _V3LifecycleMixin:
         file_policies = pkg_manifest.get("file_policies") or {}
         if not isinstance(file_policies, dict):
             file_policies = {}
-        files_written: list[str] = []
+        # OPT-1: snapshot pre-caricato (usa il cache di ManifestManager se già
+        # popolato dalla stessa operazione corrente). sha_map consente OPT-5
+        # senza ulteriori letture disco del manifest.
+        entries_snapshot = manifest.load()
+        sha_map: dict[str, str] = {}
+        for _e in entries_snapshot:
+            _fk = str(_e.get("file", "")).strip()
+            if _fk and _fk not in sha_map:
+                _sha = str(_e.get("sha256", "")).strip()
+                if _sha:
+                    sha_map[_fk] = _sha
+
         preserved: list[str] = []
         errors: list[str] = []
+        # OPT-2: raccolta scritture pendenti per batch post-loop.
+        # Ogni entry: (original_entry, github_rel, dest_path, content, merge_strategy).
+        pending_writes: list[tuple[str, str, Path, str, str | None]] = []
         for entry in workspace_files:
             if not isinstance(entry, str):
                 errors.append(f"invalid workspace_files entry: {entry!r}")
@@ -177,20 +206,74 @@ class _V3LifecycleMixin:
                 errors.append(f"{entry}: cannot read source ({exc})")
                 continue
             policy_meta = file_policies.get(entry) or {}
-            merge_strategy = policy_meta.get("merge_strategy") if isinstance(policy_meta, dict) else None
-            try:
-                WorkspaceWriteGateway(self._ctx.workspace_root, manifest).write(  # type: ignore[attr-defined]
-                    github_rel, content, package_id, pkg_version, merge_strategy
-                )
-            except OSError as exc:
-                errors.append(f"{entry}: write failed ({exc})")
+            merge_strategy = (
+                policy_meta.get("merge_strategy") if isinstance(policy_meta, dict) else None
+            )
+            dest_path = self._ctx.github_root / github_rel  # type: ignore[attr-defined]
+            # OPT-5: salta la scrittura se il contenuto sorgente è identico
+            # all'SHA già tracciato nel manifest e il file esiste su disco
+            # (idempotenza su re-install senza variazioni di contenuto).
+            # Nota: _sha256_text usa UTF-8 LF; su Windows può differire dallo
+            # SHA binario CRLF — in quel caso il check non combacia e la
+            # scrittura avviene normalmente (comportamento corretto e sicuro).
+            if _sha256_text(content) == sha_map.get(github_rel, "") and dest_path.is_file():
+                preserved.append(entry)
                 continue
-            files_written.append(entry)
+            pending_writes.append((entry, github_rel, dest_path, content, merge_strategy))
+
+        # Errori di validazione pre-scrittura: restituisce subito senza toccare disco.
+        if errors:
+            return {
+                "success": False,
+                "files_written": [],
+                "preserved": preserved,
+                "errors": errors,
+            }
+
+        if not pending_writes:
+            return {
+                "success": True,
+                "files_written": [],
+                "preserved": preserved,
+                "errors": [],
+            }
+
+        # OPT-4 + OPT-2: scritture fisiche batch + manifest.upsert_many() una sola volta.
+        # Il manifest viene aggiornato solo se tutte le scritture hanno avuto successo.
+        files_written: list[str] = []
+        upsert_files: list[tuple[str, Path]] = []
+        merge_strategies_by_file: dict[str, str] = {}
+        write_errors: list[str] = []
+        for entry, github_rel, dest_path, content, merge_strategy in pending_writes:
+            try:
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                dest_path.write_text(content, encoding="utf-8")
+                upsert_files.append((github_rel, dest_path))
+                if merge_strategy is not None:
+                    merge_strategies_by_file[github_rel] = merge_strategy
+                files_written.append(entry)
+            except OSError as exc:
+                write_errors.append(f"{github_rel}: write failed ({exc})")
+
+        if write_errors:
+            return {
+                "success": False,
+                "files_written": files_written,
+                "preserved": preserved,
+                "errors": write_errors,
+            }
+
+        manifest.upsert_many(
+            package=package_id,
+            package_version=pkg_version,
+            files=upsert_files,
+            merge_strategies_by_file=merge_strategies_by_file or None,
+        )
         return {
-            "success": len(errors) == 0,
+            "success": True,
             "files_written": files_written,
             "preserved": preserved,
-            "errors": errors,
+            "errors": [],
         }
 
     def _remove_workspace_files_v3(
@@ -399,7 +482,8 @@ class _V3LifecycleMixin:
 
         # Re-popoliamo il registry MCP per esporre subito le risorse
         # del pacchetto appena installato (idempotente).
-        self._v3_repopulate_registry()
+        # OPT-6: passa il manifest già in memoria per evitare una ri-lettura disco.
+        self._v3_repopulate_registry(freshly_installed={package_id: dict(pkg_manifest)})
 
         # Rigeneriamo gli asset Phase 6 (AGENTS.md, AGENTS-{pkg}.md, ecc.).
         try:

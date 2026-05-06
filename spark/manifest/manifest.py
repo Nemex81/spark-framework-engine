@@ -33,6 +33,11 @@ class ManifestManager:
     def __init__(self, github_root: Path) -> None:
         self._github_root = github_root
         self._path = github_root / _MANIFEST_FILENAME
+        # OPT-1: cache in-memory per evitare N letture disco nella stessa istanza.
+        # Validata tramite mtime: se il file viene modificato da un'altra istanza,
+        # la cache viene invalidata automaticamente alla prossima load().
+        self._load_cache: list[dict[str, Any]] | None = None
+        self._cache_mtime: float | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -40,21 +45,44 @@ class ManifestManager:
 
     def load(self) -> list[dict[str, Any]]:
         """Return the entries array. Returns [] if absent or unreadable."""
+        # OPT-1: usa la cache se il file non è cambiato dall'ultimo load/save.
+        if self._load_cache is not None:
+            if self._path.is_file():
+                try:
+                    if self._path.stat().st_mtime == self._cache_mtime:
+                        return self._load_cache
+                except OSError:
+                    pass
+            elif self._cache_mtime is None:
+                # File era assente quando abbiamo cachato []: ancora valido.
+                return self._load_cache
+            # Cache stale: invalida e rileggi.
+            self._load_cache = None
+            self._cache_mtime = None
         if not self._path.is_file():
-            return []
+            self._load_cache = []
+            self._cache_mtime = None
+            return self._load_cache
         try:
+            mtime = self._path.stat().st_mtime
             raw = json.loads(self._path.read_text(encoding="utf-8"))
             schema_version = str(raw.get("schema_version", "")).strip()
             if schema_version and schema_version not in _SUPPORTED_MANIFEST_SCHEMA_VERSIONS:
                 _log.warning(
                     "Manifest schema '%s' unsupported, returning empty.", schema_version
                 )
-                return []
+                self._load_cache = []
+                self._cache_mtime = mtime
+                return self._load_cache
             entries = raw.get("entries", [])
             if not isinstance(entries, list):
                 _log.warning("Manifest entries invalid, returning empty.")
-                return []
-            return list(entries)
+                self._load_cache = []
+                self._cache_mtime = mtime
+                return self._load_cache
+            self._load_cache = list(entries)
+            self._cache_mtime = mtime
+            return self._load_cache
         except (OSError, json.JSONDecodeError) as exc:
             _log.warning("Manifest unreadable, returning empty: %s", exc)
             return []
@@ -77,6 +105,11 @@ class ManifestManager:
                 json.dumps(payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+            self._load_cache = list(entries)
+            try:
+                self._cache_mtime = self._path.stat().st_mtime
+            except OSError:
+                self._cache_mtime = None
         except OSError as exc:
             _log.error("Cannot write manifest: %s", exc)
             raise
@@ -455,13 +488,15 @@ class ManifestManager:
         installed_at: str,
         merge_strategy: str,
         stub: bool = False,
+        sha256_hint: str | None = None,
     ) -> dict[str, Any]:
         entry: dict[str, Any] = {
             "file": file_rel,
             "package": package,
             "package_version": package_version,
             "installed_at": installed_at,
-            "sha256": self._sha256(file_abs),
+            # OPT-7: se il chiamante ha già il digest in memoria, evita la ri-lettura disco.
+            "sha256": sha256_hint if sha256_hint else self._sha256(file_abs),
             "scf_merge_strategy": self._normalize_merge_strategy(merge_strategy),
         }
         if stub:

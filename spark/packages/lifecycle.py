@@ -3,6 +3,7 @@
 """v3 package lifecycle helpers — install / update / remove store-based."""
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import shutil
@@ -61,18 +62,32 @@ def _install_package_v3_into_store(
 
     written: list[tuple[Path, str]] = []
     errors: list[str] = []
+
+    # OPT-3: pre-valida percorsi prima dei fetch per sicurezza, poi scarica
+    # in parallelo con un thread pool per ridurre la latenza complessiva.
+    safe_files: list[tuple[str, str]] = []  # (file_path, rel)
     for file_path in files:
         rel = file_path.removeprefix(".github/")
         # Rifiutiamo path con risalita per evitare scritture fuori dallo store.
         if ".." in Path(rel).parts:
             errors.append(f"unsafe path: {file_path}")
-            continue
-        try:
-            content = fetch_raw_file(base_raw_url + file_path)
-        except (urllib.error.URLError, OSError) as exc:
-            errors.append(f"{file_path}: {exc}")
-            continue
-        written.append((github_root / rel, content))
+        else:
+            safe_files.append((file_path, rel))
+
+    if safe_files:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(8, len(safe_files))
+        ) as executor:
+            futures = [
+                executor.submit(fetch_raw_file, base_raw_url + fp)
+                for fp, _ in safe_files
+            ]
+            for (file_path, rel), future in zip(safe_files, futures):
+                try:
+                    content = future.result()
+                    written.append((github_root / rel, content))
+                except Exception as exc:
+                    errors.append(f"{file_path}: {exc}")
 
     if errors:
         return {

@@ -102,6 +102,53 @@ class WorkspaceWriteGateway:
             )
         return target
 
+    def write_many(
+        self,
+        writes: list[tuple[str, str]],
+        owner: str,
+        version: str,
+        merge_strategies: dict[str, str] | None = None,
+    ) -> list[Path]:
+        """Scrive N file nel workspace e aggiorna il manifest in una sola operazione.
+
+        Tutti i file condividono lo stesso ``owner`` e ``version``.
+        Le scritture fisiche avvengono in sequenza; il manifest è aggiornato
+        una sola volta al termine con ``upsert_many`` (OPT-8).
+
+        Args:
+            writes: lista di ``(github_rel, content)``.
+            owner: package id proprietario di tutti i file.
+            version: versione del pacchetto.
+            merge_strategies: strategia per file specifici, indicizzata per
+                ``github_rel``. Se assente, usa il default del manifest.
+
+        Returns:
+            Lista dei Path assoluti scritti.
+        """
+        if not writes:
+            return []
+        written_paths: list[Path] = []
+        upsert_files: list[tuple[str, Path]] = []
+        for github_rel, content in writes:
+            target = self._github_root / github_rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            written_paths.append(target)
+            upsert_files.append((github_rel, target))
+        try:
+            self._manifest.upsert_many(
+                package=owner,
+                package_version=version,
+                files=upsert_files,
+                merge_strategies_by_file=merge_strategies,
+            )
+        except OSError as exc:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] Gateway batch upsert failed: %s",
+                exc,
+            )
+        return written_paths
+
     # ------------------------------------------------------------------
     # Delete helper
     # ------------------------------------------------------------------
