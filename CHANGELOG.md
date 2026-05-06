@@ -10,6 +10,22 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Added
 
+- _Nessuna voce._
+
+### Changed
+
+- _Nessuna voce._
+
+### Fixed
+
+- _Nessuna voce._
+
+---
+
+## [3.2.0] - 2026-05-06
+
+### Added
+
 - `scf_bootstrap_workspace` — nuovi parametri `force: bool = False` e
   `dry_run: bool = False` (v3.1 extension). Con `force=True` sovrascrive anche
   i file modificati dall'utente. Con `dry_run=True` simula il bootstrap senza
