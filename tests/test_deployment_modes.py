@@ -167,6 +167,25 @@ def _v3_manifest_with_standalone(package_id: str) -> dict[str, Any]:
     }
 
 
+def _v3_manifest_with_empty_standalone(package_id: str) -> dict[str, Any]:
+    """Manifest v3 con deployment_modes ma standalone_files vuoto."""
+    return {
+        "package": package_id,
+        "version": "3.0.0",
+        "min_engine_version": "3.0.0",
+        "dependencies": [],
+        "conflicts": [],
+        "file_ownership_policy": "error",
+        "files": [f".github/agents/{package_id}.agent.md"],
+        "mcp_resources": {"agents": [f"{package_id}"]},
+        "deployment_modes": {
+            "mcp_store": True,
+            "standalone_copy": True,
+            "standalone_files": [],
+        },
+    }
+
+
 def _registry_pkg_dm(package_id: str) -> dict[str, Any]:
     return {
         "id": package_id,
@@ -282,6 +301,75 @@ class TestDeploymentNotice(unittest.TestCase):
             summary = result.get("deployment_summary", {})
             self.assertTrue(summary.get("engine_store"))
             self.assertTrue(summary.get("standalone_copy"))
+
+    def test_copy_mode_empty_standalone_files_adds_warning(self) -> None:
+        """copy + standalone_files=[] → deployment_warning; standalone_copy=False nel summary."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            _authorize_dm(ws)
+            fake_mcp, _engine = _build_engine_dm(ws)
+            install = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+            pkg_id = "pkg-empty-standalone"
+            with (
+                patch.object(
+                    RegistryClient, "list_packages",
+                    return_value=[_registry_pkg_dm(pkg_id)],
+                ),
+                patch.object(
+                    RegistryClient, "fetch_package_manifest",
+                    return_value=_v3_manifest_with_empty_standalone(pkg_id),
+                ),
+                patch.object(
+                    RegistryClient, "fetch_raw_file",
+                    return_value="# contenuto",
+                ),
+            ):
+                result = asyncio.run(install(pkg_id, deployment_mode="copy"))
+
+            self.assertTrue(result.get("success"), msg=result)
+            warning = result.get("deployment_warning", "")
+            self.assertIn("standalone_files", warning, msg=warning)
+            self.assertIn(".github/", warning, msg=warning)
+            self.assertNotIn("deployment_notice", result)
+            summary = result.get("deployment_summary", {})
+            self.assertTrue(summary.get("engine_store"))
+            self.assertFalse(summary.get("standalone_copy"))
+            self.assertEqual(summary.get("standalone_files_count"), 0)
+
+    def test_copy_mode_no_deployment_modes_section_adds_warning(self) -> None:
+        """copy + manifest senza sezione deployment_modes → deployment_warning."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            _authorize_dm(ws)
+            fake_mcp, _engine = _build_engine_dm(ws)
+            install = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+            pkg_id = "pkg-no-dm-section"
+            with (
+                patch.object(
+                    RegistryClient, "list_packages",
+                    return_value=[_registry_pkg_dm(pkg_id)],
+                ),
+                patch.object(
+                    RegistryClient, "fetch_package_manifest",
+                    return_value=_v3_manifest_no_standalone(pkg_id),
+                ),
+                patch.object(
+                    RegistryClient, "fetch_raw_file",
+                    return_value="# contenuto",
+                ),
+            ):
+                result = asyncio.run(install(pkg_id, deployment_mode="copy"))
+
+            self.assertTrue(result.get("success"), msg=result)
+            self.assertIn("deployment_warning", result)
+            summary = result.get("deployment_summary", {})
+            self.assertFalse(summary.get("standalone_copy"))
 
 
 if __name__ == "__main__":

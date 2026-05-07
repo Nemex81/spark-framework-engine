@@ -544,23 +544,47 @@ def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None
                     or (deployment_mode == "auto" and modes.get("standalone_copy"))
                 )
                 if should_copy:
-                    manifest_for_standalone = ManifestManager(ctx.github_root)
-                    standalone_result = engine._install_standalone_files_v3(
-                        package_id=package_id,
-                        pkg_version=pkg_version,
-                        pkg_manifest=pkg_manifest,
-                        manifest=manifest_for_standalone,
-                    )
-                    v3_result["standalone_files_written"] = standalone_result.get(
-                        "files_written", []
-                    )
-                    v3_result["standalone_files_preserved"] = standalone_result.get(
-                        "preserved", []
-                    )
-                    if not standalone_result.get("success"):
-                        v3_result["standalone_files_errors"] = standalone_result.get(
-                            "errors", []
+                    standalone_files_declared = modes.get("standalone_files", [])
+                    if not standalone_files_declared:
+                        # copy esplicito ma manifest non dichiara standalone_files:
+                        # avvisa senza bloccare l'installazione (store è comunque ok).
+                        v3_result["deployment_warning"] = (
+                            "deployment_mode='copy' richiesto, ma il manifest del pacchetto "
+                            "non dichiara file standalone (standalone_files vuoto o assente). "
+                            "Nessun file è stato scritto in .github/. "
+                            "I file sono disponibili solo nell'engine store."
                         )
+                        v3_result["deployment_summary"] = {
+                            "engine_store": True,
+                            "standalone_copy": False,
+                            "standalone_files_count": 0,
+                        }
+                    else:
+                        # Procedi normalmente con la copia standalone.
+                        manifest_for_standalone = ManifestManager(ctx.github_root)
+                        standalone_result = engine._install_standalone_files_v3(
+                            package_id=package_id,
+                            pkg_version=pkg_version,
+                            pkg_manifest=pkg_manifest,
+                            manifest=manifest_for_standalone,
+                        )
+                        v3_result["standalone_files_written"] = standalone_result.get(
+                            "files_written", []
+                        )
+                        v3_result["standalone_files_preserved"] = standalone_result.get(
+                            "preserved", []
+                        )
+                        if not standalone_result.get("success"):
+                            v3_result["standalone_files_errors"] = standalone_result.get(
+                                "errors", []
+                            )
+                        v3_result["deployment_summary"] = {
+                            "engine_store": True,
+                            "standalone_copy": True,
+                            "standalone_files_count": len(
+                                v3_result.get("standalone_files_written", [])
+                            ),
+                        }
                 elif deployment_mode == "auto" and not modes.get("standalone_copy"):
                     # auto senza standalone_copy dichiarato: file solo nello store.
                     v3_result["deployment_notice"] = (
@@ -569,11 +593,11 @@ def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None
                         "Per copiare i file nel workspace, "
                         "richiama scf_install_package con deployment_mode='copy'."
                     )
-                v3_result["deployment_summary"] = {
-                    "engine_store": True,
-                    "standalone_copy": should_copy,
-                    "standalone_files_count": len(v3_result.get("standalone_files_written", [])),
-                }
+                    v3_result["deployment_summary"] = {
+                        "engine_store": True,
+                        "standalone_copy": False,
+                        "standalone_files_count": 0,
+                    }
             if deployment_mode == "store" and v3_result.get("success"):
                 v3_result.setdefault(
                     "deployment_summary",
