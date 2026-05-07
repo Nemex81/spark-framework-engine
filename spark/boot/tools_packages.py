@@ -25,24 +25,6 @@ from spark.boot.tools_packages_diagnostics import register_diagnostics_package_t
 
 __all__ = ["register_package_tools"]
 
-# Tool index (counted by test_engine_coherence — keeps the tool registry
-# in sync with the 15 implementations now in their thematic submodules):
-# @_register_tool("scf_list_available_packages")   → tools_packages_query
-# @_register_tool("scf_get_package_info")          → tools_packages_query
-# @_register_tool("scf_list_installed_packages")   → tools_packages_query
-# @_register_tool("scf_plan_install")              → tools_packages_query
-# @_register_tool("scf_install_package")           → tools_packages_install
-# @_register_tool("scf_check_updates")             → tools_packages_update
-# @_register_tool("scf_update_package")            → tools_packages_update
-# @_register_tool("scf_update_packages")           → tools_packages_update
-# @_register_tool("scf_apply_updates")             → tools_packages_update
-# @_register_tool("scf_remove_package")            → tools_packages_remove
-# @_register_tool("scf_get_package_changelog")     → tools_packages_remove
-# @_register_tool("scf_resolve_conflict_ai")       → tools_packages_diagnostics
-# @_register_tool("scf_approve_conflict")          → tools_packages_diagnostics
-# @_register_tool("scf_reject_conflict")           → tools_packages_diagnostics
-# @_register_tool("scf_finalize_update")           → tools_packages_diagnostics
-
 
 def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
     """Register all 15 package lifecycle tools -- delegates to thematic sub-factories.

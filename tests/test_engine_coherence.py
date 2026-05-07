@@ -9,6 +9,11 @@ _TOOLS_OVERRIDE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_
 _TOOLS_BOOTSTRAP_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_bootstrap.py"
 _TOOLS_POLICY_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_policy.py"
 _TOOLS_PACKAGES_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages.py"
+_TOOLS_PACKAGES_QUERY_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages_query.py"
+_TOOLS_PACKAGES_INSTALL_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages_install.py"
+_TOOLS_PACKAGES_UPDATE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages_update.py"
+_TOOLS_PACKAGES_REMOVE_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages_remove.py"
+_TOOLS_PACKAGES_DIAGNOSTICS_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages_diagnostics.py"
 _CONSTANTS = Path(__file__).parent.parent / "spark" / "core" / "constants.py"
 _CHANGELOG = Path(__file__).parent.parent / "CHANGELOG.md"
 
@@ -43,7 +48,15 @@ def test_tool_counter_consistency():
         + "\n"
         + _read(_TOOLS_POLICY_PATH)
         + "\n"
-        + _read(_TOOLS_PACKAGES_PATH)
+        + _read(_TOOLS_PACKAGES_QUERY_PATH)
+        + "\n"
+        + _read(_TOOLS_PACKAGES_INSTALL_PATH)
+        + "\n"
+        + _read(_TOOLS_PACKAGES_UPDATE_PATH)
+        + "\n"
+        + _read(_TOOLS_PACKAGES_REMOVE_PATH)
+        + "\n"
+        + _read(_TOOLS_PACKAGES_DIAGNOSTICS_PATH)
     )
 
     actual = len(re.findall(r"@_register_tool\(", source))

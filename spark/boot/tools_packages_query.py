@@ -10,98 +10,19 @@ Returns ``scf_plan_install`` so the facade can pass it to
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from spark.boot import install_helpers as _ih
-from spark.core.constants import ENGINE_VERSION, _BOOTSTRAP_PACKAGE_ID, _BACKUPS_SUBDIR, _CHANGELOGS_SUBDIR
-from spark.core.models import (
-    MERGE_STATUS_CLEAN,
-    MERGE_STATUS_CONFLICT,
-    MERGE_STATUS_IDENTICAL,
-    MergeConflict,
-    MergeResult,
-)
+from spark.core.constants import ENGINE_VERSION
 from spark.core.utils import (
-    _resolve_dependency_update_order,
-    _extract_version_from_changelog,
-    _format_utc_timestamp,
     _is_engine_version_compatible,
-    _is_v3_package,
     _normalize_string_list,
-    _utc_now,
-)
-from spark.manifest import (
-    ManifestManager,
-    SnapshotManager,
-    WorkspaceWriteGateway,
-    _normalize_remote_file_record,
-    _scf_backup_workspace,
-    _scf_diff_workspace,
-)
-from spark.merge import (
-    MergeSessionManager,
-    run_post_merge_validators,
-    validate_completeness,
-    validate_structural,
-    validate_tool_coherence,
-)
-from spark.merge.sections import (
-    _SCF_SECTION_HEADER,
-    _classify_copilot_instructions_format,
-    _prepare_copilot_instructions_migration,
-    _scf_extract_merge_priority,
-    _scf_iter_section_blocks,
-    _scf_render_section,
-    _scf_section_markers,
-    _scf_section_merge,
-    _scf_section_merge_text,
-    _scf_split_frontmatter,
-    _scf_strip_section,
-    _section_markers_for_package,
-    _strip_package_section,
-)
-from spark.merge.validators import (
-    _MARKDOWN_HEADING_RE,
-    _SUPPORTED_CONFLICT_MODES,
-    _extract_frontmatter_block,
-    _extract_markdown_headings,
-    _normalize_merge_text,
-    _resolve_disjoint_line_additions,
 )
 from spark.packages import (
     _build_registry_package_summary,
-    _get_deployment_modes,
     _get_registry_min_engine_version,
-    _install_package_v3_into_store,
-    _list_orphan_overrides_for_package,
-    _remove_package_v3_from_store,
     _resolve_package_version,
-    _v3_overrides_blocking_update,
 )
-from spark.registry import (
-    _V3_STORE_INSTALLATION_MODE,
-    _build_package_raw_url_base,
-    _resource_filename_candidates,
-    _v3_store_sentinel_file,
-)
-from spark.workspace import (
-    _V2_MIGRATION_DELETE_FILES,
-    _V2_MIGRATION_DELETE_PATTERNS,
-    _V2_MIGRATION_KEEP_DIRS,
-    _V2_MIGRATION_KEEP_FILES,
-    _V2_MIGRATION_OVERRIDE_DIRS,
-    _classify_v2_workspace_file,
-    _default_update_policy,
-    _default_update_policy_payload,
-    _normalize_update_mode,
-    _read_update_policy_payload,
-    _update_policy_path,
-    _validate_update_mode,
-    _write_update_policy_payload,
-)
-from spark.boot.tools_bootstrap import _gateway_write_bytes, _gateway_write_text
-from spark.boot.tools_resources import _ff_to_dict
 
 _log = logging.getLogger("spark-framework-engine")
 
