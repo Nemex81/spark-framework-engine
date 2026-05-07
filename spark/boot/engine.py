@@ -680,6 +680,6 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         # D.3: i 4 tool bootstrap sono registrati dopo packages (dipendono da _install_package_tool_fn).
         register_bootstrap_tools(self, self._mcp, tool_names)
 
-        _log.info("[SPARK-ENGINE][INFO] Tools registrati: %d", len(tool_names))
+        _log.info("[SPARK-ENGINE][INFO] Tools registered: %d total", len(tool_names))
 
 

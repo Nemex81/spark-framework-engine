@@ -249,29 +249,39 @@ File: `spark/boot/tools_packages.py` (NUOVO) + `spark/boot/engine.py` (riduzione
 
 ### AP.1 — scf_get_agent vs scf_get_agent_resource divergenza silenziosa (get singolo)
 
-- [ ] Dopo Fase A (A.4 integrazione ResourceResolver), verificare che `scf_get_agent(name)`
+- [x] Dopo Fase A (A.4 integrazione ResourceResolver), verificare che `scf_get_agent(name)`
   e `scf_get_agent_resource(name)` restituiscano lo stesso contenuto per agenti
   installati via v3 store
-- [ ] Se divergono ancora, aggiungere warning nel risultato del tool:
+- [x] Se divergono ancora, aggiungere warning nel risultato del tool:
   `"source_warning": "agent found in workspace but not in store — consider
   registering an override"` o viceversa
-- [ ] Aggiornare test di integrazione per coprire il caso store-vs-workspace
+  — Implementato in `spark/boot/tools_resources.py`: `scf_get_agent` aggiunge
+  `source_warning` quando `reg.resolve(uri) is None` (agente solo workspace fisico).
+- [x] Aggiornare test di integrazione per coprire il caso store-vs-workspace
+  — Aggiunto `tests/test_ap1_scf_get_agent_source_warning.py` (3 test).
 
 ### AP.2 — scf_list_agents omette agenti Cat.B post v3 install
 
-- [ ] Aggiungere test esplicito: dopo install di spark-base in un workspace vuoto,
+- [x] Aggiungere test esplicito: dopo install di spark-base in un workspace vuoto,
   verificare che `scf_list_agents` includa Agent-Analyze, Agent-Git ecc. (agenti
   Cat.B solo nello store)
-- [ ] Il test deve fallire PRIMA di A.4 e passare DOPO A.4 (test di regressione
+  — Aggiunto `test_list_agents_cat_b_store_only_after_a4` in
+  `tests/test_framework_inventory_resolver.py`.
+- [x] Il test deve fallire PRIMA di A.4 e passare DOPO A.4 (test di regressione
   intenzionale che documenta il fix)
+  — PASS confermato con A.4 integrato (resolver attivo).
 
 ### AP.3 — Contatore "Tools registered: 44 total" non automatico
 
-- [ ] Valutare aggiunta di un assertion automatica in `register_tools()`:
+- [x] Valutare aggiunta di un assertion automatica in `register_tools()`:
   `assert len(tool_names) == 44, f"Expected 44 tools, got {len(tool_names)}"` emessa
   come warning (non eccezione) su stderr se il contatore diverge
-- [ ] Alternativa: generare il log dal contatore reale `len(tool_names)` invece di
+- [x] Alternativa: generare il log dal contatore reale `len(tool_names)` invece di
   hardcoded "44"
+  — Implementato: `spark/boot/engine.py` ora logga
+  `_log.info("[SPARK-ENGINE][INFO] Tools registered: %d total", len(tool_names))`;
+  il log hardcoded rimosso da `spark/boot/sequence.py`. Test `test_engine_coherence.py`
+  aggiornato per verificare il pattern dinamico.
 
 ***
 

@@ -192,6 +192,4 @@ def _build_app(engine_root: Path) -> FastMCP:
             onboarding_result.get("status", "unknown"),
         )
 
-    _log.info("Tools registered: 44 total")
-
     return mcp

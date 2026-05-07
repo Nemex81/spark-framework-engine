@@ -180,6 +180,56 @@ class TestFrameworkInventoryWithResolver(unittest.TestCase):
             names = [a.name for a in agents]
             self.assertEqual(names, sorted(names))
 
+    def test_list_agents_cat_b_store_only_after_a4(self) -> None:
+        """AP.2 — test di regressione: agenti Cat.B solo nello store sono inclusi
+        in list_agents() dopo l'integrazione A.4 con ResourceResolver.
+
+        Prima di A.4, list_agents() usava solo il filesystem workspace e ometteva
+        gli agenti installati via v3 store che non erano copiati in .github/agents/.
+        Questo test documenta che il fix è stabile: un workspace vuoto (nessun agente
+        in .github/agents/) ma con pacchetto installato nello store produce una lista
+        non vuota da list_agents().
+        """
+        cat_b_agents = ["Agent-Analyze", "Agent-Git", "Agent-Plan", "Agent-Docs"]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ws_github = root / ".github"
+            # Workspace vuoto — nessun agente in .github/agents/.
+            (ws_github / "agents").mkdir(parents=True)
+
+            # Simula install di spark-base con agenti Cat.B nello store.
+            engine_dir = root / "engine"
+            pkg_agents_dir = engine_dir / "packages" / "spark-base" / ".github" / "agents"
+            pkg_agents_dir.mkdir(parents=True)
+            for agent_name in cat_b_agents:
+                (pkg_agents_dir / f"{agent_name}.agent.md").write_text(
+                    f"# {agent_name}", encoding="utf-8"
+                )
+
+            # Costruisci registry e store condivisi (un unico registry con tutti gli agenti).
+            registry = McpResourceRegistry()
+            store = PackageResourceStore(engine_dir)
+            for agent_name in cat_b_agents:
+                path = store.resolve("spark-base", "agents", agent_name)
+                assert path is not None, (
+                    f"store.resolve('spark-base', 'agents', {agent_name!r}) returned None"
+                )
+                uri = McpResourceRegistry.make_uri("agents", agent_name)
+                registry.register(uri, path, "spark-base", "agents")
+
+            inv = FrameworkInventory(_make_context(ws_github))
+            inv.mcp_registry = registry
+            inv.resource_store = store
+
+            agents = inv.list_agents()
+            names = [a.name for a in agents]
+            for agent_name in cat_b_agents:
+                self.assertIn(
+                    agent_name,
+                    names,
+                    f"AP.2: {agent_name} (Cat.B, solo in store) deve apparire in list_agents()",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -251,6 +251,17 @@ def register_resource_tools(
             if ff.name.lower() == name.lower():
                 result = _ff_to_dict(ff)
                 result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                # AP.1 — rileva divergenza silenziosa tra scf_get_agent e scf_get_agent_resource.
+                # scf_get_agent_resource risolve via McpResourceRegistry.resolve(uri) che
+                # copre solo override e store; se l'agente è solo nel workspace fisico
+                # (.github/agents/) scf_get_agent_resource non lo troverà.
+                reg = _ensure_reg()
+                uri = McpResourceRegistry.make_uri("agents", ff.name)
+                if reg.resolve(uri) is None:
+                    result["source_warning"] = (
+                        "agent found in workspace but not in store — "
+                        "consider registering an override"
+                    )
                 return result
         return {
             "success": False,
