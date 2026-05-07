@@ -371,6 +371,45 @@ class TestDeploymentNotice(unittest.TestCase):
             summary = result.get("deployment_summary", {})
             self.assertFalse(summary.get("standalone_copy"))
 
+    def test_store_mode_skips_standalone_and_sets_summary(self) -> None:
+        """store + manifest con standalone_files → _install_standalone_files_v3 non chiamato."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            _authorize_dm(ws)
+            fake_mcp, engine = _build_engine_dm(ws)
+            install = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+            pkg_id = "pkg-store-skip-standalone"
+            with (
+                patch.object(
+                    RegistryClient, "list_packages",
+                    return_value=[_registry_pkg_dm(pkg_id)],
+                ),
+                patch.object(
+                    RegistryClient, "fetch_package_manifest",
+                    return_value=_v3_manifest_with_standalone(pkg_id),
+                ),
+                patch.object(
+                    RegistryClient, "fetch_raw_file",
+                    return_value="# contenuto",
+                ),
+                patch.object(
+                    engine, "_install_standalone_files_v3"
+                ) as mock_standalone,
+            ):
+                result = asyncio.run(install(pkg_id, deployment_mode="store"))
+
+            self.assertTrue(result.get("success"), msg=result)
+            self.assertNotIn("deployment_notice", result)
+            self.assertNotIn("deployment_warning", result)
+            summary = result.get("deployment_summary", {})
+            self.assertTrue(summary.get("engine_store"))
+            self.assertFalse(summary.get("standalone_copy"))
+            self.assertEqual(summary.get("standalone_files_count"), 0)
+            mock_standalone.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

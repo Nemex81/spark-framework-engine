@@ -76,6 +76,7 @@ from spark.merge.validators import (
 )
 from spark.packages import (
     _build_registry_package_summary,
+    _get_deployment_modes,
     _get_registry_min_engine_version,
     _install_package_v3_into_store,
     _list_orphan_overrides_for_package,
@@ -431,7 +432,80 @@ def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None
         deployment_mode: str = "auto",
         migrate_copilot_instructions: bool = False,
     ) -> dict[str, Any]:
-        """Install an SCF package from the public registry into the active workspace .github/."""
+        """Install an SCF package from the public registry.
+
+        Packages with min_engine_version >= 3.0.0 are installed in the
+        engine store (v3 path). Legacy packages (< 3.0.0) are written
+        directly into .github/ (v2 path).
+
+        Args:
+            package_id: Registry ID of the package to install.
+            conflict_mode: How to handle file conflicts with untracked
+                existing files. One of: abort, replace, manual, auto,
+                assisted. Default: abort.
+            update_mode: Update strategy for tracked files. One of: ask,
+                integrative, replace, conservative, selective. Empty
+                string delegates to the workspace update policy.
+                Default: "".
+            deployment_mode: Controls whether v3 package files are
+                copied into .github/ after engine-store installation.
+                One of:
+                auto   — copies only if the manifest declares
+                         standalone_copy=True;
+                store  — engine store only, never copies;
+                copy   — copies standalone_files from the manifest
+                         (emits deployment_warning if none declared).
+                Default: auto.
+            migrate_copilot_instructions: When True, migrates
+                copilot-instructions.md from legacy format to SCF-marker
+                format before installing. Default: False.
+
+        Returns:
+            dict with at minimum:
+                success (bool): True if installation completed.
+                package (str): Package ID.
+                version (str): Installed version.
+
+            v3 path — additional keys on success:
+                deployment_summary (dict):
+                    engine_store (bool): True if stored in engine store.
+                    standalone_copy (bool): True if files written to
+                        .github/.
+                    standalone_files_count (int): Files written count.
+                deployment_notice (str): Present when
+                    deployment_mode='auto' and manifest has no
+                    standalone_copy. Mutually exclusive with
+                    deployment_warning.
+                deployment_warning (str): Present when
+                    deployment_mode='copy' but manifest declares no
+                    standalone_files. Mutually exclusive with
+                    deployment_notice.
+                standalone_files_written (list[str]): Files written.
+                standalone_files_preserved (list[str]): Files skipped.
+                standalone_files_errors (list[str]): Errors if any.
+
+            v2 legacy path — additional keys on success:
+                installed (list[str]): Files written to .github/.
+                preserved (list[str]): Tracked files skipped.
+                extended_files (list[str]): Section-merged files.
+                delegated_files (list[str]): Files skipped by policy.
+                replaced_files (list[str]): Replaced unconditionally.
+                merge_clean (list[dict]): Cleanly merged files.
+                merge_conflict (list[dict]): Unresolved conflicts.
+                session_id (str | None): Active merge session ID.
+                snapshot_written (list[str]): Snapshots saved.
+                backup_path (str | None): Backup archive path.
+
+            On action_required (success=True, install paused):
+                action_required (str): One of:
+                    authorize_github_write,
+                    migrate_copilot_instructions,
+                    choose_update_mode.
+                message (str): Description of required action.
+
+            On failure (success=False):
+                error (str): Error description.
+        """
         if conflict_mode not in _SUPPORTED_CONFLICT_MODES:
             return _build_install_result(
                 False,
@@ -536,8 +610,6 @@ def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None
             )
             # B.2: dopo install v3 applica standalone_files se richiesto.
             if v3_result.get("success") and deployment_mode != "store":
-                from spark.packages import _get_deployment_modes  # noqa: PLC0415
-
                 modes = _get_deployment_modes(pkg_manifest)
                 should_copy = (
                     deployment_mode == "copy"
@@ -545,7 +617,7 @@ def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None
                 )
                 if should_copy:
                     standalone_files_declared = modes.get("standalone_files", [])
-                    if not standalone_files_declared:
+                    if not standalone_files_declared and deployment_mode == "copy":
                         # copy esplicito ma manifest non dichiara standalone_files:
                         # avvisa senza bloccare l'installazione (store è comunque ok).
                         v3_result["deployment_warning"] = (
