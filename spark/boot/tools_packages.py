@@ -561,6 +561,28 @@ def register_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None
                         v3_result["standalone_files_errors"] = standalone_result.get(
                             "errors", []
                         )
+                elif deployment_mode == "auto" and not modes.get("standalone_copy"):
+                    # auto senza standalone_copy dichiarato: file solo nello store.
+                    v3_result["deployment_notice"] = (
+                        "Pacchetto installato solo nell'engine store. "
+                        "I file NON sono stati scritti in .github/. "
+                        "Per copiare i file nel workspace, "
+                        "richiama scf_install_package con deployment_mode='copy'."
+                    )
+                v3_result["deployment_summary"] = {
+                    "engine_store": True,
+                    "standalone_copy": should_copy,
+                    "standalone_files_count": len(v3_result.get("standalone_files_written", [])),
+                }
+            if deployment_mode == "store" and v3_result.get("success"):
+                v3_result.setdefault(
+                    "deployment_summary",
+                    {
+                        "engine_store": True,
+                        "standalone_copy": False,
+                        "standalone_files_count": 0,
+                    },
+                )
             return v3_result
         # Pacchetti legacy (< 3.0.0): warning su stderr e flusso v2 invariato.
         _log.warning(
