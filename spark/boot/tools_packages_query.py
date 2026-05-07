@@ -36,6 +36,8 @@ def register_query_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -
     sub-factory (needed by ``scf_apply_updates``).
     """
     ctx = engine._ctx
+    # Infrastruttura factory: catturato per futura espansione
+    # o simmetria con gli altri sottomoduli.
     inventory = engine._inventory
     manifest = engine._manifest
     registry = engine._registry_client
@@ -49,8 +51,6 @@ def register_query_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -
 
     # ── install_helpers aliases ──────────────────────────────────────────── #
     _normalize_file_policies = _ih._normalize_file_policies
-    _validate_extend_policy_target = _ih._validate_extend_policy_target
-    _build_install_result = _ih._build_install_result
 
     # ── shims ────────────────────────────────────────────────────────────── #
     def _get_package_install_context(package_id: str) -> dict[str, Any]:

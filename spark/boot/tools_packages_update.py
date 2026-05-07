@@ -46,6 +46,8 @@ def register_update_package_tools(
     satisfy cross-submodule call dependencies.
     """
     ctx = engine._ctx
+    # Infrastruttura factory: catturato per futura espansione
+    # o simmetria con gli altri sottomoduli.
     inventory = engine._inventory
     manifest = engine._manifest
     registry = engine._registry_client

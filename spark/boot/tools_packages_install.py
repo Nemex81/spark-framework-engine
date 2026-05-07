@@ -150,8 +150,6 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
     _build_install_result = _ih._build_install_result
     _build_diff_summary = _ih._build_diff_summary
     _resolve_effective_update_mode = _ih._resolve_effective_update_mode
-    _normalize_file_policies = _ih._normalize_file_policies
-    _validate_extend_policy_target = _ih._validate_extend_policy_target
 
     # ── shims ────────────────────────────────────────────────────────────── #
     def _save_snapshots(package_id: str, files: list[tuple[str, Path]]) -> dict[str, list[str]]:
