@@ -36,8 +36,11 @@ def register_query_package_tools(engine: Any, mcp: Any, tool_names: list[str]) -
     sub-factory (needed by ``scf_apply_updates``).
     """
     ctx = engine._ctx
-    # Infrastruttura factory: catturato per futura espansione
-    # o simmetria con gli altri sottomoduli.
+    # Infrastruttura factory — le seguenti catture
+    # (inventory, merge_engine, sessions) sono mantenute
+    # per simmetria con gli altri sottomoduli e come punti
+    # di estensione espliciti per tool futuri nel gruppo
+    # query. Non rimuovere senza analisi cross-modulo.
     inventory = engine._inventory
     manifest = engine._manifest
     registry = engine._registry_client

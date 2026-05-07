@@ -46,8 +46,12 @@ def register_update_package_tools(
     satisfy cross-submodule call dependencies.
     """
     ctx = engine._ctx
-    # Infrastruttura factory: catturato per futura espansione
-    # o simmetria con gli altri sottomoduli.
+    # Infrastruttura factory — le seguenti catture
+    # (inventory, merge_engine, snapshots, sessions) sono
+    # mantenute per simmetria con gli altri sottomoduli e
+    # come punti di estensione espliciti per tool futuri
+    # nel gruppo update. Non rimuovere senza analisi
+    # cross-modulo.
     inventory = engine._inventory
     manifest = engine._manifest
     registry = engine._registry_client
