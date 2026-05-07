@@ -243,7 +243,10 @@ class TestPackageInstallationPolicies(unittest.TestCase):
             self.assertTrue(result["success"])
             self.assertEqual(result["installed"], [".github/agents/shared.md"])
             self.assertEqual(shared_file.read_text(encoding="utf-8"), "new content")
-            self.assertEqual(manifest.get_installed_versions(), {"pkg-b": "2.0.0"})
+            # Fresh ManifestManager instance to avoid stale mtime-based cache from
+            # the pre-install instance; the engine may have written the manifest
+            # within the same timestamp window on fast filesystems.
+            self.assertEqual(ManifestManager(github_root).get_installed_versions(), {"pkg-b": "2.0.0"})
             snapshots = SnapshotManager(self._runtime_dir(workspace_root) / "snapshots")
             self.assertTrue(snapshots.snapshot_exists("pkg-b", "agents/shared.md"))
             self.assertEqual(

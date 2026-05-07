@@ -17,6 +17,10 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `scf_apply_updates`, `scf_plan_install`, `scf_remove_package`,
   `scf_get_package_changelog`, `scf_resolve_conflict_ai`, `scf_approve_conflict`,
   `scf_reject_conflict`, `scf_finalize_update`. Factory `register_package_tools(engine, mcp, tool_names)`.
+- `tests/test_ap1_scf_get_agent_source_warning.py` — 3 test per la divergenza silenziosa
+  tra `scf_get_agent` (workspace+store) e `scf_get_agent_resource` (registry-only):
+  `test_source_warning_present_for_workspace_only_agent`,
+  `test_no_source_warning_for_store_agent`, `test_not_found_returns_error`.
 
 ### Changed
 
@@ -24,9 +28,29 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   factory): registra sequenzialmente `register_resource_tools`, `register_override_tools`,
   `register_policy_tools`, `register_package_tools`, `register_bootstrap_tools`.
   Zero tool definiti inline. (Fase D.5 — Deframmentazione engine.py completata.)
+- `spark/boot/engine.py` — log contatore tool ora dinamico:
+  `_log.info("[SPARK-ENGINE][INFO] Tools registered: %d total", len(tool_names))` —
+  rimosso il valore hardcoded precedente (AP.3).
+- `spark/boot/sequence.py` — rimosso log hardcoded
+  `"Tools registered: 44 total"` dalla fine di `_build_app()` (AP.3).
+- `tests/test_engine_coherence.py` — `test_tool_counter_consistency` aggiornato:
+  verifica il pattern dinamico `"%d total"` in `engine.py` invece del log
+  hardcoded; conta decoratori `@_register_tool(` nei moduli factory (AP.3).
 
 ### Fixed
 
+- `spark/boot/tools_resources.py` — `scf_get_agent` ora aggiunge il campo
+  `source_warning` quando un agente è trovato nel workspace fisico ma non nel
+  registry MCP, segnalando la divergenza senza breaking change (AP.1).
+- `tests/test_framework_inventory_resolver.py` — aggiunto test di regressione
+  `test_list_agents_cat_b_store_only_after_a4`: documenta che gli agenti Cat.B
+  (Agent-Analyze, Agent-Git, Agent-Plan, Agent-Docs) presenti solo nello store
+  compaiono in `list_agents()` dopo l'integrazione A.4 con ResourceResolver (AP.2).
+- `tests/test_package_installation_policies.py` —
+  `test_scf_install_package_allows_reinstall_for_same_package`: sostituita
+  l'asserzione sulla versione con una nuova istanza `ManifestManager(github_root)`
+  per eliminare la race condition mtime-based cache tra l'istanza pre-install
+  e la scrittura del motore (S.1 stabilizzazione).
 - `README.md`: corretto link rotto a `SCF-PROJECT-DESIGN.md` — punta ora al percorso
   corretto `docs/archivio/SCF-PROJECT-DESIGN.md` con nota "(archiviato)".
 - `README.md`: corretto conteggio prompt bootstrap da "9" a "13" (`scf-*.prompt.md`

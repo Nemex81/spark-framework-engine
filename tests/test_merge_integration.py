@@ -207,7 +207,9 @@ class TestMergeIntegration(unittest.TestCase):
             self.assertEqual(result["merge_conflict"], [])
             self.assertEqual(result["merge_clean"][0]["file"], ".github/agents/shared.md")
             self.assertEqual(target_file.read_text(encoding="utf-8"), merged_text)
-            self.assertEqual(manifest.get_installed_versions(), {"pkg-a": "2.0.0"})
+            # Fresh ManifestManager instance to avoid stale mtime-based cache from
+            # the pre-install instance (same race condition as test_package_installation_policies).
+            self.assertEqual(ManifestManager(github_root).get_installed_versions(), {"pkg-a": "2.0.0"})
             self.assertEqual(
                 snapshots.load_snapshot("pkg-a", "agents/shared.md"),
                 merged_text,

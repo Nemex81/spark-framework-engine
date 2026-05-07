@@ -4,8 +4,8 @@
 > Strategia: Dual-Mode Package Contract v1.0
 > Stato: IN PIANIFICAZIONE → **COMPLETATO**
 >
-> Baseline test di riferimento: 313 passed / 9 skipped / 0 failed → aggiornata a 352 passed / 9 skipped post D.0–D.5
-> Stato: COMPLETATO (Fase A, B, C, D interamente gated)
+> Baseline test di riferimento: 313 passed / 9 skipped / 0 failed → 352 passed (post D.0–D.5) → **356 passed / 9 skipped / 0 failed (post AP.1/AP.2/AP.3 + S.1)**
+> Stato: COMPLETATO — Dual-Mode Package Contract v1.0 + Anomalie AP.1/AP.2/AP.3 chiuse + Stabilizzazione S.1 — 2026-05-07 UTC
 
 ## Legenda stati
 
@@ -287,7 +287,7 @@ File: `spark/boot/tools_packages.py` (NUOVO) + `spark/boot/engine.py` (riduzione
 
 ## Note tecniche
 
-- Baseline regressione: 313 passed / 9 skipped — da verificare dopo ogni Task.
+- Baseline regressione: **356 passed / 9 skipped** (post AP.1/AP.2/AP.3 + S.1) — da verificare dopo ogni Task.
 - Zero `print()` in tutto il codice prodotto. Logging esclusivamente via `_log.*` su `sys.stderr`.
 - Ogni nuovo metodo pubblico o modulo: type hints completi obbligatori.
 - ManifestManager è l'unico punto di scrittura del manifest workspace — invariante da non violare.

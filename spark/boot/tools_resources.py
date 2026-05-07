@@ -171,72 +171,80 @@ def register_resource_tools(
         """Return full content and metadata for a single SCF skill by name via skills:// URI."""
         uri = McpResourceRegistry.make_uri("skills", name)
         reg = _ensure_reg()
-        ff = reg.resolve(uri)
-        if ff is None:
+        resolved_path = reg.resolve(uri)
+        if resolved_path is None:
             return {
                 "success": False,
                 "error": f"Skill resource URI not found: {uri}",
                 "available": [f.name for f in inventory.list_skills()],
             }
-        result = _ff_to_dict(ff)
-        result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
-        result["mcp_uri"] = uri
-        result["mime_type"] = "text/markdown"
-        return result
+        return {
+            "name": name,
+            "path": str(resolved_path),
+            "content": resolved_path.read_text(encoding="utf-8", errors="replace"),
+            "mcp_uri": uri,
+            "mime_type": "text/markdown",
+        }
 
     @_register_tool("scf_get_instruction_resource")
     async def scf_get_instruction_resource(name: str) -> dict[str, Any]:
         """Return full content and metadata for a single SCF instruction by name via instructions:// URI."""
         uri = McpResourceRegistry.make_uri("instructions", name)
         reg = _ensure_reg()
-        ff = reg.resolve(uri)
-        if ff is None:
+        resolved_path = reg.resolve(uri)
+        if resolved_path is None:
             return {
                 "success": False,
                 "error": f"Instruction resource URI not found: {uri}",
                 "available": [f.name for f in inventory.list_instructions()],
             }
-        result = _ff_to_dict(ff)
-        result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
-        result["mcp_uri"] = uri
-        result["mime_type"] = "text/markdown"
-        return result
+        return {
+            "name": name,
+            "path": str(resolved_path),
+            "content": resolved_path.read_text(encoding="utf-8", errors="replace"),
+            "mcp_uri": uri,
+            "mime_type": "text/markdown",
+        }
 
     @_register_tool("scf_get_agent_resource")
     async def scf_get_agent_resource(name: str) -> dict[str, Any]:
         """Return full content and metadata for a single SCF agent by name via agents:// URI."""
         uri = McpResourceRegistry.make_uri("agents", name)
         reg = _ensure_reg()
-        ff = reg.resolve(uri)
-        if ff is None:
+        resolved_path = reg.resolve(uri)
+        if resolved_path is None:
             return {
                 "success": False,
                 "error": f"Agent resource URI not found: {uri}",
                 "available": [f.name for f in inventory.list_agents()],
             }
-        result = _ff_to_dict(ff)
-        result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
-        result["mcp_uri"] = uri
-        result["mime_type"] = "text/markdown"
-        return result
+        return {
+            "name": name,
+            "path": str(resolved_path),
+            "content": resolved_path.read_text(encoding="utf-8", errors="replace"),
+            "mcp_uri": uri,
+            "mime_type": "text/markdown",
+        }
 
     @_register_tool("scf_get_prompt_resource")
     async def scf_get_prompt_resource(name: str) -> dict[str, Any]:
         """Return full content and metadata for a single SCF prompt by name via prompts:// URI."""
         uri = McpResourceRegistry.make_uri("prompts", name)
         reg = _ensure_reg()
-        ff = reg.resolve(uri)
-        if ff is None:
+        resolved_path = reg.resolve(uri)
+        if resolved_path is None:
             return {
                 "success": False,
                 "error": f"Prompt resource URI not found: {uri}",
                 "available": [f.name for f in inventory.list_prompts()],
             }
-        result = _ff_to_dict(ff)
-        result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
-        result["mcp_uri"] = uri
-        result["mime_type"] = "text/markdown"
-        return result
+        return {
+            "name": name,
+            "path": str(resolved_path),
+            "content": resolved_path.read_text(encoding="utf-8", errors="replace"),
+            "mcp_uri": uri,
+            "mime_type": "text/markdown",
+        }
 
     @_register_tool("scf_list_agents")
     async def scf_list_agents() -> dict[str, Any]:
