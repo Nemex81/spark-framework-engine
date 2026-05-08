@@ -110,6 +110,77 @@ class TestInstallStandaloneFilesV3(unittest.TestCase):
             self.assertTrue(dest.is_file())
             self.assertEqual(dest.read_text(encoding="utf-8"), "# Python instructions")
 
+    def test_plugin_file_written_to_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eng = _make_engine_stub(root)
+            mfr = _make_manifest(eng._ctx.github_root)
+            _seed_store_file(
+                eng._ctx.engine_root,
+                "pkg-plugin",
+                ".github/workflows/notify-engine.yml",
+                "name: Notify Engine",
+            )
+            pkg_manifest = {
+                "plugin_files": [".github/workflows/notify-engine.yml"],
+            }
+            result = eng._install_standalone_files_v3(
+                package_id="pkg-plugin",
+                pkg_version="1.0.0",
+                pkg_manifest=pkg_manifest,
+                manifest=mfr,
+            )
+            self.assertTrue(result["success"])
+            self.assertEqual(result["standalone_files_written"], [])
+            self.assertIn(".github/workflows/notify-engine.yml", result["plugin_files_installed"])
+            self.assertIn(".github/workflows/notify-engine.yml", result["files_written"])
+            dest = eng._ctx.github_root / "workflows" / "notify-engine.yml"
+            self.assertTrue(dest.is_file())
+            self.assertEqual(dest.read_text(encoding="utf-8"), "name: Notify Engine")
+
+    def test_result_splits_standalone_and_plugin_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eng = _make_engine_stub(root)
+            mfr = _make_manifest(eng._ctx.github_root)
+            _seed_store_file(
+                eng._ctx.engine_root,
+                "pkg-split",
+                ".github/instructions/example.instructions.md",
+                "# Example",
+            )
+            _seed_store_file(
+                eng._ctx.engine_root,
+                "pkg-split",
+                ".github/python.profile.md",
+                "# Python Profile",
+            )
+            pkg_manifest = {
+                "deployment_modes": {
+                    "standalone_files": [".github/instructions/example.instructions.md"],
+                },
+                "plugin_files": [".github/python.profile.md"],
+            }
+            result = eng._install_standalone_files_v3(
+                package_id="pkg-split",
+                pkg_version="1.0.0",
+                pkg_manifest=pkg_manifest,
+                manifest=mfr,
+            )
+            self.assertTrue(result["success"])
+            self.assertEqual(
+                result["standalone_files_written"],
+                [".github/instructions/example.instructions.md"],
+            )
+            self.assertEqual(result["plugin_files_installed"], [".github/python.profile.md"])
+            self.assertEqual(
+                result["files_written"],
+                [
+                    ".github/instructions/example.instructions.md",
+                    ".github/python.profile.md",
+                ],
+            )
+
     def test_missing_source_in_store_returns_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

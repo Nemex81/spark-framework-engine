@@ -402,13 +402,21 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
             # B.2: dopo install v3 applica standalone_files se richiesto.
             if v3_result.get("success") and deployment_mode != "store":
                 modes = _get_deployment_modes(pkg_manifest)
+                plugin_files_declared = pkg_manifest.get("plugin_files", [])
+                if not isinstance(plugin_files_declared, list):
+                    plugin_files_declared = []
                 should_copy = (
                     deployment_mode == "copy"
                     or (deployment_mode == "auto" and modes.get("standalone_copy"))
                 )
-                if should_copy:
+                should_install_plugin_files = bool(plugin_files_declared)
+                if should_copy or should_install_plugin_files:
                     standalone_files_declared = modes.get("standalone_files", [])
-                    if not standalone_files_declared and deployment_mode == "copy":
+                    if (
+                        not standalone_files_declared
+                        and not should_install_plugin_files
+                        and deployment_mode == "copy"
+                    ):
                         # copy esplicito ma manifest non dichiara standalone_files:
                         # avvisa senza bloccare l'installazione (store è comunque ok).
                         v3_result["deployment_warning"] = (
@@ -432,10 +440,16 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
                             manifest=manifest_for_standalone,
                         )
                         v3_result["standalone_files_written"] = standalone_result.get(
-                            "files_written", []
+                            "standalone_files_written", []
                         )
                         v3_result["standalone_files_preserved"] = standalone_result.get(
-                            "preserved", []
+                            "standalone_files_preserved", []
+                        )
+                        v3_result["plugin_files_installed"] = standalone_result.get(
+                            "plugin_files_installed", []
+                        )
+                        v3_result["plugin_files_preserved"] = standalone_result.get(
+                            "plugin_files_preserved", []
                         )
                         if not standalone_result.get("success"):
                             v3_result["standalone_files_errors"] = standalone_result.get(
@@ -446,6 +460,9 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
                             "standalone_copy": True,
                             "standalone_files_count": len(
                                 v3_result.get("standalone_files_written", [])
+                            ),
+                            "plugin_files_count": len(
+                                v3_result.get("plugin_files_installed", [])
                             ),
                         }
                 elif deployment_mode == "auto" and not modes.get("standalone_copy"):
@@ -460,6 +477,7 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
                         "engine_store": True,
                         "standalone_copy": False,
                         "standalone_files_count": 0,
+                        "plugin_files_count": 0,
                     }
             if deployment_mode == "store" and v3_result.get("success"):
                 v3_result.setdefault(
@@ -468,7 +486,18 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
                         "engine_store": True,
                         "standalone_copy": False,
                         "standalone_files_count": 0,
+                        "plugin_files_count": 0,
                     },
+                )
+            if v3_result.get("success"):
+                physical_files = []
+                physical_files.extend(v3_result.get("workspace_files_written", []) or [])
+                physical_files.extend(v3_result.get("plugin_files_installed", []) or [])
+                physical_files.extend(v3_result.get("standalone_files_written", []) or [])
+                v3_result["installed"] = list(dict.fromkeys(physical_files))
+                v3_result.setdefault(
+                    "_deprecated_note",
+                    "Use workspace_files_written and plugin_files_installed instead",
                 )
             return v3_result
         # Pacchetti legacy (< 3.0.0): warning su stderr e flusso v2 invariato.

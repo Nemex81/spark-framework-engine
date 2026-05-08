@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from spark.core.constants import ENGINE_VERSION
+from spark.core.constants import ENGINE_VERSION, _RESOURCE_TYPES
 from spark.core.utils import _sha256_text
 from spark.inventory import EngineInventory
 from spark.manifest import ManifestManager, WorkspaceWriteGateway
@@ -33,6 +33,33 @@ from spark.registry import (
 from spark.assets import _apply_phase6_assets
 
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
+
+
+def _collect_mcp_service_uris(pkg_manifest: Mapping[str, Any]) -> list[str]:
+    """Return MCP resource URIs activated by a package manifest."""
+    resources = pkg_manifest.get("mcp_resources") or {}
+    if not isinstance(resources, Mapping):
+        return []
+    uris: list[str] = []
+    for resource_type in _RESOURCE_TYPES:
+        names = resources.get(resource_type) or []
+        if not isinstance(names, list):
+            continue
+        for name in names:
+            uris.append(McpResourceRegistry.make_uri(resource_type, str(name)))
+    return sorted(uris)
+
+
+def _dedupe_preserving_order(items: list[str]) -> list[str]:
+    """Return items without duplicates while preserving first-seen order."""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
 
 
 class _V3LifecycleMixin:
@@ -311,24 +338,69 @@ class _V3LifecycleMixin:
 
         modes = _get_deployment_modes(pkg_manifest)
         standalone_files = modes.get("standalone_files") or []
-        if not standalone_files:
+        plugin_files = pkg_manifest.get("plugin_files", [])
+        if plugin_files is None:
+            plugin_files = []
+        if not isinstance(plugin_files, list):
+            return {
+                "success": False,
+                "files_written": [],
+                "standalone_files_written": [],
+                "plugin_files_installed": [],
+                "preserved": [],
+                "standalone_files_preserved": [],
+                "plugin_files_preserved": [],
+                "errors": ["plugin_files must be a list when declared"],
+            }
+        if not standalone_files and not plugin_files:
             return {
                 "success": True,
                 "files_written": [],
+                "standalone_files_written": [],
+                "plugin_files_installed": [],
                 "preserved": [],
+                "standalone_files_preserved": [],
+                "plugin_files_preserved": [],
                 "errors": [],
             }
 
-        synthetic_manifest: dict[str, Any] = {
-            "workspace_files": standalone_files,
-            "file_policies": pkg_manifest.get("file_policies") or {},
-        }
-        return self._install_workspace_files_v3(
+        file_policies = pkg_manifest.get("file_policies") or {}
+        standalone_result = self._install_workspace_files_v3(
             package_id=package_id,
             pkg_version=pkg_version,
-            pkg_manifest=synthetic_manifest,
+            pkg_manifest={
+                "workspace_files": standalone_files,
+                "file_policies": file_policies,
+            },
             manifest=manifest,
         )
+        plugin_result = self._install_workspace_files_v3(
+            package_id=package_id,
+            pkg_version=pkg_version,
+            pkg_manifest={
+                "workspace_files": plugin_files,
+                "file_policies": file_policies,
+            },
+            manifest=manifest,
+        )
+        standalone_written = list(standalone_result.get("files_written", []) or [])
+        plugin_written = list(plugin_result.get("files_written", []) or [])
+        standalone_preserved = list(standalone_result.get("preserved", []) or [])
+        plugin_preserved = list(plugin_result.get("preserved", []) or [])
+        errors = list(standalone_result.get("errors", []) or []) + list(
+            plugin_result.get("errors", []) or []
+        )
+        return {
+            "success": bool(standalone_result.get("success"))
+            and bool(plugin_result.get("success")),
+            "files_written": _dedupe_preserving_order(standalone_written + plugin_written),
+            "standalone_files_written": standalone_written,
+            "plugin_files_installed": plugin_written,
+            "preserved": _dedupe_preserving_order(standalone_preserved + plugin_preserved),
+            "standalone_files_preserved": standalone_preserved,
+            "plugin_files_preserved": plugin_preserved,
+            "errors": errors,
+        }
 
     def _remove_workspace_files_v3(
         self,
@@ -348,6 +420,11 @@ class _V3LifecycleMixin:
             ``{"removed": [...], "preserved": [...], "errors": [...]}``.
         """
         workspace_files = pkg_manifest.get("workspace_files") or []
+        plugin_files = pkg_manifest.get("plugin_files", [])
+        if plugin_files is None:
+            plugin_files = []
+        if isinstance(workspace_files, list) and isinstance(plugin_files, list):
+            workspace_files = _dedupe_preserving_order(workspace_files + plugin_files)
         if not isinstance(workspace_files, list) or not workspace_files:
             return {"removed": [], "preserved": [], "errors": []}
         gateway = WorkspaceWriteGateway(self._ctx.workspace_root, manifest)  # type: ignore[attr-defined]
@@ -452,6 +529,15 @@ class _V3LifecycleMixin:
                 installation_mode="v3_store",
                 store_path=str(store.packages_root / package_id),
                 files_installed=list(existing_v3_entry.get("files", []) or []),
+                mcp_services_activated=_collect_mcp_service_uris(pkg_manifest),
+                workspace_files_written=[],
+                workspace_files_preserved=[],
+                plugin_files_installed=[],
+                plugin_files_preserved=[],
+                installed=[],
+                _deprecated_note=(
+                    "Use workspace_files_written and plugin_files_installed instead"
+                ),
                 idempotent=True,
                 message=f"Package {package_id}@{pkg_version} already installed.",
             )
@@ -565,8 +651,13 @@ class _V3LifecycleMixin:
             installation_mode="v3_store",
             store_path=store_result["store_path"],
             files_installed=store_result["files"],
+            mcp_services_activated=_collect_mcp_service_uris(pkg_manifest),
             workspace_files_written=ws_result["files_written"],
             workspace_files_preserved=ws_result["preserved"],
+            plugin_files_installed=[],
+            plugin_files_preserved=[],
+            installed=list(ws_result["files_written"]),
+            _deprecated_note="Use workspace_files_written and plugin_files_installed instead",
             phase6_report=phase6_report,
             conflict_mode=conflict_mode,
         )

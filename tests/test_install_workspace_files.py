@@ -211,6 +211,44 @@ class TestRemoveWorkspaceFilesUntracked(unittest.TestCase):
                 "Untracked workspace_files entry must NOT be deleted on remove.",
             )
 
+    def test_remove_tracked_plugin_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_engine, tempfile.TemporaryDirectory() as tmp_ws:
+            engine_root = Path(tmp_engine)
+            workspace_root = Path(tmp_ws)
+            entry = ".github/workflows/notify-engine.yml"
+            target = workspace_root / ".github" / "workflows" / "notify-engine.yml"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("name: Notify Engine\n", encoding="utf-8")
+            ctx = WorkspaceContext(
+                workspace_root=workspace_root,
+                github_root=workspace_root / ".github",
+                engine_root=engine_root,
+            )
+            inventory = FrameworkInventory(ctx)
+            mcp = _FakeMCP()
+            engine = SparkFrameworkEngine(mcp, ctx, inventory)
+            manifest = ManifestManager(ctx.github_root)
+            manifest.upsert(
+                file_rel="workflows/notify-engine.yml",
+                package="scf-pycode-crafter",
+                package_version="1.0.0",
+                file_abs=target,
+            )
+            pkg_manifest = {
+                "package": "scf-pycode-crafter",
+                "version": "1.0.0",
+                "workspace_files": [],
+                "plugin_files": [entry],
+            }
+            result = engine._remove_workspace_files_v3(
+                package_id="scf-pycode-crafter",
+                pkg_manifest=pkg_manifest,
+                manifest=manifest,
+            )
+            self.assertIn(entry, result["removed"])
+            self.assertEqual(result["preserved"], [])
+            self.assertFalse(target.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
