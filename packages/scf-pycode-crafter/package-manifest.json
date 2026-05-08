@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "package": "scf-pycode-crafter",
   "version": "2.2.1",
   "display_name": "SCF Python Code Crafter",
@@ -19,6 +19,11 @@
     ".github/copilot-instructions.md",
     ".github/instructions/python.instructions.md",
     ".github/instructions/tests.instructions.md"
+  ],
+  "plugin_files": [
+    ".github/workflows/notify-engine.yml",
+    ".github/python.profile.md",
+    ".github/skills/error-recovery/reference/errors-python.md"
   ],
   "mcp_resources": {
     "agents": [

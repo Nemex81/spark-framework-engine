@@ -95,7 +95,9 @@ class TestEngineInventoryManifest(unittest.TestCase):
 
 
 class TestManifestSchemaCompatibility(unittest.TestCase):
-    """Verify package manifest v3.0 schema is parsed without crash."""
+    """Verify package manifest v3.x schema is parsed without crash."""
+
+    _SUPPORTED_PACKAGE_SCHEMA_VERSIONS = {"3.0", "3.1"}
 
     def _make_v3_manifest(self, tmp_path: Path) -> Path:
         manifest = {
@@ -131,12 +133,13 @@ class TestManifestSchemaCompatibility(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(data["schema_version"], "3.0")
             self.assertIn("workspace_files", data)
+            self.assertEqual(data.get("plugin_files", []), [])
             self.assertIn("mcp_resources", data)
             # Fallback v2.x: 'files' deve restare presente
             self.assertIn("files", data)
 
     def test_v3_real_manifests_have_required_fields(self) -> None:
-        """The 3 real package manifests in the workspace must satisfy v3.0 schema."""
+        """The 3 real package manifests in the workspace must satisfy v3.x schema."""
         roots = [
             _ENGINE_PATH.parent.parent / "spark-base" / "package-manifest.json",
             _ENGINE_PATH.parent.parent / "scf-master-codecrafter" / "package-manifest.json",
@@ -146,10 +149,17 @@ class TestManifestSchemaCompatibility(unittest.TestCase):
             if not path.is_file():
                 continue
             data = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(
-                data["schema_version"], "3.0", f"{path}: schema_version != 3.0"
+            self.assertIn(
+                data["schema_version"],
+                self._SUPPORTED_PACKAGE_SCHEMA_VERSIONS,
+                f"{path}: schema_version unsupported",
             )
             self.assertIn("workspace_files", data, f"{path}: workspace_files missing")
+            self.assertIsInstance(
+                data.get("plugin_files", []),
+                list,
+                f"{path}: plugin_files must be a list when present",
+            )
             self.assertIn("mcp_resources", data, f"{path}: mcp_resources missing")
             self.assertIn("files", data, f"{path}: files (v2.x fallback) missing")
             for key in ("agents", "prompts", "skills", "instructions"):

@@ -1,5 +1,5 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "package": "scf-master-codecrafter",
   "version": "2.6.0",
   "display_name": "SCF Master CodeCrafter",
@@ -19,6 +19,7 @@
     ".github/copilot-instructions.md",
     ".github/instructions/mcp-context.instructions.md"
   ],
+  "plugin_files": [],
   "mcp_resources": {
     "agents": [
       "code-Agent-Analyze",
