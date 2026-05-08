@@ -7,6 +7,8 @@
 **Agente designato:** `@spark-engine-maintainer`
 **Tipo operazione:** Implementazione codice — modifica file esistenti + creazione funzioni
 **Baseline test:** 446 passed, 9 skipped, 0 failed
+** mode: agent **
+** execute_mode: autonomus **
 
 ---
 
