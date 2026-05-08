@@ -174,6 +174,7 @@ from spark.boot.tools_override import register_override_tools
 from spark.boot.tools_bootstrap import register_bootstrap_tools
 from spark.boot.tools_policy import register_policy_tools
 from spark.boot.tools_packages import register_package_tools
+from spark.boot.tools_plugins import register_plugin_tools
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -628,7 +629,7 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         _log.info("[SPARK-ENGINE][INFO] Resources registrate: %d", len(resource_uris))
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all MCP tools. Resources (15) and Tools (44)."""
+        """Register all MCP tools. Resources (15) and Tools (48)."""
         inventory = self._inventory
         tool_names: list[str] = []
 
@@ -679,6 +680,9 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         register_package_tools(self, self._mcp, tool_names)
         # D.3: i 4 tool bootstrap sono registrati dopo packages (dipendono da _install_package_tool_fn).
         register_bootstrap_tools(self, self._mcp, tool_names)
+
+        # D.6: i 4 tool plugin lifecycle sono registrati dalla factory in tools_plugins.py.
+        register_plugin_tools(self, self._mcp, tool_names)
 
         _log.info("[SPARK-ENGINE][INFO] Tools registered: %d total", len(tool_names))
 
