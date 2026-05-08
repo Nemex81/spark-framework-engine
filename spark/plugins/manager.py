@@ -50,7 +50,7 @@ def list_available_plugins(registry_client: Any) -> list[dict[str, Any]]:
     """
     try:
         packages: list[dict[str, Any]] = list(registry_client.list_packages())
-    except RuntimeError as exc:
+    except (ValueError, RuntimeError) as exc:
         _log.warning(
             "[SPARK-PLUGINS][WARNING] list_available_plugins: registry non raggiungibile: %s",
             exc,
@@ -100,14 +100,24 @@ def download_plugin(
             ``overwrite=False``).
           - ``errors`` (list[str]): Errori incontrati.
 
-    Raises:
-        ValueError: Se l'URL del registry non è GitHub.
-        RuntimeError: Se il registry è irraggiungibile e non c'è cache.
     """
     github_root = (target_dir / ".github").resolve()
 
     # Trova il pacchetto nel registry.
-    packages = registry_client.list_packages()
+    try:
+        packages = registry_client.list_packages()
+    except (ValueError, RuntimeError) as exc:
+        _log.error(
+            "[SPARK-PLUGINS][ERROR] download_plugin: registry non raggiungibile: %s", exc
+        )
+        return {
+            "success": False,
+            "package_id": package_id,
+            "version": version,
+            "files_written": [],
+            "files_skipped": [],
+            "errors": [f"Registry non raggiungibile: {exc}"],
+        }
     registry_entry: dict[str, Any] | None = None
     for pkg in packages:
         if str(pkg.get("id", "")).strip() == package_id:
@@ -132,7 +142,7 @@ def download_plugin(
     repo_url = str(registry_entry.get("repo_url", ""))
     try:
         pkg_manifest: dict[str, Any] = registry_client.fetch_package_manifest(repo_url)
-    except RuntimeError as exc:
+    except (ValueError, RuntimeError) as exc:
         return {
             "success": False,
             "package_id": package_id,
