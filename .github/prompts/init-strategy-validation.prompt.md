@@ -5,6 +5,8 @@
 **Branch target:** `feature/dual-mode-manifest-v3.1`
 **Data:** 2026-05-08
 **Agente designato:** `@spark-engine-maintainer`
+** mode: agent **
+** execute_mode: autonomus **
 
 ---
 
