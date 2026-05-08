@@ -142,15 +142,10 @@ class _V3LifecycleMixin:
     ) -> dict[str, Any]:
         """Scrive nel workspace solo i file dichiarati in ``workspace_files``.
 
-        Categoria A del refactoring v3: file referenziati staticamente da
-        Copilot/Cline (es. ``copilot-instructions.md``, instructions globali,
-        ``project-profile.md``). I file Categoria B (prompts, instructions
-        operative, agents, skills) restano nello store centrale e sono
-        serviti via MCP.
-
-        Idempotente: se il file esiste già con sha identico, gateway aggiorna
-        solo l'ownership nel manifest. Se l'utente ha modificato il file
-        (sha mismatch su entry tracciata), viene preservato.
+        .. deprecated::
+            Logica migrata in :class:`spark.plugins.installer.PluginInstaller`
+            (metodo ``install_from_store``).  Questo stub di retrocompatibilità
+            delega alla nuova implementazione e verrà rimosso nel cleanup finale.
 
         Args:
             package_id: ID del pacchetto.
@@ -161,147 +156,23 @@ class _V3LifecycleMixin:
 
         Returns:
             ``{"success": bool, "files_written": [...], "preserved": [...],
-              "errors": [...]}``. ``success=True`` anche con preserved
-            non vuoti (semantica di idempotenza). ``success=False`` solo
-            se sorgente mancante o write fallita.
+              "errors": [...]}``.
         """
-        workspace_files = pkg_manifest.get("workspace_files") or []
-        if not isinstance(workspace_files, list) or not workspace_files:
-            return {
-                "success": True,
-                "files_written": [],
-                "preserved": [],
-                "errors": [],
-            }
-        store = PackageResourceStore(self._ctx.engine_root)  # type: ignore[attr-defined]
-        package_root = store.packages_root / package_id
-        file_policies = pkg_manifest.get("file_policies") or {}
-        if not isinstance(file_policies, dict):
-            file_policies = {}
-        # OPT-1: snapshot pre-caricato (usa il cache di ManifestManager se già
-        # popolato dalla stessa operazione corrente). sha_map consente OPT-5
-        # senza ulteriori letture disco del manifest.
-        entries_snapshot = manifest.load()
-        sha_map: dict[str, str] = {}
-        for _e in entries_snapshot:
-            _fk = str(_e.get("file", "")).strip()
-            if _fk and _fk not in sha_map:
-                _sha = str(_e.get("sha256", "")).strip()
-                if _sha:
-                    sha_map[_fk] = _sha
+        # DEPRECATED: logica migrata in spark/plugins/installer.py — PluginInstaller.install_from_store()
+        from spark.manifest.gateway import WorkspaceWriteGateway  # noqa: PLC0415
+        from spark.plugins.installer import PluginInstaller  # noqa: PLC0415
 
-        preserved: list[str] = []
-        errors: list[str] = []
-        # OPT-2: raccolta scritture pendenti per batch post-loop.
-        # Ogni entry: (original_entry, github_rel, dest_path, content, merge_strategy).
-        pending_writes: list[tuple[str, str, Path, str, str | None]] = []
-        for entry in workspace_files:
-            if not isinstance(entry, str):
-                errors.append(f"invalid workspace_files entry: {entry!r}")
-                continue
-            github_rel = entry.removeprefix(".github/")
-            if ".." in Path(github_rel).parts:
-                errors.append(f"unsafe workspace_files path: {entry}")
-                continue
-            source_path = package_root / entry
-            if not source_path.is_file():
-                errors.append(
-                    f"workspace_files source missing in store: {entry}"
-                )
-                continue
-            # Preservation gate: se il file è già presente nel workspace ed è
-            # tracciato come modificato dall'utente da un altro owner,
-            # non sovrascrivere.
-            # NOTE: ``scf-engine-bootstrap`` viene escluso perché è un owner-shadow
-            # generato da auto-bootstrap (Cat. A sentinella) e non rappresenta una
-            # claim reale di pacchetto; in scenari multi-owner
-            # [scf-engine-bootstrap, <pkg>] il gate scatta correttamente
-            # sull'owner di pacchetto se l'utente ha modificato il file.
-            existing_owners = manifest.get_file_owners(github_rel)
-            other_owner_modified = any(
-                owner != package_id
-                and owner != "scf-engine-bootstrap"
-                and manifest.is_user_modified(github_rel) is True
-                for owner in existing_owners
-            )
-            if other_owner_modified:
-                preserved.append(entry)
-                continue
-            try:
-                content = source_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                errors.append(f"{entry}: cannot read source ({exc})")
-                continue
-            policy_meta = file_policies.get(entry) or {}
-            merge_strategy = (
-                policy_meta.get("merge_strategy") if isinstance(policy_meta, dict) else None
-            )
-            dest_path = self._ctx.github_root / github_rel  # type: ignore[attr-defined]
-            # OPT-5: salta la scrittura se il contenuto sorgente è identico
-            # all'SHA già tracciato nel manifest e il file esiste su disco
-            # (idempotenza su re-install senza variazioni di contenuto).
-            # Nota: _sha256_text usa UTF-8 LF; su Windows può differire dallo
-            # SHA binario CRLF — in quel caso il check non combacia e la
-            # scrittura avviene normalmente (comportamento corretto e sicuro).
-            if _sha256_text(content) == sha_map.get(github_rel, "") and dest_path.is_file():
-                preserved.append(entry)
-                continue
-            pending_writes.append((entry, github_rel, dest_path, content, merge_strategy))
-
-        # Errori di validazione pre-scrittura: restituisce subito senza toccare disco.
-        if errors:
-            return {
-                "success": False,
-                "files_written": [],
-                "preserved": preserved,
-                "errors": errors,
-            }
-
-        if not pending_writes:
-            return {
-                "success": True,
-                "files_written": [],
-                "preserved": preserved,
-                "errors": [],
-            }
-
-        # OPT-4 + OPT-2: scritture fisiche batch + manifest.upsert_many() una sola volta.
-        # Il manifest viene aggiornato solo se tutte le scritture hanno avuto successo.
-        files_written: list[str] = []
-        upsert_files: list[tuple[str, Path]] = []
-        merge_strategies_by_file: dict[str, str] = {}
-        write_errors: list[str] = []
-        for entry, github_rel, dest_path, content, merge_strategy in pending_writes:
-            try:
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                dest_path.write_text(content, encoding="utf-8")
-                upsert_files.append((github_rel, dest_path))
-                if merge_strategy is not None:
-                    merge_strategies_by_file[github_rel] = merge_strategy
-                files_written.append(entry)
-            except OSError as exc:
-                write_errors.append(f"{github_rel}: write failed ({exc})")
-
-        if write_errors:
-            return {
-                "success": False,
-                "files_written": files_written,
-                "preserved": preserved,
-                "errors": write_errors,
-            }
-
-        manifest.upsert_many(
-            package=package_id,
-            package_version=pkg_version,
-            files=upsert_files,
-            merge_strategies_by_file=merge_strategies_by_file or None,
+        installer = PluginInstaller(
+            workspace_root=self._ctx.workspace_root,  # type: ignore[attr-defined]
+            manifest_manager=manifest,
+            gateway=WorkspaceWriteGateway(self._ctx.workspace_root, manifest),  # type: ignore[attr-defined]
         )
-        return {
-            "success": True,
-            "files_written": files_written,
-            "preserved": preserved,
-            "errors": [],
-        }
+        return installer.install_from_store(
+            package_id=package_id,
+            pkg_version=pkg_version,
+            pkg_manifest=pkg_manifest,
+            engine_root=self._ctx.engine_root,  # type: ignore[attr-defined]
+        )
 
     def _install_standalone_files_v3(
         self,
@@ -410,6 +281,11 @@ class _V3LifecycleMixin:
     ) -> dict[str, Any]:
         """Rimuove dal workspace i file ``workspace_files`` non modificati dall'utente.
 
+        .. deprecated::
+            Logica migrata in :class:`spark.plugins.remover.PluginRemover`
+            (metodo ``remove_workspace_files``).  Questo stub di retrocompatibilità
+            delega alla nuova implementazione e verrà rimosso nel cleanup finale.
+
         Args:
             package_id: ID del pacchetto da rimuovere.
             pkg_manifest: package-manifest.json letto dallo store
@@ -419,50 +295,16 @@ class _V3LifecycleMixin:
         Returns:
             ``{"removed": [...], "preserved": [...], "errors": [...]}``.
         """
-        workspace_files = pkg_manifest.get("workspace_files") or []
-        plugin_files = pkg_manifest.get("plugin_files", [])
-        if plugin_files is None:
-            plugin_files = []
-        if isinstance(workspace_files, list) and isinstance(plugin_files, list):
-            workspace_files = _dedupe_preserving_order(workspace_files + plugin_files)
-        if not isinstance(workspace_files, list) or not workspace_files:
-            return {"removed": [], "preserved": [], "errors": []}
-        gateway = WorkspaceWriteGateway(self._ctx.workspace_root, manifest)  # type: ignore[attr-defined]
-        removed: list[str] = []
-        preserved: list[str] = []
-        errors: list[str] = []
-        for entry in workspace_files:
-            if not isinstance(entry, str):
-                continue
-            github_rel = entry.removeprefix(".github/")
-            target = self._ctx.github_root / github_rel  # type: ignore[attr-defined]
-            if not target.is_file():
-                continue
-            owners = manifest.get_file_owners(github_rel)
-            # Non toccare se l'unica ownership tracciata è di un altro pacchetto.
-            non_package_owners = [o for o in owners if o != package_id]
-            if non_package_owners and package_id not in owners:
-                preserved.append(entry)
-                continue
-            # File non tracciato nel manifest: preserva per sicurezza e logga warning.
-            if not owners:
-                _log.warning(
-                    "[SPARK-ENGINE][WARNING] _remove_workspace_files_v3: "
-                    "file %s non tracciato nel manifest, preservato per sicurezza.",
-                    entry,
-                )
-                preserved.append(entry)
-                continue
-            # Preservazione user-modified.
-            if manifest.is_user_modified(github_rel) is True:
-                preserved.append(entry)
-                continue
-            try:
-                gateway.delete(github_rel, package_id)
-                removed.append(entry)
-            except OSError as exc:
-                errors.append(f"{entry}: delete failed ({exc})")
-        return {"removed": removed, "preserved": preserved, "errors": errors}
+        # DEPRECATED: logica migrata in spark/plugins/remover.py — PluginRemover.remove_workspace_files()
+        from spark.manifest.gateway import WorkspaceWriteGateway  # noqa: PLC0415
+        from spark.plugins.remover import PluginRemover  # noqa: PLC0415
+
+        remover = PluginRemover(
+            workspace_root=self._ctx.workspace_root,  # type: ignore[attr-defined]
+            manifest_manager=manifest,
+            gateway=WorkspaceWriteGateway(self._ctx.workspace_root, manifest),  # type: ignore[attr-defined]
+        )
+        return remover.remove_workspace_files(package_id=package_id, pkg_manifest=pkg_manifest)
 
     async def _install_package_v3(
         self,

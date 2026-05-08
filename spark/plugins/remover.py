@@ -11,8 +11,9 @@ Logica ereditata (riscritta nel nuovo contesto senza import circolari da):
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from spark.plugins.schema import PluginRecord
 
@@ -24,6 +25,17 @@ if TYPE_CHECKING:
 _PLUGIN_SECTION_HEADER: str = (
     "# Plugin instructions (managed by SPARK Plugin Manager \u2014 do not edit manually)"
 )
+
+
+def _dedupe_preserving_order(items: list[str]) -> list[str]:
+    """Deduplica una lista preservando l'ordine di prima occorrenza."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
 
 
 class PluginRemover:
@@ -144,6 +156,87 @@ class PluginRemover:
                 )
 
         return removed
+
+    def remove_workspace_files(
+        self,
+        package_id: str,
+        pkg_manifest: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Rimuove dal workspace i file ``workspace_files`` + ``plugin_files`` del pacchetto.
+
+        Equivalente migrato da ``spark.boot.lifecycle._remove_workspace_files_v3``.
+        Opera sui file dichiarati in ``pkg_manifest["workspace_files"]`` e
+        ``pkg_manifest["plugin_files"]`` (deduplicati).  Preserva i file
+        modificati dall'utente o owned da altri pacchetti.
+
+        Il manifest del pacchetto deve essere letto dallo store PRIMA che la
+        directory del pacchetto venga rimossa (invariante del flusso v3 remove).
+
+        Args:
+            package_id: ID del pacchetto da rimuovere.
+            pkg_manifest: package-manifest.json letto dallo store prima della rmtree.
+
+        Returns:
+            ``{"removed": [...], "preserved": [...], "errors": []}``.
+        """
+        workspace_files: list[str] = []
+        raw_wf = pkg_manifest.get("workspace_files")
+        if isinstance(raw_wf, list):
+            workspace_files = list(raw_wf)
+
+        plugin_files: list[str] = []
+        raw_pf = pkg_manifest.get("plugin_files")
+        if isinstance(raw_pf, list):
+            plugin_files = list(raw_pf)
+
+        all_files = _dedupe_preserving_order(workspace_files + plugin_files)
+
+        if not all_files:
+            return {"removed": [], "preserved": [], "errors": []}
+
+        removed: list[str] = []
+        preserved: list[str] = []
+        errors: list[str] = []
+
+        for entry in all_files:
+            if not isinstance(entry, str):
+                continue
+
+            github_rel = entry.removeprefix(".github/")
+            target = self._github_root / github_rel
+
+            if not target.is_file():
+                continue
+
+            owners = self._manifest.get_file_owners(github_rel)
+
+            # File non tracciato: preserva per sicurezza.
+            if not owners:
+                print(
+                    f"[SPARK-PLUGINS][WARNING] File {entry!r} non tracciato nel manifest, "
+                    "preservato per sicurezza",
+                    file=sys.stderr,
+                )
+                preserved.append(entry)
+                continue
+
+            # File owned da altri pacchetti: non toccare.
+            if package_id not in owners:
+                preserved.append(entry)
+                continue
+
+            # Preservation gate: utente ha modificato il file.
+            if self._manifest.is_user_modified(github_rel) is True:
+                preserved.append(entry)
+                continue
+
+            try:
+                self._gateway.delete(github_rel, package_id)
+                removed.append(entry)
+            except OSError as exc:
+                errors.append(f"{entry}: delete failed ({exc})")
+
+        return {"removed": removed, "preserved": preserved, "errors": errors}
 
     def _remove_instruction_reference(self, pkg_id: str) -> None:
         """Rimuove la referenza ``#file:`` del plugin da ``copilot-instructions.md``.

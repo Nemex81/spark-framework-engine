@@ -6,6 +6,8 @@
 **Branch target:** `feature/dual-mode-manifest-v3.1`
 **Approvazione:** Nemex81 (coordinatore umano)
 **Versione prompt:** 1.0
+** mode: agent **
+** execute_mode: autonomus **
 
 ---
 

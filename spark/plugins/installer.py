@@ -13,9 +13,11 @@ from __future__ import annotations
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from spark.core.utils import _sha256_text
 from spark.plugins.schema import PluginInstallError, PluginManifest
 
 if TYPE_CHECKING:
@@ -163,6 +165,158 @@ class PluginInstaller:
             )
 
         return written
+
+    def install_from_store(
+        self,
+        package_id: str,
+        pkg_version: str,
+        pkg_manifest: Mapping[str, Any],
+        engine_root: Path,
+    ) -> dict[str, Any]:
+        """Copia nel workspace i file ``workspace_files`` dallo store engine locale.
+
+        Equivalente migrato da ``spark.boot.lifecycle._install_workspace_files_v3``.
+        Legge il contenuto dall'engine store locale (non da HTTP) e scrive nel
+        workspace tramite ``WorkspaceWriteGateway`` con batch write (OPT-8).
+
+        Applica il preservation gate: se il file è tracciato come modificato
+        dall'utente (SHA mismatch), non sovrascrive.  Idempotente: se SHA
+        sorgente == SHA tracciato e il file esiste su disco, salta la scrittura.
+
+        Args:
+            package_id: ID del pacchetto.
+            pkg_version: Versione del pacchetto installata.
+            pkg_manifest: package-manifest.json (deve contenere ``workspace_files``
+                e opzionalmente ``file_policies``).
+            engine_root: Path assoluto alla root del motore (contiene ``packages/``).
+
+        Returns:
+            ``{"success": bool, "files_written": [...], "preserved": [...], "errors": []}``.
+        """
+        from spark.registry.store import PackageResourceStore  # noqa: PLC0415
+
+        workspace_files: list[str] = []
+        raw = pkg_manifest.get("workspace_files")
+        if isinstance(raw, list):
+            workspace_files = raw
+
+        if not workspace_files:
+            return {"success": True, "files_written": [], "preserved": [], "errors": []}
+
+        store = PackageResourceStore(engine_root)
+        package_root = store.packages_root / package_id
+
+        file_policies: dict[str, Any] = {}
+        raw_policies = pkg_manifest.get("file_policies")
+        if isinstance(raw_policies, dict):
+            file_policies = raw_policies
+
+        # Snapshot SHA per preservation gate / idempotenza (OPT-5).
+        entries_snapshot = self._manifest.load()
+        sha_map: dict[str, str] = {}
+        for entry in entries_snapshot:
+            fk = str(entry.get("file", "")).strip()
+            sha = str(entry.get("sha256", "")).strip()
+            if fk and sha and fk not in sha_map:
+                sha_map[fk] = sha
+
+        preserved: list[str] = []
+        errors: list[str] = []
+        pending_writes: list[tuple[str, str]] = []   # (github_rel, content)
+        pending_entries: list[str] = []              # original entry strings
+        pending_strategies: dict[str, str] = {}
+
+        for entry in workspace_files:
+            if not isinstance(entry, str):
+                errors.append(f"invalid workspace_files entry: {entry!r}")
+                continue
+
+            github_rel = entry.removeprefix(".github/")
+
+            # Path traversal guard.
+            if ".." in Path(github_rel).parts:
+                errors.append(f"unsafe workspace_files path: {entry}")
+                continue
+
+            source_path = package_root / entry
+            if not source_path.is_file():
+                errors.append(f"workspace_files source missing in store: {entry}")
+                continue
+
+            # Preservation gate: file owned e modificato da un altro pacchetto.
+            existing_owners = self._manifest.get_file_owners(github_rel)
+            other_owner_modified = any(
+                owner != package_id
+                and owner != "scf-engine-bootstrap"
+                and self._manifest.is_user_modified(github_rel) is True
+                for owner in existing_owners
+            )
+            if other_owner_modified:
+                preserved.append(entry)
+                continue
+
+            try:
+                content = source_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                errors.append(f"{entry}: cannot read source ({exc})")
+                continue
+
+            # Idempotency: skip se SHA invariato e file presente su disco (OPT-5).
+            if (
+                _sha256_text(content) == sha_map.get(github_rel, "")
+                and (self._github_root / github_rel).is_file()
+            ):
+                preserved.append(entry)
+                continue
+
+            policy_meta = file_policies.get(entry)
+            merge_strategy: str | None = None
+            if isinstance(policy_meta, dict):
+                merge_strategy = policy_meta.get("merge_strategy")
+
+            pending_writes.append((github_rel, content))
+            pending_entries.append(entry)
+            if merge_strategy is not None:
+                pending_strategies[github_rel] = merge_strategy
+
+        if errors:
+            return {
+                "success": False,
+                "files_written": [],
+                "preserved": preserved,
+                "errors": errors,
+            }
+
+        if not pending_writes:
+            return {
+                "success": True,
+                "files_written": [],
+                "preserved": preserved,
+                "errors": [],
+            }
+
+        # Batch write tramite gateway (OPT-8).
+        try:
+            self._gateway.write_many(
+                writes=pending_writes,
+                owner=package_id,
+                version=pkg_version,
+                merge_strategies=pending_strategies or None,
+            )
+        except OSError as exc:
+            return {
+                "success": False,
+                "files_written": [],
+                "preserved": preserved,
+                "errors": [f"batch write failed: {exc}"],
+            }
+
+        return {
+            "success": True,
+            "files_written": pending_entries,
+            "preserved": preserved,
+            "errors": [],
+        }
 
     def _add_instruction_reference(self, pkg_id: str) -> None:
         """Aggiunge la referenza ``#file:`` del plugin in ``copilot-instructions.md``.

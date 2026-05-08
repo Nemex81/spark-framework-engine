@@ -77,8 +77,9 @@ class PluginManagerFacade:
             registry_url=registry_url,
         )
 
-        # PluginRegistry: stato locale dei plugin installati (.spark-plugins).
-        self._plugin_registry = PluginRegistry(github_root)
+        # PluginRegistry: stato dei plugin installati.
+        # Usa il manifest-based backend (Step 3) passando il manifest_manager.
+        self._plugin_registry = PluginRegistry(github_root, manifest_manager=self._manifest)
 
         # Componenti operativi del Plugin Manager.
         self._installer = PluginInstaller(workspace_root, self._manifest, self._gateway)
