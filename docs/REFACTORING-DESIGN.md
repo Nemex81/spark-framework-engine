@@ -65,6 +65,12 @@ Questo livello è il cuore della gestione dei pacchetti. Contiene il client per 
 
 Questo livello dipende da `core` e `manifest`. È il confine tra la logica locale e il mondo esterno.
 
+**Nota Dual-Mode manifest v3.1.** I package manifest distinguono ora tra risorse
+servite in MCP Service Mode (`mcp_resources` nello store engine) e file fisici in
+Plugin Mode. `workspace_files` resta riservato agli editor-binding stretti letti
+direttamente da VS Code/Copilot/GitHub, mentre `plugin_files` elenca file plugin
+fisici aggiuntivi da scrivere nel workspace usando lo stesso preservation gate.
+
 ### 3.5 Workspace (workspace)
 
 Questo livello si occupa di capire dove si trova il workspace attivo e di descriverne il contenuto. Il localizzatore risolve il path del workspace usando variabili d'ambiente, marker di file e configurazioni VS Code. L'inventory scopre i file SCF presenti sotto `.github/` e li cataloga. Il gestore delle preferenze legge e scrive la politica di aggiornamento dell'utente.

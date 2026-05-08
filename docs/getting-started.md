@@ -191,6 +191,20 @@ Per usare SPARK la prima volta in un workspace utente:
   - controlla dettaglio, dipendenze e compatibilita con `scf_get_package_info(package_id)`
   - installa con `scf_install_package(package_id)`
 
+### MCP Service Mode e Plugin Mode
+
+I pacchetti SCF schema `3.1` possono usare due modalita contemporaneamente:
+
+- **MCP Service Mode**: agenti, skill, instruction e prompt restano nello store
+  dell'engine e vengono serviti via URI MCP come `agents://...` o `skills://...`.
+- **Plugin Mode**: i file dichiarati in `workspace_files` e `plugin_files` vengono
+  scritti fisicamente nel workspace sotto `.github/`, tracciati dal manifest e
+  protetti dal preservation gate se l'utente li modifica.
+
+Nel risultato di `scf_install_package`, `mcp_services_activated` mostra le risorse
+MCP attivate, `workspace_files_written` mostra gli editor-binding scritti e
+`plugin_files_installed` mostra i file plugin fisici installati.
+
 - Dopo l'installazione, verifica lo stato locale con `scf_verify_workspace()`.
   I file condivisi intenzionalmente tra piu' pacchetti con `scf_merge_strategy: merge_sections`
   non vengono trattati come conflitti di ownership dal report di integrita'.

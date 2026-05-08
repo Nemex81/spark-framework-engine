@@ -197,6 +197,18 @@ Quando il flusso policy e attivo, il payload include anche:
 - `authorization_required` / `github_write_authorized`
 - `backup_path` per i percorsi `replace`
 
+Per i package manifest schema `3.1`, l'installazione distingue esplicitamente
+tre categorie nel payload v3:
+
+- `mcp_services_activated`: URI MCP attivati dal package (`agents://`,
+  `skills://`, `instructions://`, `prompts://`)
+- `workspace_files_written`: file editor-binding dichiarati in `workspace_files`
+- `plugin_files_installed`: file fisici dichiarati in `plugin_files`, installati
+  nel workspace con lo stesso preservation gate dei `workspace_files`
+
+La chiave `installed` resta presente come alias deprecato dei file fisici scritti
+nel workspace per compatibilita con client esistenti.
+
 `scf_plan_install(package_id)` restituisce un'anteprima read-only del risultato
 di installazione: file scrivibili, file da preservare, conflitti che richiedono
 una decisione esplicita e, per i merge mode, una preview del piano di merge.
