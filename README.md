@@ -63,7 +63,7 @@ scf://runtime-state
 > Il numero effettivo a runtime è superiore perché i pacchetti installati registrano
 > risorse aggiuntive al boot tramite `_v3_repopulate_registry()`.
 
-## Tools Disponibili (44)
+## Tools Disponibili (46)
 
 ```
 scf_list_overrides(resource_type=None)
@@ -104,6 +104,12 @@ scf_finalize_update(session_id)
 scf_resolve_conflict_ai(session_id, conflict_id)
 scf_approve_conflict(session_id, conflict_id)
 scf_reject_conflict(session_id, conflict_id)
+scf_plugin_install(pkg_id)
+scf_plugin_remove(pkg_id)
+scf_plugin_update(pkg_id)
+scf_plugin_list()
+scf_list_plugins()
+scf_install_plugin(package_id, version="latest", workspace_root="", overwrite=False)
 ```
 
 ## Migrazione Da Workspace Pre-Ownership

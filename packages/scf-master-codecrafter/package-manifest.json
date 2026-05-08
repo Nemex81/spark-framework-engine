@@ -15,10 +15,8 @@
   "conflicts": [],
   "file_ownership_policy": "error",
   "changelog_path": ".github/changelogs/scf-master-codecrafter.md",
-  "workspace_files": [
-    ".github/copilot-instructions.md",
-    ".github/instructions/mcp-context.instructions.md"
-  ],
+  "delivery_mode": "mcp_only",
+  "workspace_files": [],
   "plugin_files": [],
   "mcp_resources": {
     "agents": [

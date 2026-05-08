@@ -10,6 +10,7 @@ Logica ereditata (riscritta nel nuovo contesto senza import circolari da):
 """
 from __future__ import annotations
 
+import logging
 import sys
 import urllib.error
 import urllib.request
@@ -19,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 from spark.core.utils import _sha256_text
 from spark.plugins.schema import PluginInstallError, PluginManifest
+
+_log: logging.Logger = logging.getLogger("spark-framework-engine")
 
 if TYPE_CHECKING:
     from spark.manifest.gateway import WorkspaceWriteGateway
@@ -194,6 +197,20 @@ class PluginInstaller:
             ``{"success": bool, "files_written": [...], "preserved": [...], "errors": []}``.
         """
         from spark.registry.store import PackageResourceStore  # noqa: PLC0415
+
+        # TASK-2 — Dual-Mode Architecture: i pacchetti mcp_only non scrivono mai
+        # workspace_files nel workspace utente. Le risorse sono servite via MCP
+        # dallo store interno del motore.
+        # SPARK-ISSUE: se future code path di scrittura workspace_files vengono
+        # aggiunte (es. in spark/packages/lifecycle.py), applicare lo stesso guard
+        # delivery_mode == "mcp_only" in ogni punto. [TASK-2]
+        delivery_mode = pkg_manifest.get("delivery_mode", "managed")
+        if delivery_mode == "mcp_only":
+            _log.info(
+                "[SPARK-PLUGINS][INFO] Package '%s' is mcp_only — skipping workspace_files write.",
+                package_id,
+            )
+            return {"success": True, "files_written": [], "preserved": [], "errors": []}
 
         workspace_files: list[str] = []
         raw = pkg_manifest.get("workspace_files")

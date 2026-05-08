@@ -1,15 +1,15 @@
-"""Plugin tools factory — Step 2 Full Decoupling Architecture.
+"""Plugin tools factory — Step 2 Full Decoupling + Dual-Mode Architecture.
 
-Registers 4 MCP tools:
-  scf_plugin_install, scf_plugin_remove, scf_plugin_update, scf_plugin_list.
+Registers 6 MCP tools:
+  scf_plugin_install, scf_plugin_remove, scf_plugin_update, scf_plugin_list,
+  scf_list_plugins, scf_install_plugin.
 
-Tutti i tool delegano interamente a ``PluginManagerFacade`` senza logica
-di business interna. Ogni tool accetta ``workspace_root: str`` per consentire
-operazioni su workspace arbitrari (utile in ambienti multi-root).
+I primi 4 tool delegano a ``PluginManagerFacade`` (store-based, Universo A).
+Gli ultimi 2 tool delegano a ``PluginManager`` / ``download_plugin``
+(download diretto senza store, TASK-4 Dual-Mode Architecture v1.0).
 
-Il facade viene instanziato fresh per ogni chiamata con il workspace_root
-fornito dal client, con fallback a ``engine._ctx.workspace_root`` se la
-stringa è vuota o assente.
+Tutti i tool accettano ``workspace_root: str`` per consentire operazioni
+su workspace arbitrari (utile in ambienti multi-root).
 """
 from __future__ import annotations
 
@@ -18,11 +18,13 @@ from pathlib import Path
 from typing import Any
 
 from spark.plugins import PluginManagerFacade
+from spark.plugins.manager import download_plugin, list_available_plugins
 from spark.plugins.schema import (
     PluginInstallError,
     PluginNotFoundError,
     PluginNotInstalledError,
 )
+from spark.registry.client import RegistryClient
 
 _log = logging.getLogger("spark-framework-engine")
 
@@ -279,3 +281,135 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
         if registry_error is not None:
             response["registry_error"] = registry_error
         return response
+
+    # -----------------------------------------------------------------------
+    # TASK-4 — Dual-Mode Architecture: tool per download diretto (no store)
+    # -----------------------------------------------------------------------
+
+    @_register_tool("scf_list_plugins")
+    async def scf_list_plugins() -> dict[str, Any]:
+        """List plugin packages available for direct download (excludes mcp_only).
+
+        Returns the list of packages from the remote SCF registry that can be
+        downloaded directly into the workspace ```.github/`` directory without
+        passing through the engine's internal store.
+
+        Packages with ``delivery_mode == "mcp_only"`` are excluded: those are
+        served via MCP from the engine store and do not need to be downloaded.
+
+        Returns:
+            A dict with keys:
+              - ``status``: ``"ok"`` or ``"error"``
+              - ``plugins``: List of package dicts from the remote registry
+              - ``count``: Number of available packages
+              - ``message``: Human-readable summary
+        """
+        _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: start")
+        try:
+            registry_client = (
+                engine._registry_client
+                if engine._registry_client is not None
+                else RegistryClient(ctx.github_root)
+            )
+            plugins = list_available_plugins(registry_client)
+        except Exception as exc:  # noqa: BLE001
+            _log.error("[SPARK-ENGINE][ERROR] scf_list_plugins: %s", exc)
+            return {
+                "status": "error",
+                "plugins": [],
+                "count": 0,
+                "message": str(exc),
+            }
+        _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: done count=%d", len(plugins))
+        return {
+            "status": "ok",
+            "plugins": plugins,
+            "count": len(plugins),
+            "message": f"{len(plugins)} plugin disponibili per il download diretto.",
+        }
+
+    @_register_tool("scf_install_plugin")
+    async def scf_install_plugin(
+        package_id: str,
+        version: str = "latest",
+        workspace_root: str = "",
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        """Download a plugin directly into the workspace .github/ directory.
+
+        Downloads ``plugin_files`` declared in the package manifest from the
+        GitHub source repo into ``target_workspace/.github/`` without registering
+        anything in the engine's internal store or ``.github/.spark-plugins``.
+
+        The user owns the downloaded files. The engine does not track them.
+
+        Args:
+            package_id: Identifier of the plugin to download.
+            version: Version to download. Use ``"latest"`` for the most recent.
+            workspace_root: Absolute path to the target workspace root. Defaults to
+                the engine's active workspace if empty.
+            overwrite: If ``True``, overwrite existing files. Default ``False``.
+
+        Returns:
+            A dict with keys:
+              - ``status``: ``"ok"`` or ``"error"``
+              - ``package_id``: Package identifier echoed back
+              - ``version``: Version effectively downloaded
+              - ``files_written``: List of files written
+              - ``files_skipped``: List of files skipped (already exist)
+              - ``errors``: List of errors encountered
+              - ``message``: Human-readable summary
+        """
+        _log.info("[SPARK-ENGINE][INFO] scf_install_plugin: start package_id=%s version=%s", package_id, version)
+        target = Path(workspace_root).resolve() if workspace_root.strip() else ctx.workspace_root
+        try:
+            registry_client = (
+                engine._registry_client
+                if engine._registry_client is not None
+                else RegistryClient(ctx.github_root)
+            )
+            result = download_plugin(
+                package_id=package_id,
+                version=version,
+                target_dir=target,
+                registry_client=registry_client,
+                overwrite=overwrite,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.error("[SPARK-ENGINE][ERROR] scf_install_plugin(%s): %s", package_id, exc)
+            return {
+                "status": "error",
+                "package_id": package_id,
+                "version": version,
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [str(exc)],
+                "message": str(exc),
+            }
+
+        status = "ok" if result.get("success") else "error"
+        written = result.get("files_written", [])
+        skipped = result.get("files_skipped", [])
+        errors = result.get("errors", [])
+        effective_version = result.get("version", version)
+
+        _log.info(
+            "[SPARK-ENGINE][INFO] scf_install_plugin: done package_id=%s version=%s written=%d",
+            package_id,
+            effective_version,
+            len(written),
+        )
+        return {
+            "status": status,
+            "package_id": package_id,
+            "version": effective_version,
+            "files_written": written,
+            "files_skipped": skipped,
+            "errors": errors,
+            "message": (
+                f"Plugin '{package_id}' v{effective_version}: "
+                f"{len(written)} file scritti, {len(skipped)} saltati."
+                if status == "ok"
+                else f"Errore: {'; '.join(errors)}"
+            ),
+        }

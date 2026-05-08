@@ -1,27 +1,18 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "package": "spark-base",
   "version": "1.7.3",
   "display_name": "SPARK Base Layer",
   "description": "Layer fondazionale SCF con agenti base, skill condivise, instruction comuni e prompt framework general-purpose.",
   "author": "Nemex81",
   "min_engine_version": "3.1.0",
+  "delivery_mode": "mcp_only",
   "dependencies": [],
   "conflicts": [],
   "file_ownership_policy": "error",
   "changelog_path": ".github/changelogs/spark-base.md",
-  "workspace_files": [
-    ".github/copilot-instructions.md",
-    ".github/instructions/framework-guard.instructions.md",
-    ".github/instructions/git-policy.instructions.md",
-    ".github/instructions/model-policy.instructions.md",
-    ".github/instructions/personality.instructions.md",
-    ".github/instructions/project-reset.instructions.md",
-    ".github/instructions/spark-assistant-guide.instructions.md",
-    ".github/instructions/verbosity.instructions.md",
-    ".github/instructions/workflow-standard.instructions.md",
-    ".github/project-profile.md"
-  ],
+  "workspace_files": [],
+  "plugin_files": [],
   "mcp_resources": {
     "agents": [
       "Agent-Analyze",

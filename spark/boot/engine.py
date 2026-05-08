@@ -635,7 +635,7 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         _log.info("[SPARK-ENGINE][INFO] Resources registrate: %d", len(resource_uris))
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all MCP tools. Resources (15) and Tools (48)."""
+        """Register all MCP tools. Resources (15) and Tools (50)."""
         inventory = self._inventory
         tool_names: list[str] = []
 

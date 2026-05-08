@@ -15,16 +15,9 @@
   "conflicts": [],
   "file_ownership_policy": "error",
   "changelog_path": ".github/changelogs/scf-pycode-crafter.md",
-  "workspace_files": [
-    ".github/copilot-instructions.md",
-    ".github/instructions/python.instructions.md",
-    ".github/instructions/tests.instructions.md"
-  ],
-  "plugin_files": [
-    ".github/workflows/notify-engine.yml",
-    ".github/python.profile.md",
-    ".github/skills/error-recovery/reference/errors-python.md"
-  ],
+  "delivery_mode": "mcp_only",
+  "workspace_files": [],
+  "plugin_files": [],
   "mcp_resources": {
     "agents": [
       "py-Agent-Analyze",

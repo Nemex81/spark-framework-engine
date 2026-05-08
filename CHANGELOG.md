@@ -8,7 +8,41 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
-### Added
+### Added — Dual-Mode Architecture v1.0 (TASK-1..TASK-4)
+
+- `packages/spark-base/package-manifest.json` — `delivery_mode: "mcp_only"`,
+  `schema_version: "3.0" → "3.1"`, `workspace_files: []`, `plugin_files: []`.
+  I pacchetti built-in sono ora serviti esclusivamente via MCP dallo store
+  interno del motore; nessun file viene copiato nel workspace utente.
+- `packages/scf-master-codecrafter/package-manifest.json` — `delivery_mode: "mcp_only"`,
+  `workspace_files: []`. `plugin_files` resta `[]`.
+- `packages/scf-pycode-crafter/package-manifest.json` — `delivery_mode: "mcp_only"`,
+  `workspace_files: []`, `plugin_files: []`.
+- `spark/plugins/manager.py` — nuovo modulo con `PluginManager`,
+  `download_plugin()` e `list_available_plugins()`. Implementa il download
+  diretto di plugin nella directory `.github/` senza passare per lo store
+  interno del motore. I pacchetti `mcp_only` sono filtrati automaticamente
+  dal listing. (TASK-3)
+- `spark/plugins/__init__.py` — aggiornato: esporta anche `PluginManager`,
+  `download_plugin`, `list_available_plugins` oltre a `PluginManagerFacade`.
+- `spark/boot/tools_plugins.py` — aggiunti 2 nuovi tool MCP (TASK-4):
+  - `scf_list_plugins()` — elenca i plugin disponibili per download diretto
+    (esclude `mcp_only`). Usa `list_available_plugins()` di `manager.py`.
+  - `scf_install_plugin(package_id, version, workspace_root, overwrite)` —
+    scarica un plugin nel workspace utente tramite `download_plugin()`.
+    Nessun tracking nello store; il contatore tool passa da 4 a 6 in questo modulo.
+- `README.md` — sezione "Tools Disponibili" aggiornata da 44 a 46 con i
+  nuovi tool `scf_list_plugins` e `scf_install_plugin`.
+
+### Changed — Dual-Mode Architecture v1.0
+
+- `spark/plugins/installer.py` — aggiunto guard `delivery_mode == "mcp_only"` in
+  `install_from_store()`: i pacchetti con `delivery_mode: "mcp_only"` non scrivono
+  mai `workspace_files` nel workspace utente. Aggiunto anche `import logging` e
+  `_log` per il nuovo guard. (TASK-2)
+- `spark/boot/tools_plugins.py` — docstring aggiornato: "Registers 6 MCP tools"
+  (era 4). Aggiunti import `download_plugin`, `list_available_plugins`,
+  `RegistryClient` a livello di modulo.
 
 - `spark/boot/tools_packages.py` — nuovo modulo factory per i 15 tool package
   lifecycle e conflict resolution: `scf_list_available_packages`,
