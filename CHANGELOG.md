@@ -8,7 +8,11 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
-(Nessuna modifica in questa versione — next feature/fix sarà documentato qui)
+### Planned
+
+- Aggiornare `min_engine_version` in `scf-master-codecrafter`
+  e `scf-pycode-crafter` a `"3.2.0"` nei rispettivi
+  `package-manifest.json` (task post-merge, repo separati).
 
 ---
 

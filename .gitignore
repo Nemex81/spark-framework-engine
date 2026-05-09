@@ -98,6 +98,11 @@ out.json
  
 # Output diagnostici e debug — mai tracciare
 pytest_out.txt
+
+# Artefatti temporanei sessioni pytest — non committare
+test_out.txt
+test_run_output.txt
+pytest_out*.txt
 scripts/_phase0_*.py
 scripts/_phase0_*.json
 
