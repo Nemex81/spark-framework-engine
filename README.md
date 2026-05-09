@@ -7,7 +7,7 @@ come Resources e Tools consumabili da GitHub Copilot in Agent mode.
 Il motore legge il `.github/` del progetto attivo dinamicamente —
 non contiene dati di dominio, si adatta a qualsiasi progetto.
 
-> **Versione corrente:** 3.2.0 (06 maggio 2026). Per le note di migrazione
+> **Versione corrente:** 3.3.0 (09 maggio 2026). Per le note di migrazione
 > consultare il [CHANGELOG.md](CHANGELOG.md).
 
 ---
@@ -111,6 +111,34 @@ scf_plugin_list()
 scf_list_plugins()
 scf_install_plugin(package_id, version="latest", workspace_root="", overwrite=False)
 ```
+
+### Nota sui tool legacy
+
+I tool `scf_list_plugins()` e `scf_install_plugin()` sono **deprecati** a favore
+di `scf_plugin_list()` e `scf_plugin_install()` (introdotti nella v3.0).
+Rimangono disponibili per retrocompatibilità ma con la segnalazione nei payload
+`deprecated: true` e `removal_target_version: "3.4.0"` (due minor release dopo
+l'attuale 3.2.0). Il campo `migrate_to` nei return block specifica il tool
+sostitutivo esplicito. I client dovrebbero transitare verso i nuovi tool nelle
+prossime versioni.
+
+## Architettura — Pacchetti interni vs Plugin Workspace
+
+Il motore espone due **Universi** distinti di componenti:
+
+- **Universo A (MCP-Only)**: i pacchetti `spark-base`, `scf-master-codecrafter`
+  e `scf-pycode-crafter` sono serviti esclusivamente via MCP dallo store engine
+  centralizzato. Non generano file nel workspace utente. Accesso tramite
+  resource URI `agents://`, `skills://`, `instructions://`, `prompts://`.
+- **Universo B (Plugin Workspace)**: i plugin esterni (category "plugin") e i
+  pacchetti con `delivery_mode: "file"` possono installare file fisici nel
+  workspace utente tramite `scf_plugin_install()` o `scf_install_package()`.
+  Il file editing avviene direttamente nel filesystem di VS Code.
+
+Per il dettaglio operativo dei flussi e l'elenco dei tool MCP correlati a
+ciascun Universo, consulta l'agente `spark-assistant`: la sezione
+"Architettura — pacchetti interni vs plugin workspace" è la fonte canonica
+per questo argomento.
 
 ## Migrazione Da Workspace Pre-Ownership
 
@@ -344,6 +372,16 @@ I file `.github/` di questo repo seguono lo stesso schema ownership che il motor
 - **File nativi engine**: agenti, skill, instruction e prompt specifici del motore hanno `scf_owner: "spark-framework-engine"`.
 - **File shadow di pacchetti**: i prompt `scf-*.prompt.md` e l'agente `spark-guide.agent.md` appartengono a `spark-base` e sono riallineati al contenuto del pacchetto sorgente con `scf_owner: "spark-base"`.
 - **File condivisi**: `.github/copilot-instructions.md` è un file `merge_sections` con sezioni `SCF:BEGIN/END` per tutti i pacchetti installati e serve da implementazione di riferimento del formato canonico.
+
+---
+
+## Contribuire
+
+Le procedure per rinominare agenti SCF, aggiungere/rimuovere tool MCP e gestire
+fixture pytest condivise sono documentate in:
+
+→ **[CONTRIBUTING.md](CONTRIBUTING.md)**
+
 ---
 
 ## Progetto Correlati

@@ -8,6 +8,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+(Nessuna modifica in questa versione — next feature/fix sarà documentato qui)
+
+---
+
+## [3.3.0] - 2026-05-09
+
 ### Added — Pending Resolution v1.0 (2026-05-09)
 
 - `spark/boot/tools_plugins.py` — i tool legacy `scf_list_plugins` e
@@ -32,6 +38,11 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   validazione suite). Risolve SP-5.
 - `docs/reports/SPARK-REPORT-PendingResolution-v1.0.md` — report di
   risoluzione dei 5 sospesi pre-merge.
+- `README.md` — aggiunta nota sui tool legacy `scf_list_plugins` /
+  `scf_install_plugin` con `removal_target_version` e `migrate_to`.
+  Aggiunta sezione "Architettura — Pacchetti interni vs Plugin Workspace"
+  che spiega la distinzione Universo A (mcp_only) / Universo B (plugin
+  workspace) e cross-reference a `spark-assistant` come fonte canonica.
 
 ### Fixed — Live Fixture Fix v1.0 (2026-05-09)
 
