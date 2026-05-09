@@ -8,6 +8,18 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed
+
+- `tests/test_multi_owner_policy.py` —
+  `test_extend_policy_can_create_section_file_when_shared_target_is_missing`:
+  rimossa race condition mtime nella validazione della cache di `ManifestManager`.
+  Il test riusava la stessa istanza per setup e assertion; su filesystem veloci
+  (es. Windows NTFS in run brevi) le due scritture avvenivano nello stesso clock
+  tick (T1 == T2), impedendo l'invalidazione della cache e restituendo dati stale
+  (`["pkg-a"]` invece di `["pkg-a", "pkg-b"]`). Fix: l'assertion finale crea una
+  fresh instance `ManifestManager(github_root)` — stessa semantica, lettura
+  garantita da disco.
+
 ### Planned
 
 - Aggiornare `min_engine_version` in `scf-master-codecrafter`
