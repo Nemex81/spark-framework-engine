@@ -60,16 +60,33 @@ class OnboardingManager:
     # ------------------------------------------------------------------
 
     def is_first_run(self) -> bool:
-        """Ritorna True se il workspace non ha ancora subito onboarding.
+        """Ritorna True se il workspace ha pacchetti dichiarati non ancora installati.
 
-        La condizione "primo avvio" è determinata dall'assenza di pacchetti
-        installati nel manifest del workspace. Idempotente per definizione:
-        se un pacchetto è già installato, l'onboarding è già avvenuto.
+        La condizione "primo avvio" è determinata confrontando la lista pacchetti
+        in ``.github/spark-packages.json`` con quelli presenti nel manifest.
+        Se il file non esiste, si usa la logica legacy (manifest vuoto = primo avvio).
+        Idempotente: torna False non appena tutti i pacchetti dichiarati sono installati.
 
         Returns:
-            True se nessun pacchetto è installato nel manifest attivo.
+            True se almeno un pacchetto dichiarato non è ancora installato.
         """
         try:
+            spark_packages_file = self._ctx.github_root / _SPARK_PACKAGES_FILE
+            if spark_packages_file.is_file():
+                raw = json.loads(spark_packages_file.read_text(encoding="utf-8"))
+                if not raw.get("auto_install", True):
+                    return False
+                declared: list[str] = raw.get("packages", [])
+                if not isinstance(declared, list) or not declared:
+                    return False
+                from spark.manifest.manifest import ManifestManager  # noqa: PLC0415
+                manifest = ManifestManager(self._ctx.github_root)
+                installed = set(manifest.get_installed_versions().keys())
+                return any(
+                    isinstance(pkg, str) and pkg.strip() and pkg.strip() not in installed
+                    for pkg in declared
+                )
+            # Fallback legacy: nessun file dichiarativo → manifest vuoto = primo avvio.
             from spark.manifest.manifest import ManifestManager  # noqa: PLC0415
             manifest = ManifestManager(self._ctx.github_root)
             installed = manifest.get_installed_versions()

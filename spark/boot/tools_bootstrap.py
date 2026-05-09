@@ -345,7 +345,7 @@ def register_bootstrap_tools(
         sentinel_rel = "agents/spark-assistant.agent.md"
         policy_payload, policy_source = _read_update_policy_payload(ctx.github_root)
         migration_state = _detect_workspace_migration_state()
-        legacy_bootstrap_mode = normalized_bootstrap_mode == "" and policy_source != "file"
+        legacy_bootstrap_mode = normalized_bootstrap_mode == ""
 
         def _bootstrap_policy_options() -> list[dict[str, Any]]:
             return [
@@ -543,6 +543,13 @@ def register_bootstrap_tools(
             result["policy_created"] = policy_created
             if policy_created:
                 result["policy_path"] = str(policy_path)
+            # Task C fix: al primo bootstrap reale (files_written non vuota e nessuna
+            # policy preesistente), crea update_policy.json con default sicuro "ask".
+            if policy_source != "file" and len(result.get("files_written", [])) > 0:
+                _, new_policy_path = _configure_initial_bootstrap_policy("ask")
+                result["policy_source"] = "file"
+                result["policy_created"] = True
+                result["policy_path"] = str(new_policy_path)
             # v3.1 — New fields: backfill defaults for any caller path.
             result.setdefault("files_copied", result.get("files_written", []))
             result.setdefault("files_skipped", [])
@@ -637,6 +644,7 @@ def register_bootstrap_tools(
             ".github/instructions/verbosity.instructions.md",
             ".github/instructions/workflow-standard.instructions.md",
             ".github/project-profile.md",
+            ".github/spark-packages.json",
         ]
         _SPARK_BASE_BOOTSTRAP_SENTINELS: list[str] = [
             ".github/AGENTS.md",
