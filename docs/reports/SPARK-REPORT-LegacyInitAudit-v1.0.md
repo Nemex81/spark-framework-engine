@@ -133,7 +133,7 @@ Stato:                       GAP PARZIALE — file protetto ma classificazione/v
   del template engine.
 - Impatto: BLOCCANTE (potenziale perdita irreversibile di personalizzazioni)
 - Complessità fix: ALTA (richiede formato per sezioni "managed")
-- → **BLOCCO-ARCHITETTURALE**: non implementato (vedi sezione dedicata)
+- → **RISOLTO** (strategia frontmatter-only, approvata da Nemex81, vedi sezione dedicata)
 
 #### Convalida strategia implementata
 
@@ -282,8 +282,9 @@ con descrizione completa di:
 
 ```
 Baseline pre-fix:  534 passed / 9 skipped / 0 failed
-Post-fix (5 nuovi test):  539 passed / 9 skipped / 0 failed
-Delta: +5 nuovi test, 0 regressioni
+Post-fix GAP-X-1 + GAP-Y-1 (5 nuovi test):  539 passed / 9 skipped / 0 failed
+Post-fix GAP-Y-2 (7 nuovi test aggiuntivi):  546 passed / 9 skipped / 0 failed
+Delta totale: +12 nuovi test, 0 regressioni
 ```
 
 Comando di verifica:
@@ -293,33 +294,53 @@ C:/Users/nemex/Envs/audiomaker311/Scripts/python.exe -m pytest tests/ -q --ignor
 
 ---
 
-## BLOCCO-ARCHITETTURALE: GAP-Y-2
+## GAP-Y-2: RISOLTO — Frontmatter-Only Update
 
-### Descrizione
+### Decisione architetturale (Nemex81)
 
-Quando un file SPARK obsoleto viene aggiornato con `force=True`, l'intero
-file viene sovrascritto con la versione engine. Qualsiasi personalizzazione
-dell'utente nelle sezioni non-gestite dal framework viene persa irreversibilmente.
+Stratégia approvata: **frontmatter-only update** — quando `force=True` viene
+usato su un file SPARK con versione obsoleta, l'engine aggiorna solo il blocco
+frontmatter YAML (le righe tra `---` e `---`) e lascia il body intatto.
 
-### Scenario di rischio
+### Implementazione
 
-L'utente ha personalizzato `copilot-instructions.md` aggiungendo sezioni
-proprie al di fuori del blocco `SCF:BEGIN`/`SCF:END`. Con `force=True`,
-il file viene riscritto da zero, le sezioni personalizzate spariscono.
+**File modificato:** `spark/boot/tools_bootstrap.py`
 
-### Analisi opzioni
+1. **Nuova funzione helper** `_apply_frontmatter_only_update(source_path, dest_path) -> str | None`:
+   - Legge il frontmatter del file engine (verbatim, senza parse/serialize)
+   - Legge il body del file utente (verbatim, senza modifiche)
+   - Restituisce la stringa concatenata `"---" + source_fm + "---" + user_body`
+   - Ritorna `None` in caso di frontmatter sorgente malformato → fallback a protezione
 
-| Opzione | Pro | Contro |
-|---------|-----|--------|
-| A — Marker `<!-- SPARK-MANAGED -->` | Semplice, leggibile | Richiede tutti i file SPARK aggiornati |
-| B — `merge_sections` marker (già usato in `copilot-instructions.md`) | Pattern già esistente | Applicabile solo ai file con sezioni strutturate |
-| C — Frontmatter-only update | Minimale, non tocca il corpo | Risolve solo il caso in cui la differenza è nel frontmatter |
-| D — Diff + patch interattivo | Massima preservazione | Complessità molto alta, richiede UI aggiuntiva |
+2. **Loop bootstrap modificato** (ramo `force=True`):
+   - Prima della sovrascrittura completa, classifica il file con `_classify_bootstrap_conflict()`
+   - Se `spark_outdated`: chiama `_apply_frontmatter_only_update()` + `continue` (no write block)
+   - Se fallback None: aggiunge a `files_conflict_non_spark` + `files_protected`
+   - Se `non_spark`: comportamento invariato (sovrascrittura completa)
 
-### Condizione per implementazione
+3. **Nuovo campo payload:** `files_updated_frontmatter_only: list[str]`
+   - Backfillato con `setdefault([])` in `_finalize_bootstrap_result()`
+   - Presente anche in `files_written` (backward compat) e `files_copied`
 
-Non implementare GAP-Y-2 senza decisione architetturale esplicita da Nemex81
-su quale opzione adottare e su quali file applicarla.
+### Invarianti rispettati
+
+- ✅ Nessuna dipendenza Python nuova (raw string split, no yaml.dump)
+- ✅ Nessuna modifica a `spark-framework-engine.py`
+- ✅ Nessuna modifica alle firme dei tool MCP
+- ✅ Nessun cambio di comportamento per file non-SPARK o workspace vergini
+- ✅ Test force=True preesistenti invariati (file non-SPARK → full overwrite)
+
+### Test aggiunti (7)
+
+| Test | Tipo | Asserzione chiave |
+|------|------|-------------------|
+| `test_force_true_updates_frontmatter_only_for_spark_outdated` | integrazione | field in payload + content check |
+| `test_force_true_preserves_user_body_when_spark_outdated` | integrazione | marker utente nel body finale |
+| `test_force_true_non_spark_file_still_gets_full_overwrite` | integrazione | non-SPARK → full overwrite invariato |
+| `test_force_true_spark_outdated_payload_on_clean_workspace` | integrazione | workspace vergine → lista vuota |
+| `test_apply_frontmatter_only_unit_builds_merged_content` | unit | frontmatter engine + body utente |
+| `test_apply_frontmatter_only_unit_returns_none_on_malformed_source` | unit | source senza frontmatter → None |
+| `test_apply_frontmatter_only_unit_handles_empty_user_body` | unit | body vuoto → output valido |
 
 ---
 
@@ -329,9 +350,10 @@ su quale opzione adottare e su quali file applicarla.
 
 | File | Tipo modifica | Impatto |
 |------|---------------|---------|
-| `spark/boot/tools_bootstrap.py` | Fix chirurgico | Payload arricchito, behavior invariato |
-| `tests/test_legacy_init_audit.py` | Nuovo file | 5 test TDD (Scenario X + Y) |
-| `CHANGELOG.md` | Documentazione | Voce [Unreleased] + nota GAP-Y-2 |
+| `spark/boot/tools_bootstrap.py` | Fix chirurgico (x2) | Payload arricchito, behavior invariato |
+| `tests/test_legacy_init_audit.py` | Nuovo file (5) + update (7) | 12 test TDD totali (Scenario X + Y + Y-2) |
+| `CHANGELOG.md` | Documentazione | Voce [Unreleased] aggiornata |
+| `docs/reports/SPARK-REPORT-LegacyInitAudit-v1.0.md` | Report chiuso | GAP-Y-2 da BLOCCO a RISOLTO |
 
 ### Invarianti rispettati
 
@@ -339,10 +361,10 @@ su quale opzione adottare e su quali file applicarla.
 - ✅ Nessuna modifica a `.github/` (framework_edit_mode non richiesto)
 - ✅ Nessuna dipendenza Python nuova (solo `parse_markdown_frontmatter` da `spark.core.utils`)
 - ✅ Zero output su `stdout` — solo `sys.stderr`
-- ✅ Docstring Google Style sulla funzione helper
+- ✅ Docstring Google Style su tutte le funzioni helper
 - ✅ SemVer: fix minore non breaking (nessun bump ENGINE_VERSION)
-- ✅ Test scritti PRIMA del fix (TDD)
-- ✅ Suite completa PASS post-fix (539/9)
+- ✅ Test scritti PRIMA del fix (TDD) e test isolati per il helper
+- ✅ Suite completa PASS post-fix GAP-Y-2 (546/9)
 
 ### Impatto utenti
 

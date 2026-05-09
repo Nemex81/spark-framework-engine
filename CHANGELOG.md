@@ -41,18 +41,38 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   fresh instance `ManifestManager(github_root)` — stessa semantica, lettura
   garantita da disco.
 
+### Added — GAP-Y-2 Frontmatter-Only Update (2026-05-XX)
+
+- `spark/boot/tools_bootstrap.py` — aggiunto `_apply_frontmatter_only_update(source_path, dest_path) -> str | None`,
+  helper module-level che ricostruisce il contenuto di un file SPARK obsoleto
+  combinando il frontmatter verbatim del file sorgente engine con il body
+  verbatim del file utente esistente nel workspace. Restituisce `None` se il
+  frontmatter sorgente è malformato (fallback a protezione).
+- `spark/boot/tools_bootstrap.py` — `scf_bootstrap_workspace` ora gestisce i file
+  SPARK obsoleti (`spark_outdated`) con `force=True` tramite frontmatter-only update:
+  aggiorna solo il blocco YAML tra i marker `---` dal sorgente engine, lasciando
+  il body utente intatto. I file non-SPARK continuano a ricevere sovrascrittura
+  completa (comportamento invariato). Fallback a `files_protected` se il
+  frontmatter-only update fallisce.
+- `spark/boot/tools_bootstrap.py` — nuovo campo nel payload di risposta:
+  - `files_updated_frontmatter_only`: file SPARK obsoleti aggiornati con la
+    strategia frontmatter-only (aggiunto anche a `files_written` e `files_copied`
+    per compatibilità backward).
+- `tests/test_legacy_init_audit.py` — 7 nuovi test (GAP-Y-2):
+  `test_force_true_updates_frontmatter_only_for_spark_outdated`,
+  `test_force_true_preserves_user_body_when_spark_outdated`,
+  `test_force_true_non_spark_file_still_gets_full_overwrite`,
+  `test_force_true_spark_outdated_payload_on_clean_workspace`,
+  `test_apply_frontmatter_only_unit_builds_merged_content`,
+  `test_apply_frontmatter_only_unit_returns_none_on_malformed_source`,
+  `test_apply_frontmatter_only_unit_handles_empty_user_body`.
+  Suite totale: 546 passed / 9 skipped (baseline pre-sessione: 539).
+
 ### Planned
 
 - Aggiornare `min_engine_version` in `scf-master-codecrafter`
   e `scf-pycode-crafter` a `"3.2.0"` nei rispettivi
   `package-manifest.json` (task post-merge, repo separati).
-- **GAP-Y-2 — Preservazione personalizzazioni durante update SPARK** (BLOCCO-ARCHITETTURALE):
-  Quando un file SPARK (`spark: true`) viene aggiornato con `force=True`, le
-  personalizzazioni utente nelle sezioni non-gestite dal framework vengono
-  sovrascritte. Risoluzione richiede decisione architetturale su formato
-  per sezioni "managed" (opzioni: commenti `<!-- SPARK-MANAGED -->`,
-  `merge_sections` marker o frontmatter-only update).
-  Non implementato senza approvazione esplicita.
 
 ---
 

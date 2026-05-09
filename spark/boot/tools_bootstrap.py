@@ -61,6 +61,67 @@ def _classify_bootstrap_conflict(dest_path: Path) -> str:
     return "non_spark"
 
 
+def _apply_frontmatter_only_update(
+    source_path: Path,
+    dest_path: Path,
+) -> str | None:
+    """Build merged content: frontmatter from *source_path*, body from *dest_path*.
+
+    Reads the raw frontmatter block (between ``---`` markers) verbatim from
+    the engine's canonical source file, and the body (everything after the
+    closing ``---``) verbatim from the user's existing workspace file.
+    Returns the concatenated result, preserving the user's body exactly.
+
+    Args:
+        source_path: Path to the engine's canonical version of the SPARK file.
+        dest_path: Path to the user's existing file in the workspace.
+
+    Returns:
+        Merged content string on success; ``None`` if either file's frontmatter
+        is malformed (missing closing ``---``) or cannot be read.
+    """
+    try:
+        source_content = source_path.read_text(encoding="utf-8", errors="replace")
+        dest_content = dest_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] frontmatter-only update: cannot read files: %s", exc
+        )
+        return None
+
+    # Extract source frontmatter block as raw string (preserves exact formatting).
+    if not source_content.startswith("---"):
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] frontmatter-only update: source has no frontmatter: %s",
+            source_path.name,
+        )
+        return None
+    source_parts = source_content.split("---", 2)
+    if len(source_parts) < 3:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] frontmatter-only update: source frontmatter unclosed: %s",
+            source_path.name,
+        )
+        return None
+
+    # Extract user body (everything after the second ---).
+    # If dest has no frontmatter (cannot happen for spark_outdated files, but handle defensively).
+    if dest_content.startswith("---"):
+        dest_parts = dest_content.split("---", 2)
+        user_body = dest_parts[2] if len(dest_parts) >= 3 else ""
+    else:
+        user_body = dest_content
+
+    # Reconstruct: engine frontmatter block + user body.
+    merged = "---" + source_parts[1] + "---" + user_body
+    _log.info(
+        "[SPARK-ENGINE][INFO] frontmatter-only merge prepared: %s <- %s",
+        dest_path.name,
+        source_path.name,
+    )
+    return merged
+
+
 def _gateway_write_text(
     workspace_root: Path,
     github_rel: str,
@@ -582,6 +643,7 @@ def register_bootstrap_tools(
             result.setdefault("files_conflict_non_spark", [])
             result.setdefault("files_conflict_spark_outdated", [])
             result.setdefault("spark_outdated_details", [])
+            result.setdefault("files_updated_frontmatter_only", [])
             result.setdefault("sentinel_present", sentinel.is_file())
             result.setdefault("message", result.get("note", ""))
             if not legacy_bootstrap_mode:
@@ -800,6 +862,7 @@ def register_bootstrap_tools(
         files_conflict_non_spark: list[str] = []
         files_conflict_spark_outdated: list[str] = []
         spark_outdated_details: list[dict[str, Any]] = []
+        files_updated_frontmatter_only: list[str] = []
 
         try:
             for source_path, dest_path in bootstrap_targets:
@@ -838,6 +901,33 @@ def register_bootstrap_tools(
                         preserved.append(rel_path)
                         files_protected.append(rel_path)
                         continue
+                    # force=True: apply frontmatter-only update for SPARK outdated files.
+                    fm_conflict_type = _classify_bootstrap_conflict(dest_path)
+                    if fm_conflict_type == "spark_outdated":
+                        updated_content = _apply_frontmatter_only_update(source_path, dest_path)
+                        if updated_content is not None:
+                            if not dry_run:
+                                dest_path.write_text(updated_content, encoding="utf-8")
+                                written_paths.append(dest_path)
+                                files_written.append(rel_path)
+                            files_updated_frontmatter_only.append(rel_path)
+                            files_copied.append(rel_path)
+                            _log.info(
+                                "[SPARK-ENGINE][INFO] %s (frontmatter-only): %s",
+                                "dry_run" if dry_run else "Updated",
+                                github_rel,
+                            )
+                        else:
+                            files_conflict_non_spark.append(rel_path)
+                            preserved.append(rel_path)
+                            files_protected.append(rel_path)
+                            _log.warning(
+                                "[SPARK-ENGINE][WARNING] Bootstrap file preserved "
+                                "(frontmatter-only update failed, fallback): %s",
+                                rel_path,
+                            )
+                        continue  # Do not fall through to the full write block.
+                    # Non-SPARK file with force=True: apply full overwrite (unchanged behavior).
                     _log.warning(
                         "Bootstrap file force-overwritten (force=True): %s", rel_path,
                     )
@@ -893,6 +983,7 @@ def register_bootstrap_tools(
                 "files_conflict_non_spark": files_conflict_non_spark,
                 "files_conflict_spark_outdated": files_conflict_spark_outdated,
                 "spark_outdated_details": spark_outdated_details,
+                "files_updated_frontmatter_only": files_updated_frontmatter_only,
                 "sentinel_present": sentinel.is_file(),
                 "message": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 "preserved": preserved,
@@ -933,6 +1024,7 @@ def register_bootstrap_tools(
             "files_conflict_non_spark": files_conflict_non_spark,
             "files_conflict_spark_outdated": files_conflict_spark_outdated,
             "spark_outdated_details": spark_outdated_details,
+            "files_updated_frontmatter_only": files_updated_frontmatter_only,
             "sentinel_present": sentinel.is_file(),
             "message": (
                 "Bootstrap simulated (dry_run=True). No files were written."
