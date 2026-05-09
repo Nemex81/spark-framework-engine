@@ -1,7 +1,7 @@
 {
   "schema_version": "3.1",
   "package": "scf-pycode-crafter",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "display_name": "SCF Python Code Crafter",
   "description": "Agenti, skill e istruzioni specializzati per lo sviluppo Python. Richiede scf-master-codecrafter.",
   "author": "Nemex81",
@@ -9,7 +9,7 @@
   "dependencies": [
     {
       "id": "scf-master-codecrafter",
-      "min_version": "2.2.0"
+      "min_version": "2.7.0"
     }
   ],
   "conflicts": [],

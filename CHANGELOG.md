@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD022 MD024 MD032 MD038 -->
+
 # Changelog
 
 Tutte le modifiche importanti a questo progetto sono documentate in questo file.
@@ -7,6 +9,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ---
 
 ## [Unreleased]
+
+### Added - spark-ops decoupling (2026-05-10)
+
+- `packages/spark-ops/` - nuovo package MCP-only operativo per `Agent-Orchestrator`,
+  `Agent-FrameworkDocs`, `Agent-Release`, skill E2E e prompt di framework maintenance.
+- `tests/test_spark_ops_decoupling_manifest.py` - regressione sul contratto manifest
+  `spark-base`/`spark-ops` e sulle dipendenze dei package embedded.
+
+### Changed - spark-ops decoupling (2026-05-10)
+
+- `packages/spark-base/package-manifest.json` - bump a `2.0.0` e perimetro
+  ridotto a risorse user-facing/shared; gli asset operativi sono rimossi dal
+  catalogo distribuito senza eliminazione fisica dei file legacy.
+- `packages/scf-master-codecrafter/package-manifest.json` - bump a `2.7.0`,
+  dipendenza minima `spark-base >= 2.0.0` e nuova dipendenza `spark-ops >= 1.0.0`.
+- `packages/scf-pycode-crafter/package-manifest.json` - bump a `2.3.0` e
+  dipendenza minima `scf-master-codecrafter >= 2.7.0`.
+- `README.md`, `docs/architecture.md` e README package aggiornati con la
+  separazione `spark-base` user-facing / `spark-ops` operational.
 
 ### Added — Legacy Init Audit v1.0 (2026-05-XX)
 

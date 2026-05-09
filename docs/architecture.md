@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD040 MD060 -->
+
 # Architettura — SPARK Framework Engine
 
 > **Versione documentata:** 3.3.0  
@@ -66,14 +68,20 @@ sezione "Architettura — Pacchetti interni vs Plugin Workspace":
 
 ### Universo A — MCP-Only
 
-I pacchetti `spark-base`, `scf-master-codecrafter` e `scf-pycode-crafter` sono
-serviti esclusivamente via MCP dallo store engine centralizzato.
+I pacchetti `spark-base`, `spark-ops`, `scf-master-codecrafter` e
+`scf-pycode-crafter` sono serviti esclusivamente via MCP dallo store engine
+centralizzato.
 
 - **Non generano file nel workspace utente.**
 - Accesso tramite URI resource: `agents://`, `skills://`, `instructions://`, `prompts://`.
 - `delivery_mode: "mcp_only"` nel `package-manifest.json`
   (`packages/spark-base/package-manifest.json:12`).
 - `schema_version: "3.1"` richiesto per dichiarare `mcp_resources`.
+
+`spark-base` resta il layer fondazionale user-facing; `spark-ops` ospita gli
+agenti operativi di orchestrazione, documentazione framework e release. La
+dipendenza e monodirezionale: `spark-ops` dipende da `spark-base`, mai il
+contrario.
 
 ### Universo B — Plugin Workspace
 
@@ -204,7 +212,8 @@ spark-framework-engine/
 ├── engine-manifest.json           Risorse engine-owned (6 instruction, 4 agenti, 3 instruction MCP)
 ├── spark-init.py                  Script inizializzazione workspace utente
 ├── packages/
-│   ├── spark-base/                Pacchetto fondazionale (mcp_only, schema 3.1)
+│   ├── spark-base/                Pacchetto fondazionale user-facing (mcp_only)
+│   ├── spark-ops/                 Pacchetto operativo E2E/release/framework docs
 │   ├── scf-master-codecrafter/   Layer master programmatico
 │   └── scf-pycode-crafter/       Layer Python-specifico
 ├── spark/

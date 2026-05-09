@@ -7,6 +7,18 @@
 
 ## Riepilogo modifiche implementate
 
+### Addendum 2026-05-10 - spark-ops decoupling
+
+- [x] Convalidata la strategia aggiornata: `Agent-Research`, `rollback-procedure`,
+	`framework-scope-guard`, `semver-bump` e `framework-unlock` restano in `spark-base`.
+- [x] Creato `packages/spark-ops/` come package `mcp_only` per Orchestrator,
+	FrameworkDocs, Release, skill E2E e prompt operativi.
+- [x] Aggiornato `spark-base` a `2.0.0` rimuovendo dal catalogo distribuito le
+	risorse operative migrate senza eliminare fisicamente i file legacy.
+- [x] Aggiornati manifest embedded e documentazione per `scf-master-codecrafter`
+	e `scf-pycode-crafter`.
+- [x] Aggiunto test manifest `tests/test_spark_ops_decoupling_manifest.py`.
+
 - [x] Letto e validato il report `docs/reports/SPARK-REPORT-DualMode-Architecture-v1.0.md`.
 - [x] Localizzati i punti reali di implementazione in `spark/boot/lifecycle.py` e `spark/boot/tools_packages_install.py`.
 - [x] Creato il piano tecnico self-contained in `docs/implementation-plan-dual-mode-v3.1.md`.

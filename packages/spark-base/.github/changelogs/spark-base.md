@@ -14,6 +14,23 @@ scf_merge_priority: 10
 
 ## [Unreleased]
 
+### Removed
+
+- Rimossi dal catalogo distribuito MCP di `spark-base` gli agenti operativi
+	`Agent-Orchestrator`, `Agent-FrameworkDocs` e `Agent-Release`, ora forniti
+	dal nuovo package `spark-ops`.
+- Rimossi dal catalogo distribuito i prompt `orchestrate`, `release`,
+	`framework-changelog`, `framework-release` e `framework-update`, ora forniti
+	da `spark-ops`.
+- Rimossi dal catalogo distribuito le skill operative `semantic-gate`,
+	`error-recovery` e `task-scope-guard`, ora fornite da `spark-ops`.
+
+### Changed
+
+- `spark-base` passa a `2.0.0` e diventa il layer user-facing/shared; i file
+	sorgente legacy non vengono eliminati fisicamente finche non viene confermata
+	la procedura `file-deletion-guard`.
+
 ### Fixed
 
 - Corretti i riferimenti cross-package negli agenti base verso skill distribuite come directory (`clean-architecture`, `docs-manager`, `framework-index`, `framework-query`, `project-doc-bootstrap`, `validate-accessibility`, `changelog-entry`).

@@ -1,7 +1,9 @@
+<!-- markdownlint-disable MD040 MD060 -->
+
 # packages/spark-base/ — Layer Fondazionale SCF
 
 **ID pacchetto:** `spark-base`  
-**Versione corrente:** `1.7.3`  
+**Versione corrente:** `2.0.0`  
 **Schema manifest:** `3.1`  
 **Delivery mode:** `mcp_only`  
 **Motore minimo richiesto:** `3.1.0`
@@ -11,8 +13,11 @@
 ## Descrizione
 
 `spark-base` è il layer fondazionale del framework SCF.
-Definisce agenti base, skill condivise, instruction comuni e prompt
+Definisce agenti base user-facing, skill condivise, instruction comuni e prompt
 general-purpose riutilizzabili da tutti i plugin linguaggio-specifici.
+
+Le risorse operative di framework maintenance e ciclo E2E vivono ora in
+`spark-ops`, che dipende da `spark-base` senza creare dipendenze inverse.
 
 **Non installa file fisici nel workspace utente** (`workspace_files: []`).
 Tutte le risorse sono servite esclusivamente via MCP dall'engine store.
@@ -25,9 +30,9 @@ Tutte le risorse sono servite esclusivamente via MCP dall'engine store.
 packages/spark-base/
 ├── package-manifest.json    Manifest pacchetto (schema 3.1)
 └── .github/                 Risorse MCP del pacchetto
-    ├── agents/              13 agenti
-    ├── prompts/             30 prompt
-    ├── skills/              23 skill
+    ├── agents/              10 agenti user-facing/support
+    ├── prompts/             25 prompt user-facing e SCF lifecycle
+    ├── skills/              20 skill condivise
     └── instructions/        8 instruction
 ```
 
@@ -39,38 +44,37 @@ Non vengono mai scritte nel workspace utente.
 
 ## Risorse MCP esposte
 
-### Agenti (13)
+### Agenti (10)
 
 | Nome | Descrizione sintetica |
 |------|-----------------------|
 | `Agent-Analyze` | Discovery e analisi codebase (read-only) |
 | `Agent-Docs` | Sincronizzazione documentazione (API.md, ARCHITECTURE.md, CHANGELOG.md) |
-| `Agent-FrameworkDocs` | Manutenzione documentazione e changelog del framework |
 | `Agent-Git` | Operazioni git autorizzate (commit, push, merge, tag) |
 | `Agent-Helper` | Consultivo read-only sul framework installato |
-| `Agent-Orchestrator` | Orchestratore autonomo del ciclo E2E |
 | `Agent-Plan` | Breakdown architetturale in fasi implementabili |
-| `Agent-Release` | Versioning, build, packaging e release coordination |
 | `Agent-Research` | Fallback per ricerca linguaggio-dominio e best practice |
 | `Agent-Validate` | Validazione, test coverage e quality gates |
 | `Agent-Welcome` | Setup e manutenzione profilo progetto |
 | `spark-assistant` | Gateway workspace: bootstrap, install/update/remove pacchetti |
 | `spark-guide` | Onboarding e routing verso spark-assistant |
 
-### Prompt (30)
+### Prompt (25)
 
-Framework, git, release, onboarding, operazioni SCF
+Git, onboarding, operazioni SCF
 (`scf-install`, `scf-update`, `scf-remove`, `scf-status`, …)
-e prompt di gestione documentazione (`sync-docs`, `framework-changelog`, …).
+e prompt di gestione documentazione progetto (`sync-docs`, `project-*`, …).
 
-### Skill (23)
+I prompt operativi `orchestrate`, `release`, `framework-changelog`,
+`framework-release` e `framework-update` sono forniti da `spark-ops`.
+
+### Skill (20)
 
 | Skill | Ambito |
 |-------|--------|
 | `changelog-entry` | Formato e sezione voci CHANGELOG |
 | `conventional-commit` | Convenzione commit Conventional Commits |
 | `document-template` | Template documenti di progetto |
-| `error-recovery` | Procedura retry e escalata su errori agente |
 | `file-deletion-guard` | Protezione eliminazione file |
 | `framework-guard` | Protezione componenti framework protetti |
 | `framework-index` | Panoramica framework da sorgenti interne |
@@ -81,11 +85,12 @@ e prompt di gestione documentazione (`sync-docs`, `framework-changelog`, …).
 | `project-profile` | Gestione project-profile.md |
 | `project-reset` | Reset profilo progetto |
 | `rollback-procedure` | Procedura rollback standardizzata |
-| `semantic-gate` | Gate semantico per validazione output |
 | `semver-bump` | Calcolo bump semantico da diff |
-| `task-scope-guard` | Protezione scope durante task multi-file |
 | `validate-accessibility` | Checklist accessibilità WAI-ARIA |
-| + 5 altri | `accessibility-output`, `agent-selector`, `framework-guard`, `personality`, `style-setup`, `verbosity` |
+| + 5 altri | `accessibility-output`, `agent-selector`, `personality`, `style-setup`, `verbosity` |
+
+Le skill operative `semantic-gate`, `error-recovery` e `task-scope-guard`
+sono fornite da `spark-ops`.
 
 ### Instruction (8)
 
@@ -97,6 +102,7 @@ e prompt di gestione documentazione (`sync-docs`, `framework-changelog`, …).
 ## Compatibilità e dipendenze
 
 - **Nessuna dipendenza** su altri pacchetti SCF
+- **`spark-ops` dipende da `spark-base`**, non il contrario
 - **Tutti i plugin** (`scf-master-codecrafter`, `scf-pycode-crafter`, …)
   elencano `spark-base` come dipendenza diretta
 - `file_ownership_policy: "error"` — conflitti di ownership bloccano l'installazione

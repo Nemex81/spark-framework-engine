@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD022 MD032 MD036 MD060 -->
+
 # Piano Tecnico — Disaccoppiamento spark-base → spark-ops
 ## Versione: 1.0.0 — 2026-05-09
 ## Branch: `feature/dual-mode-manifest-v3.1`

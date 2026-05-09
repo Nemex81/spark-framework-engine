@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD022 MD031 MD040 MD060 -->
+
 # SPARK Framework Engine
 
 Motore MCP universale per il **SPARK Code Framework (SCF)**.
@@ -126,10 +128,12 @@ prossime versioni.
 
 Il motore espone due **Universi** distinti di componenti:
 
-- **Universo A (MCP-Only)**: i pacchetti `spark-base`, `scf-master-codecrafter`
-  e `scf-pycode-crafter` sono serviti esclusivamente via MCP dallo store engine
+- **Universo A (MCP-Only)**: i pacchetti `spark-base`, `spark-ops`,
+  `scf-master-codecrafter` e `scf-pycode-crafter` sono serviti esclusivamente via MCP dallo store engine
   centralizzato. Non generano file nel workspace utente. Accesso tramite
   resource URI `agents://`, `skills://`, `instructions://`, `prompts://`.
+  `spark-base` copre bootstrap/onboarding/workflow utente; `spark-ops` copre
+  orchestrazione E2E, framework docs e release coordination.
 - **Universo B (Plugin Workspace)**: i plugin esterni (category "plugin") e i
   pacchetti con `delivery_mode: "file"` possono installare file fisici nel
   workspace utente tramite `scf_plugin_install()` o `scf_install_package()`.
@@ -349,7 +353,8 @@ euristiche conservative e i validator; i casi ambigui vengono degradati a una
 sessione manuale attiva.
 
 Lo script standalone `spark-init.py` usa il `package-manifest.json` di `spark-base`
-come source of truth per la prima inizializzazione. Se trova file gia presenti ma
+come source of truth user-facing per la prima inizializzazione. Le risorse
+operative opzionali sono invece fornite da `spark-ops`. Se trova file gia presenti ma
 non tracciati, chiede all'utente se vuole `replace`, `preserve` oppure un'integrazione
 best-effort `integrate` prima di toccare il workspace.
 

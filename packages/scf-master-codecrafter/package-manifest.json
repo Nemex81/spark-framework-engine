@@ -1,7 +1,7 @@
 {
   "schema_version": "3.1",
   "package": "scf-master-codecrafter",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "display_name": "SCF Master CodeCrafter",
   "description": "Plugin CORE-CRAFT per il master-layer SCF. Fornisce design, code routing, code UI e contesto MCP sopra spark-base.",
   "author": "Nemex81",
@@ -9,7 +9,11 @@
   "dependencies": [
     {
       "id": "spark-base",
-      "min_version": "1.6.1"
+      "min_version": "2.0.0"
+    },
+    {
+      "id": "spark-ops",
+      "min_version": "1.0.0"
     }
   ],
   "conflicts": [],
