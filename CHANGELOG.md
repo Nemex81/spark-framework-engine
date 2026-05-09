@@ -8,6 +8,42 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — Dual-Universe Consolidation (audit 2026-05-09)
+
+- `tests/test_onboarding_manager.py` — 17 test unitari per
+  `spark.boot.onboarding.OnboardingManager` (gap V6 del rapporto
+  `docs/reports/rapporto perplexity - audit-system-state-v1.0.md`):
+  copre `is_first_run` (manifest popolato/vuoto, fallback legacy,
+  `auto_install: false`, packages list vuota, file corrotto),
+  `_install_declared_packages` (no file, `auto_install: false`,
+  pacchetto gia installato, install OK / KO / RuntimeError, campo
+  `packages` non lista) e `run_onboarding` (status `completed`,
+  `partial`, `skipped`).
+- `packages/spark-base/.github/agents/spark-assistant.agent.md` — nuova
+  sezione "Architettura — pacchetti interni vs plugin workspace" che
+  esplicita all'utente finale la distinzione tra Universo A
+  (pacchetti `mcp_only` serviti dall'engine) e Universo B (plugin
+  esterni installati esplicitamente). Colma il gap narrativo V5.
+- `spark/boot/tools_plugins.py` — costante `_LEGACY_DEPRECATION_NOTICE`.
+  I tool legacy `scf_list_plugins` e `scf_install_plugin` ora
+  espongono `deprecated: true` e `deprecation_notice` in tutti i
+  payload JSON di risposta (success ed error). Permette a Copilot di
+  preferire automaticamente i tool store-based `scf_plugin_list` /
+  `scf_plugin_install`.
+- `docs/reports/SPARK-REPORT-DualUniverse-Consolidation-v1.0.md` —
+  report di consolidamento dual-universe.
+
+### Fixed — Dual-Universe Consolidation (audit 2026-05-09)
+
+- `spark/boot/onboarding.py` — corretto import errato in
+  `OnboardingManager._ensure_store_populated`: `PackageResourceStore`
+  vive in `spark.registry.store`, non in `spark.packages.store`.
+  L'import errato sollevava `ImportError` silenziosamente ad ogni
+  esecuzione, trasformando ogni `run_onboarding()` in
+  `status: "partial"` con errore `"No module named
+  'spark.packages.store'"`. Anomalia non rilevata dal rapporto
+  Perplexity originale, scoperta in fase di test del Modulo 3.
+
 ### Added — Dual-Mode Architecture v1.0 (TASK-1..TASK-4)
 
 - `packages/spark-base/package-manifest.json` — `delivery_mode: "mcp_only"`,

@@ -222,7 +222,10 @@ class OnboardingManager:
         Returns:
             True se lo store contiene almeno un pacchetto, False se vuoto.
         """
-        from spark.packages.store import PackageResourceStore  # noqa: PLC0415
+        # PackageResourceStore vive in ``spark.registry.store`` — l'import
+        # errato precedente (``spark.packages.store``) sollevava ImportError
+        # silenziosamente trasformando ogni onboarding in ``status: "partial"``.
+        from spark.registry.store import PackageResourceStore  # noqa: PLC0415
 
         store = PackageResourceStore(self._ctx.engine_root)
         packages_root = store.packages_root

@@ -63,6 +63,27 @@ Per spiegazioni sull'architettura SCF, sulle differenze tra pacchetti interni
 e plugin workspace o sulla struttura del framework, rimanda all'agente
 `spark-guide`.
 
+## Architettura — pacchetti interni vs plugin workspace
+
+SPARK distingue due famiglie di estensioni che non vanno confuse:
+
+- **Pacchetti interni (Universo A)**: serviti via MCP dal motore
+  `spark-framework-engine`. L'utente non li installa ne aggiorna a mano:
+  arrivano con il motore, vengono attivati al primo avvio dal bootstrap
+  automatico (`scf_bootstrap_workspace`) e restano in `mcp_only`. Esempio:
+  `spark-base`. Strumenti correlati: `scf_list_installed_packages`,
+  `scf_get_package_info`.
+- **Plugin workspace (Universo B)**: pacchetti SCF esterni pubblicati su
+  GitHub e indicizzati nel registry. L'utente li sceglie esplicitamente,
+  li installa nel proprio workspace e li mantiene aggiornati. Esempi:
+  `scf-master-codecrafter`, `scf-pycode-crafter`. Strumenti correlati:
+  `scf_plugin_list`, `scf_plugin_install`, `scf_plugin_update`,
+  `scf_plugin_remove`, `scf_get_plugin_info`.
+
+Quando l'utente chiede "cosa posso installare", presenta solo i plugin
+(Universo B). I pacchetti interni vanno menzionati solo se chiede
+esplicitamente cosa sta gia funzionando.
+
 ## Flusso A — Onboarding workspace vergine
 
 1. Usa `scf_get_workspace_info` per verificare se il workspace e SCF-valido.

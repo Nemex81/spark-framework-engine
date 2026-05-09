@@ -34,6 +34,16 @@ _log = logging.getLogger("spark-framework-engine")
 
 __all__ = ["register_plugin_tools"]
 
+# Marker uniforme per i tool legacy (TASK-4 Dual-Mode v1.0).
+# Esposto a Copilot via campi ``deprecated`` + ``deprecation_notice`` nei
+# payload JSON dei tool ``scf_list_plugins`` e ``scf_install_plugin`` per
+# pilotarne l'uso solo in workflow di compat (no tracking nello store).
+_LEGACY_DEPRECATION_NOTICE: str = (
+    "Tool legacy senza tracking nello store. Preferire i tool store-based: "
+    "'scf_plugin_list' (al posto di 'scf_list_plugins') e "
+    "'scf_plugin_install' (al posto di 'scf_install_plugin')."
+)
+
 
 # ---------------------------------------------------------------------------
 # Helper privato: costruisce il facade per il workspace richiesto
@@ -400,6 +410,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 "status": "error",
                 "plugins": [],
                 "count": 0,
+                "deprecated": True,
+                "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
                 "message": str(exc),
             }
         _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: done count=%d", len(plugins))
@@ -407,6 +419,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "status": "ok",
             "plugins": plugins,
             "count": len(plugins),
+            "deprecated": True,
+            "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
             "message": f"{len(plugins)} plugin disponibili per il download diretto.",
         }
 
@@ -493,6 +507,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 "files_written": [],
                 "files_skipped": [],
                 "errors": [str(exc)],
+                "deprecated": True,
+                "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
                 "message": str(exc),
             }
 
@@ -515,6 +531,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "files_written": written,
             "files_skipped": skipped,
             "errors": errors,
+            "deprecated": True,
+            "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
             "message": (
                 f"Plugin '{package_id}' v{effective_version}: "
                 f"{len(written)} file scritti, {len(skipped)} saltati."
