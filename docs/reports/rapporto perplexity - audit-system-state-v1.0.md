@@ -47,6 +47,16 @@ Il metodo esiste in `engine.py` alla riga 343, definito come `async def install_
 
 **STATO: CRITICO**
 
+> **⚠ NOTA POST-AUDIT (2026-05-09):** la classificazione CRITICO è stata
+> rivista a **MEDIO** nel report di consolidamento
+> `SPARK-REPORT-DualUniverse-Consolidation-v1.0.md` (§ V2).
+> Analisi statica dell'entry point (`spark-framework-engine.py` riga 196)
+> conferma che `_build_app()` ritorna l'istanza FastMCP **prima** che
+> `.run(transport="stdio")` avvii il proprio event loop. Le chiamate
+> `asyncio.run()` in `_build_app()` operano quindi in una finestra sicura.
+> Il `try/except RuntimeError` difensivo già presente è sufficiente come hardening.
+> Nessuna modifica al codice richiesta.
+
 `sequence.py` chiama `onboarding.run_onboarding()` **sincronamente** alla riga 190, all'interno di `_build_app()` che è una funzione `def` (non `async`). Il problema reale è che `_build_app()` viene chiamato dall'entry point dello script principale che avvia FastMCP con `transport="stdio"`. FastMCP (basato su `anyio`/`asyncio`) gestisce internamente il proprio event loop. Al momento in cui `_install_declared_packages()` esegue `asyncio.run()` (riga 338 di `onboarding.py`), l'event loop potrebbe già essere attivo, causando `RuntimeError: This event loop is already running`.
 
 La mitigazione presente (riga 354: `except RuntimeError as exc`) cattura l'eccezione e la logga come warning su stderr — ma il pacchetto NON viene installato. L'onboarding risulta apparentemente completato (`status: "partial"` o `status: "skipped"`) senza installare nulla, senza alcuna segnalazione visibile all'utente. Il bug non causa crash, ma produce un **onboarding silenziosamente vuoto** in ogni avvio normale con FastMCP attivo.

@@ -358,3 +358,89 @@ def test_run_onboarding_skipped_when_no_steps_completed(tmp_path: Path) -> None:
     assert "bootstrap" in result["steps_skipped"]
     assert "store_populated" in result["steps_skipped"]
     assert "declared_packages" in result["steps_skipped"]
+
+
+# ---------------------------------------------------------------------------
+# E2E minimal-mock (R2 — audit Step 5 2026-05-09)
+# ---------------------------------------------------------------------------
+#
+# Obiettivo: verificare l'intera catena run_onboarding() su workspace vergine
+# con mock limitati alle sole dipendenze esterne (rete + engine core).
+# Conferma che ANOMALIA-NEW (import path corretto) non sia l'unica causa
+# storica dei "partial" rilevando regressioni future di idempotenza.
+
+
+def test_run_onboarding_e2e_minimal_mock_virgin_workspace(tmp_path: Path) -> None:
+    """E2E run_onboarding() con mock minimi su workspace vergine.
+
+    Verifica:
+    - is_first_run() == True prima dell'onboarding (workspace vergine)
+    - run_onboarding() restituisce status == "completed"
+    - packages_installed contiene il pacchetto dichiarato
+    - steps_completed copre bootstrap, store_populated, declared_packages
+    - errors è lista vuota
+    - idempotenza: dopo l'install il manifest contiene il pacchetto
+
+    Mock applicati (e motivazione):
+    - ``app._minimal_bootstrap_required_paths``: restituisce un path non
+      esistente per forzare l'esecuzione del bootstrap. Necessario perché
+      ``SparkFrameworkEngine`` non è istanziabile senza FastMCP + server.
+    - ``app.ensure_minimal_bootstrap``: evita la scrittura reale su .github/.
+      L'output del bootstrap Cat.A non è oggetto di questo test.
+    - ``app.install_package_for_onboarding``: evita download di rete.
+      Il side_effect registra il pacchetto nel manifest (come farebbe il
+      codice reale) per garantire idempotenza del flusso.
+
+    Tutti gli altri componenti (WorkspaceContext, ManifestManager,
+    PackageResourceStore, FileSystem) sono reali e operano su tmp_path.
+    """
+    workspace = tmp_path / "ws"
+    engine = tmp_path / "engine"
+    engine.mkdir()
+
+    # --- Setup workspace vergine con spark-packages.json ---
+    _write_spark_packages(workspace / ".github", ["spark-base"], auto_install=True)
+
+    # --- Setup store locale reale (simula pacchetto già nel bundle engine) ---
+    store_dir = engine / "packages" / "spark-base"
+    store_dir.mkdir(parents=True)
+    (store_dir / "package-manifest.json").write_text("{}", encoding="utf-8")
+
+    # --- Costruisce manager con mock minimi ---
+    manager, _, app = _make_manager(workspace, engine)
+
+    # Mock 1: sentinel non esistente → bootstrap viene eseguito
+    sentinel = workspace / ".github" / "AGENTS.md"
+    app._minimal_bootstrap_required_paths.return_value = (sentinel,)
+    app.ensure_minimal_bootstrap.return_value = {"success": True, "status": "bootstrapped"}
+
+    # Mock 2: install con side-effect reale (scrive manifest come il vero install)
+    async def _install_and_register(pkg: str) -> dict[str, Any]:
+        # Registra il pacchetto nel manifest, come farebbe _install_package_v3.
+        _seed_manifest(workspace / ".github", {pkg: "1.0.0"})
+        return {"success": True, "message": f"installed {pkg}"}
+
+    app.install_package_for_onboarding.side_effect = _install_and_register
+
+    # --- Verifica precondizione: workspace vergine = primo avvio ---
+    assert manager.is_first_run() is True, "il workspace vergine deve essere primo avvio"
+
+    # --- Esegue onboarding ---
+    result = manager.run_onboarding()
+
+    # --- Asserzioni stato finale ---
+    assert result["status"] == "completed", f"stato atteso 'completed', ottenuto: {result}"
+    assert result["errors"] == [], f"nessun errore atteso, trovati: {result['errors']}"
+    assert "spark-base" in result["packages_installed"]
+    assert "bootstrap" in result["steps_completed"]
+    assert "store_populated" in result["steps_completed"]
+    assert "declared_packages" in result["steps_completed"]
+
+    # --- Verifica idempotenza post-install ---
+    # Il manifest deve ora contenere spark-base → is_first_run deve tornare False.
+    assert manager.is_first_run() is False, (
+        "dopo l'installazione is_first_run deve tornare False (idempotenza)"
+    )
+
+    # --- Verifica che app.install_package_for_onboarding sia stato chiamato una volta ---
+    app.install_package_for_onboarding.assert_called_once_with("spark-base")

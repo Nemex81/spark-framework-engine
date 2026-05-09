@@ -8,6 +8,31 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — Merge Readiness Step 5 (2026-05-09)
+
+- `tests/test_onboarding_manager.py` — test E2E minimal-mock
+  `test_run_onboarding_e2e_minimal_mock_virgin_workspace` (R2): verifica
+  `run_onboarding()` end-to-end su workspace vergine con `auto_install: true`,
+  controlla `status == "completed"`, `packages_installed == ["spark-base"]` e
+  idempotenza post-install (`is_first_run() is False` dopo l'esecuzione).
+  Porta il totale dei test `OnboardingManager` a 18.
+
+### Changed — Merge Readiness Step 5 (2026-05-09)
+
+- `packages/spark-base/.github/agents/spark-assistant.agent.md` — bump
+  versione da `1.2.0` a `1.3.0` (minor: la sezione "Architettura — pacchetti
+  interni vs plugin workspace" introduce regole comportamentali per l'agente,
+  non solo narrativa descrittiva. SemVer minor corretto).
+- `spark/boot/tools_plugins.py` — aggiunto commento
+  `# TODO: centralizzare in spark/boot/_legacy_markers.py se altri tool
+  diventano legacy in moduli diversi` sopra la costante
+  `_LEGACY_DEPRECATION_NOTICE` (D2: lasciata in loco, oggi 2 tool legacy
+  in un solo modulo — estrazione non giustificata).
+- `docs/reports/rapporto perplexity - audit-system-state-v1.0.md` — aggiunta
+  nota inline su V2: classificazione rivista da CRITICO a MEDIO nel report
+  `SPARK-REPORT-DualUniverse-Consolidation-v1.0.md` post analisi statica
+  entry point FastMCP.
+
 ### Added — Dual-Universe Consolidation (audit 2026-05-09)
 
 - `tests/test_onboarding_manager.py` — 17 test unitari per

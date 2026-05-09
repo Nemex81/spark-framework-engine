@@ -11,7 +11,7 @@ scf_file_role: "agent"
 scf_merge_strategy: "replace"
 scf_merge_priority: 10
 scf_protected: false
-version: 1.2.0
+version: 1.3.0
 model:
   - GPT-5.4 (copilot)
 layer: workspace
