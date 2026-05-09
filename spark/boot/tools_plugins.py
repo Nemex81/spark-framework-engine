@@ -1,11 +1,12 @@
 """Plugin tools factory — Step 2 Full Decoupling + Dual-Mode Architecture.
 
-Registers 6 MCP tools:
+Registers 7 MCP tools:
   scf_plugin_install, scf_plugin_remove, scf_plugin_update, scf_plugin_list,
-  scf_list_plugins, scf_install_plugin.
+    scf_get_plugin_info, scf_list_plugins, scf_install_plugin.
 
 I primi 4 tool delegano a ``PluginManagerFacade`` (store-based, Universo A).
-Gli ultimi 2 tool delegano a ``PluginManager`` / ``download_plugin``
+``scf_get_plugin_info`` legge i metadati plugin dal registry e dal manifest remoto.
+Gli ultimi 2 tool sono compat legacy verso ``PluginManager`` / ``download_plugin``
 (download diretto senza store, TASK-4 Dual-Mode Architecture v1.0).
 
 Tutti i tool accettano ``workspace_root: str`` per consentire operazioni
@@ -17,6 +18,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from spark.core.constants import ENGINE_VERSION
+from spark.core.utils import _is_engine_version_compatible, _normalize_string_list
+from spark.packages import _get_registry_min_engine_version, _resolve_package_version
 from spark.plugins import PluginManagerFacade
 from spark.plugins.manager import download_plugin, list_available_plugins
 from spark.plugins.schema import (
@@ -51,8 +55,86 @@ def _make_facade(workspace_root_str: str, fallback: Path) -> PluginManagerFacade
     return PluginManagerFacade(workspace_root=workspace)
 
 
+def _make_registry_client(engine: Any, github_root: Path) -> Any:
+    """Return the engine registry client or create a fallback client."""
+    return engine._registry_client if engine._registry_client is not None else RegistryClient(github_root)
+
+
+def _get_direct_plugin_entries(registry_client: Any) -> list[dict[str, Any]]:
+    """Return registry entries available for direct plugin workflows."""
+    return list_available_plugins(registry_client)
+
+
+def _build_plugin_info_payload(plugin_id: str, registry_client: Any) -> dict[str, Any]:
+    """Build a public detail payload for one plugin registry entry."""
+    plugins = _get_direct_plugin_entries(registry_client)
+    plugin = next(
+        (entry for entry in plugins if str(entry.get("id", "")).strip() == plugin_id),
+        None,
+    )
+    if plugin is None:
+        return {
+            "success": False,
+            "status": "error",
+            "plugin_id": plugin_id,
+            "error": f"Plugin '{plugin_id}' not found in registry.",
+            "available": [entry.get("id") for entry in plugins],
+        }
+
+    repo_url = str(plugin.get("repo_url", "")).strip()
+    try:
+        plugin_manifest = registry_client.fetch_package_manifest(repo_url)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "success": False,
+            "status": "error",
+            "plugin_id": plugin_id,
+            "error": f"Cannot fetch plugin manifest: {exc}",
+            "plugin": plugin,
+        }
+
+    raw_plugin_files = plugin_manifest.get("plugin_files", [])
+    plugin_files = raw_plugin_files if isinstance(raw_plugin_files, list) else []
+    min_engine_version = str(
+        plugin_manifest.get("min_engine_version", _get_registry_min_engine_version(plugin))
+    ).strip()
+    version = _resolve_package_version(
+        plugin_manifest.get("version", ""),
+        plugin.get("latest_version", ""),
+    )
+    name = str(
+        plugin_manifest.get("display_name")
+        or plugin_manifest.get("name")
+        or plugin.get("name")
+        or plugin_manifest.get("package")
+        or plugin_id
+    ).strip()
+    description = str(
+        plugin_manifest.get("description") or plugin.get("description", "")
+    ).strip()
+
+    return {
+        "success": True,
+        "status": "ok",
+        "plugin_id": plugin_id,
+        "name": name,
+        "description": description,
+        "version": version,
+        "dependencies": _normalize_string_list(plugin_manifest.get("dependencies", [])),
+        "source_url": repo_url,
+        "min_engine_version": min_engine_version,
+        "engine_version": ENGINE_VERSION,
+        "engine_compatible": _is_engine_version_compatible(
+            ENGINE_VERSION,
+            min_engine_version,
+        ),
+        "delivery_mode": str(plugin.get("delivery_mode", "managed")).strip() or "managed",
+        "plugin_files": plugin_files,
+    }
+
+
 def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
-    """Register 4 plugin lifecycle tools into mcp.
+    """Register plugin lifecycle and compatibility tools into mcp.
 
     Ogni tool è una thin-wrapper verso ``PluginManagerFacade``:
     - Converte ``workspace_root: str`` → ``Path``
@@ -290,6 +372,10 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
     async def scf_list_plugins() -> dict[str, Any]:
         """List plugin packages available for direct download (excludes mcp_only).
 
+        DEPRECATED: use ``scf_plugin_list`` for tracked PluginManagerFacade
+        listing. This compatibility tool remains for direct-download legacy
+        workflows and will be removed after the documented migration window.
+
         Returns the list of packages from the remote SCF registry that can be
         downloaded directly into the workspace ```.github/`` directory without
         passing through the engine's internal store.
@@ -306,12 +392,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
         """
         _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: start")
         try:
-            registry_client = (
-                engine._registry_client
-                if engine._registry_client is not None
-                else RegistryClient(ctx.github_root)
-            )
-            plugins = list_available_plugins(registry_client)
+            registry_client = _make_registry_client(engine, ctx.github_root)
+            plugins = _get_direct_plugin_entries(registry_client)
         except Exception as exc:  # noqa: BLE001
             _log.error("[SPARK-ENGINE][ERROR] scf_list_plugins: %s", exc)
             return {
@@ -328,6 +410,33 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "message": f"{len(plugins)} plugin disponibili per il download diretto.",
         }
 
+    @_register_tool("scf_get_plugin_info")
+    async def scf_get_plugin_info(plugin_id: str) -> dict[str, Any]:
+        """Restituisce i dettagli di un singolo plugin Dual-Mode per ID.
+
+        Args:
+            plugin_id: Identificatore univoco del plugin nel registry.
+
+        Returns:
+            Dict con name, description, version, dependencies, source_url,
+            min_engine_version. Chiave 'error' presente se plugin non trovato.
+
+        Raises:
+            Nessuna eccezione diretta. Errori restituiti come MCP error response.
+        """
+        _log.info("[SPARK-ENGINE][INFO] scf_get_plugin_info: %s", plugin_id)
+        try:
+            registry_client = _make_registry_client(engine, ctx.github_root)
+            return _build_plugin_info_payload(plugin_id, registry_client)
+        except Exception as exc:  # noqa: BLE001
+            _log.error("[SPARK-ENGINE][ERROR] scf_get_plugin_info(%s): %s", plugin_id, exc)
+            return {
+                "success": False,
+                "status": "error",
+                "plugin_id": plugin_id,
+                "error": str(exc),
+            }
+
     @_register_tool("scf_install_plugin")
     async def scf_install_plugin(
         package_id: str,
@@ -336,6 +445,10 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
         overwrite: bool = False,
     ) -> dict[str, Any]:
         """Download a plugin directly into the workspace .github/ directory.
+
+        DEPRECATED: use ``scf_plugin_install`` for tracked PluginManagerFacade
+        installation. This compatibility tool remains for direct-download legacy
+        workflows and will be removed after the documented migration window.
 
         Downloads ``plugin_files`` declared in the package manifest from the
         GitHub source repo into ``target_workspace/.github/`` without registering
@@ -363,11 +476,7 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
         _log.info("[SPARK-ENGINE][INFO] scf_install_plugin: start package_id=%s version=%s", package_id, version)
         target = Path(workspace_root).resolve() if workspace_root.strip() else ctx.workspace_root
         try:
-            registry_client = (
-                engine._registry_client
-                if engine._registry_client is not None
-                else RegistryClient(ctx.github_root)
-            )
+            registry_client = _make_registry_client(engine, ctx.github_root)
             result = download_plugin(
                 package_id=package_id,
                 version=version,

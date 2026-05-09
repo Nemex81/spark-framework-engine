@@ -9,12 +9,79 @@ mockano le chiamate HTTP esterne per evitare dipendenze di rete.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+from collections.abc import Callable, Coroutine
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from spark.boot.tools_plugins import register_plugin_tools
+from spark.plugins import PluginManagerFacade
+from spark.plugins.schema import PluginNotFoundError, PluginNotInstalledError
+
+
+class FakeMCP:
+    """Minimal MCP test double that captures registered tools by function name."""
+
+    def __init__(self) -> None:
+        self.tools: dict[str, Callable[..., Coroutine[Any, Any, dict[str, Any]]]] = {}
+
+    def tool(
+        self,
+    ) -> Callable[
+        [Callable[..., Coroutine[Any, Any, dict[str, Any]]]],
+        Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+
+    ]:
+        def decorator(
+            func: Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+        ) -> Callable[..., Coroutine[Any, Any, dict[str, Any]]]:
+            self.tools[func.__name__] = func
+            return func
+
+        return decorator
+
+
+class FakeRegistryClient:
+    """Registry client fixture for plugin info tool tests."""
+
+    def list_packages(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "test-plugin",
+                "name": "Test Plugin",
+                "description": "Registry description",
+                "latest_version": "1.0.0",
+                "repo_url": "https://github.com/Test/test-plugin",
+                "min_engine_version": "3.1.0",
+                "delivery_mode": "plugin",
+            },
+            {
+                "id": "internal-service",
+                "description": "MCP-only internal package",
+                "latest_version": "1.0.0",
+                "repo_url": "https://github.com/Test/internal-service",
+                "delivery_mode": "mcp_only",
+            },
+        ]
+
+    def fetch_package_manifest(self, repo_url: str) -> dict[str, Any]:
+        assert repo_url == "https://github.com/Test/test-plugin"
+        return {
+            "schema_version": "3.1",
+            "package": "test-plugin",
+            "display_name": "Test Plugin Display",
+            "description": "Manifest description",
+            "version": "1.0.1",
+            "min_engine_version": "3.1.0",
+            "dependencies": ["spark-base"],
+            "plugin_files": [".github/agents/test-plugin.agent.md"],
+        }
+
 
 from spark.plugins import PluginManagerFacade
 from spark.plugins.schema import PluginNotFoundError, PluginNotInstalledError
@@ -23,6 +90,30 @@ from spark.plugins.schema import PluginNotFoundError, PluginNotInstalledError
 # ---------------------------------------------------------------------------
 # Fixtures condivise
 # ---------------------------------------------------------------------------
+
+
+def test_scf_get_plugin_info_returns_plugin_specific_details(workspace: Path) -> None:
+    """scf_get_plugin_info restituisce dettagli dal registry e dal manifest plugin."""
+    fake_mcp = FakeMCP()
+    tool_names: list[str] = []
+    engine = SimpleNamespace(
+        _ctx=SimpleNamespace(workspace_root=workspace, github_root=workspace / ".github"),
+        _registry_client=FakeRegistryClient(),
+    )
+
+    register_plugin_tools(engine, fake_mcp, tool_names)
+
+    assert "scf_get_plugin_info" in tool_names
+    result = asyncio.run(fake_mcp.tools["scf_get_plugin_info"]("test-plugin"))
+
+    assert result["status"] == "ok"
+    assert result["name"] == "Test Plugin Display"
+    assert result["description"] == "Manifest description"
+    assert result["version"] == "1.0.1"
+    assert result["dependencies"] == ["spark-base"]
+    assert result["source_url"] == "https://github.com/Test/test-plugin"
+    assert result["min_engine_version"] == "3.1.0"
+    assert result["plugin_files"] == [".github/agents/test-plugin.agent.md"]
 
 
 @pytest.fixture()

@@ -20,6 +20,7 @@ La v2.0 corregge tutti e tre i problemi BLOCCANTI identificati nel report
 - **PROBLEMA-3** (snippet init errato): §4.3 usa `self._ctx.workspace_root` e `_REGISTRY_URL`
 
 Introduce inoltre:
+
 - Sezione §0 "Stato Attuale vs Stato Target" con path reali verificati
 - Descrizione completa dei due universi A e B (§2.1)
 - Specifica del meccanismo `#file:` per istruzioni plugin (§2.4)
@@ -32,7 +33,7 @@ Introduce inoltre:
 
 ### 0.1 Struttura codebase attuale (branch `feature/dual-mode-manifest-v3.1`)
 
-```
+```text
 spark-framework-engine/
 ├── spark-framework-engine.py          # Entry point MCP (avvio, registrazione tools)
 ├── spark/
@@ -69,7 +70,7 @@ spark-framework-engine/
 
 ### 0.2 Stato target (post-migrazione v2.0)
 
-```
+```text
 spark/
 └── plugins/                           # NUOVO package
     ├── __init__.py                    # esporta PluginManagerFacade
@@ -84,7 +85,7 @@ spark/
 **Componenti modificati:**
 
 | File | Tipo modifica |
-|------|---------------|
+| --- | --- |
 | `spark/boot/lifecycle.py` | Rimozione `_install_workspace_files_v3`, `_install_standalone_files_v3` (migrano in `spark/plugins/installer.py`) |
 | `spark/boot/tools_packages_install.py` | Thin facade verso `PluginManagerFacade` per il path plugin |
 | `spark/boot/engine.py` | Aggiunta inizializzazione `_plugin_manager` in `_init_runtime_objects()` |
@@ -93,7 +94,7 @@ spark/
 **Componenti invariati (non si toccano):**
 
 | Componente | Path reale | Motivo |
-|------------|-----------|--------|
+| --- | --- | --- |
 | `WorkspaceWriteGateway` | `spark/manifest/gateway.py` | Riusata dal Plugin Manager |
 | `ManifestManager` | `spark/manifest/manifest.py` | Riusata dal Plugin Manager |
 | `RegistryClient` | `spark/registry/client.py` | Riusata dal Plugin Manager |
@@ -147,6 +148,7 @@ I pacchetti attualmente presenti nell'engine nella loro versione embedded (spark
 scf-master-codecrafter, scf-pycode-crafter) vengono operati come **servizi MCP puri**.
 
 Regole:
+
 - Nessuna scrittura nel workspace utente per questa categoria.
 - Nessun riferimento ai repository GitHub online.
 - Serviti esclusivamente via URI MCP (`agents://`, `skills://`, `instructions://`, `prompts://`).
@@ -165,6 +167,7 @@ I plugin sono entità completamente indipendenti dall'engine.
 Sorgente di verità: repository GitHub online, referenziati dal registro.
 
 Regole:
+
 - Una volta installati nel workspace (`.github/`), funzionano anche senza engine attivo.
 - Copilot li legge direttamente dai file fisici, senza passare per MCP.
 - `ManifestManager` (`.github/.scf-manifest.json`) traccia SOLO i plugin installati.
@@ -175,7 +178,7 @@ Regole:
 
 ### 2.2 Visione a due livelli (architettura componenti)
 
-```
+```text
 +----------------------------------------------------------+
 |  LIVELLO 1 — Server MCP (spark-framework-engine.py)     |
 |                                                          |
@@ -219,7 +222,7 @@ Regole:
 
 ### 2.3 Flusso di installazione plugin (comportamento nuovo)
 
-```
+```text
 Utente -> Copilot Agent -> scf_install_plugin (tool MCP)
     |
     +-> PluginManagerFacade.install(pkg_id)
@@ -247,6 +250,7 @@ Utente -> Copilot Agent -> scf_install_plugin (tool MCP)
 ### 2.4 Meccanismo `#file:` per istruzioni plugin
 
 Ogni plugin porta il proprio file di istruzioni:
+
 - **Path nel workspace**: `.github/instructions/{plugin-id}.md`
 - **Contenuto**: istruzioni operative specifiche del plugin (equivalente all'attuale
   blocco `SCF:BEGIN:{plugin-id}` in `copilot-instructions.md`)
@@ -264,6 +268,7 @@ Quando il plugin viene rimosso, `PluginRemover._remove_instruction_reference()`
 rimuove la riga corrispondente.
 
 **Perché questo approccio è preferibile al SCF section merge attuale:**
+
 - Il plugin possiede il proprio file di istruzioni — è indipendente da `copilot-instructions.md`
 - L'aggiornamento di un plugin aggiorna solo il suo file `.github/instructions/{plugin-id}.md`
 - Non richiede `_scf_section_merge` né la gestione dei marker `SCF:BEGIN/END`
@@ -271,6 +276,7 @@ rimuove la riga corrispondente.
   (Copilot li legge come file fisici con `applyTo`)
 
 **Coesistenza con SCF section merge:**
+
 - La sezione di bootstrap engine (Universo A) usa ancora il meccanismo
   `SCF:BEGIN:engine-bootstrap / SCF:END:engine-bootstrap` in `copilot-instructions.md`
   per il contenuto minimo dell'engine
@@ -285,7 +291,7 @@ e `PluginRemover._remove_instruction_reference()`.
 
 ### 2.5 Flusso di lettura risorsa MCP (comportamento invariato)
 
-```
+```text
 Copilot Agent -> scf_get_resource("agents://spark-assistant")
     |
     +-> FrameworkInventory.get_resource(uri)
@@ -303,7 +309,7 @@ Copilot Agent -> scf_get_resource("agents://spark-assistant")
 Questo è il cuore del disaccoppiamento. Non modifica nulla di esistente —
 aggiunge un package autonomo con interfaccia pubblica definita.
 
-```
+```text
 spark/plugins/
 ├── __init__.py           # esporta PluginManagerFacade
 ├── facade.py             # PluginManagerFacade — punto di accesso unico
@@ -450,15 +456,18 @@ async def scf_install_package(pkg_id: str, ...) -> dict:
 solo le funzioni relative allo store interno dell'engine.
 
 **Funzioni che MIGRANO in `spark/plugins/installer.py`:**
+
 - `_install_workspace_files_v3` — diventa `PluginInstaller._write_files()`
 - `_install_standalone_files_v3` — diventa `PluginInstaller.install_files()`
   (nota: il nome reale nel codebase è `_install_standalone_files_v3`, non
   `_install_plugin_files_v3` come indicato erroneamente in §4.2 della v1.0)
 
 **Funzioni che MIGRANO in `spark/plugins/remover.py`:**
+
 - `_remove_workspace_files_v3` — diventa `PluginRemover.remove_files()`
 
 **Funzioni che RIMANGONO in `_V3LifecycleMixin` (spark/boot/lifecycle.py):**
+
 - `_v3_runtime_state`
 - `_is_github_write_authorized_v3`
 - `_v3_repopulate_registry`
@@ -484,6 +493,7 @@ self._plugin_manager = PluginManagerFacade(
 ```
 
 **Note critiche:**
+
 - `self._ctx` è il `WorkspaceContext` passato al costruttore — attributo esistente
 - `self._ctx.workspace_root` è il path reale del workspace utente — attributo esistente
 - NON esiste `self._config` né `self._workspace_locator` in `SparkFrameworkEngine`
@@ -510,7 +520,7 @@ I componenti seguenti non vengono modificati in nessun task. Path reali verifica
 nel codebase (branch `feature/dual-mode-manifest-v3.1`):
 
 | Componente | Path nel codebase | Package | Note |
-|------------|------------------|---------|------|
+| --- | --- | --- | --- |
 | `WorkspaceWriteGateway` | `spark/manifest/gateway.py` | `spark.manifest` | Riusata da PluginInstaller/Remover |
 | `ManifestManager` | `spark/manifest/manifest.py` | `spark.manifest` | Traccia ownership file workspace |
 | `RegistryClient` | `spark/registry/client.py` | `spark.registry` | Constructor: `(github_root, registry_url, cache_path)` |
@@ -570,6 +580,7 @@ in un manifest v3.0/v3.1 durante l'installazione.
 **Step 1 — Crea `spark/plugins/` senza rimuovere nulla** (rischio: BASSO)
 
 *Criteri di accettazione:*
+
 - `spark/plugins/__init__.py` esportato correttamente
 - `PluginManagerFacade` instanziabile con `workspace_root` e `registry_url`
 - I test esistenti passano senza modifiche (`pytest -q --ignore=tests/test_integration_live.py`)
@@ -582,6 +593,7 @@ nel nuovo contesto — non un refactor del codice originale. I due metodi coesis
 **Step 2 — Collega i tool MCP al Plugin Manager** (rischio: MEDIO)
 
 *Criteri di accettazione:*
+
 - Tool `scf_install_plugin` e `scf_remove_plugin` registrati e funzionanti
 - Il tool `scf_install_package` rimane invariato (Universo A, store interno)
 - Contatore tool `Tools registered: N total` aggiornato nel log di avvio
@@ -593,6 +605,7 @@ nel nuovo contesto — non un refactor del codice originale. I due metodi coesis
 **Step 3 — Rimuovi la logica ibrida da `lifecycle.py`** (rischio: MEDIO)
 
 *Criteri di accettazione:*
+
 - `_install_workspace_files_v3`, `_install_standalone_files_v3`,
   `_remove_workspace_files_v3` rimosse da `_V3LifecycleMixin`
 - Test `test_standalone_files_v3.py`, `test_install_workspace_files.py`,
@@ -605,6 +618,7 @@ fixture rewrite significativo (non solo nominale) — vedere §7.
 **Step 4 — Aggiorna bootstrap per comportamento v2.0** (rischio: BASSO)
 
 *Criteri di accettazione:*
+
 - `scf_bootstrap_workspace` scrive solo `copilot-instructions.md` e `AGENTS.md`
 - Gli aggiornamenti ai file di bootstrap richiedono conferma esplicita
 - `ManifestManager` traccia i file di bootstrap con owner `"engine-bootstrap"`
@@ -622,11 +636,28 @@ fixture rewrite significativo (non solo nominale) — vedere §7.
   e rimozioni.
 
 A ogni operazione del Plugin Manager:
+
 1. `ManifestManager.upsert_many()` viene chiamato per ogni file scritto (ownership)
 2. `PluginRegistry.register()` viene chiamato per il pacchetto (metadati installazione)
 
 Non c'è conflitto di write: le due strutture hanno chiavi diverse
 (path file vs package_id).
+
+### 6.5 deprecated_tools
+
+La famiglia direct-download nata nel percorso Dual-Mode v1.0 resta disponibile
+solo come compatibilita temporanea. Il percorso target per i plugin workspace e
+`PluginManagerFacade`, perche registra ownership file-level in `ManifestManager`
+e stato package-level in `PluginRegistry`.
+
+| Tool legacy | Sostituto target | Stato | Rimozione prevista |
+| --- | --- | --- | --- |
+| `scf_list_plugins` | `scf_plugin_list` | Deprecated | 2026-06-30 |
+| `scf_install_plugin` | `scf_plugin_install` | Deprecated | 2026-06-30 |
+
+`scf_get_plugin_info` rimane il tool read-only dedicato ai dettagli di un plugin
+workspace: usa il registry filtrato per plugin installabili e il manifest remoto,
+senza installare o aggiornare file.
 
 ---
 
@@ -636,6 +667,7 @@ Il branch `feature/dual-mode-manifest-v3.1` **non va mergiato su `main`** con
 l'approccio attuale. Il lavoro esistente è riutilizzabile:
 
 **Codice riutilizzabile:**
+
 - `lifecycle.py` — `_install_standalone_files_v3` (nome reale, non `_install_plugin_files_v3`)
   migra in `spark/plugins/installer.py` come `PluginInstaller.install_files()`
 - `tools_packages_install.py` — il payload con `plugin_files_installed` e
@@ -644,7 +676,7 @@ l'approccio attuale. Il lavoro esistente è riutilizzabile:
 **Test da aggiornare (NON solo fixture minimali):**
 
 | File test | Cosa cambia | Entità aggiornamento |
-|-----------|-------------|---------------------|
+| --- | --- | --- |
 | `tests/test_standalone_files_v3.py` | Target diventa `PluginInstaller` (non `_V3LifecycleMixin`) | Significativo (riscrittura fixture) |
 | `tests/test_install_workspace_files.py` | Stessa situazione | Significativo |
 | `tests/test_deployment_modes.py` | Test `plugin_files` usano `scf_install_plugin` | Significativo |
@@ -687,13 +719,13 @@ al funzionamento del framework. Opzioni:
 Impatto del chiarimento: definisce il perimetro del Step 4 e il contenuto del
 bootstrap al primo avvio.
 
-**D2 — Nome del file di stato plugin**
+### D2 — Nome del file di stato plugin
 
 `.github/.spark-plugins` è nascosto e nella cartella già monitorata da SPARK.
 Alternativa: `spark-plugins.lock` nella root del workspace (più visibile, stile npm).
 Impatto: nessuno sul codice, solo convenzione.
 
-**D3 — Comportamento offline**
+### D3 — Comportamento offline
 
 Il Plugin Manager scarica da GitHub. Se offline:
 
@@ -704,7 +736,7 @@ Il Plugin Manager scarica da GitHub. Se offline:
 Opzione B è già parzialmente implementabile con il `RegistryClient` esistente
 (che ha fallback alla cache in `fetch()`).
 
-**D4 — Autenticazione repo privati**
+### D4 — Autenticazione repo privati
 
 I repo `scf-*` sono pubblici. Se diventassero privati:
 Rimandare — aggiungere `github_token: str | None = None` a `PluginManagerFacade`
