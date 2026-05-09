@@ -389,6 +389,36 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
         # Branch v3 lifecycle: pacchetti che dichiarano min_engine_version
         # >= 3.0.0 vengono installati nello store engine, non in workspace.
         if _is_v3_package(pkg_manifest):
+            # Pre-check conflitti per plugin_files prima di avviare il download
+            # nello store. Se conflict_mode="abort" e ci sono file non tracciati
+            # che verrebbero sovrascritti dai plugin_files, blocca l'install
+            # senza toccare lo store né il manifest.
+            _v3_plugin_files_check = list(pkg_manifest.get("plugin_files") or [])
+            if _v3_plugin_files_check and conflict_mode == "abort":
+                _v3_precheck = _classify_install_files(
+                    package_id,
+                    _v3_plugin_files_check,
+                    file_policies,
+                )
+                _v3_untracked = [
+                    item
+                    for item in _v3_precheck.get("conflict_plan", [])
+                    if item.get("classification") == "conflict_untracked_existing"
+                ]
+                if _v3_untracked:
+                    return _build_install_result(
+                        False,
+                        error=(
+                            f"Package '{package_id}' would overwrite existing untracked "
+                            "plugin files. Review conflicts and retry with "
+                            "conflict_mode='replace'."
+                        ),
+                        package=package_id,
+                        version=pkg_version,
+                        conflicts_detected=_v3_untracked,
+                        blocked_files=[item["file"] for item in _v3_untracked],
+                        requires_user_resolution=True,
+                    )
             v3_result = await engine._install_package_v3(
                 package_id=package_id,
                 pkg=pkg,

@@ -8,6 +8,40 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — Live Fixture Fix v1.0 (2026-05-09)
+
+- `tests/test_integration_live.py` — fixture `tmp_workspace`: aggiunto
+  blocco di inizializzazione di `runtime/orchestrator-state.json` con
+  `github_write_authorized: true`. Senza questo file tutti e 4 i live test
+  erano bloccati dal gate `_is_github_write_authorized_v3()` prima ancora di
+  toccare la rete (Bug A).
+- `spark/core/utils.py` — aggiunta helper `_normalize_dependency_ids()` che
+  gestisce dipendenze in formato schema 3.1 (`{"id": ..., "min_version": ...}`)
+  oltre al formato stringa legacy. Risolve il `missing_dependencies` errato
+  per pacchetti con dipendenze object-typed (Bug B).
+- `spark/boot/install_helpers.py` — `_get_package_install_context()` ora usa
+  `_normalize_dependency_ids()` al posto di `_normalize_string_list()` per il
+  campo `dependencies` del manifest (Bug B).
+- `tests/test_integration_live.py` — `test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace`:
+  aggiornato `conflict_rel` da `".github/agents/Agent-Code.md"` (nome
+  pre-rename) a `".github/agents/code-Agent-Code.md"` (nome attuale dopo
+  razionalizzazione prefisso `code-`) (Bug D).
+- `tests/test_integration_live.py` — `test_install_clean_master_package_creates_manifest_and_replan_is_clean`:
+  le entry manifest `__store__/{pkg}` sono sentinelle interne v3 store e non
+  corrispondono a file fisici nel workspace; filtrate dall'assertion sui file
+  tracciati (Bug C).
+- `tests/test_integration_live.py` — `test_install_clean_master_package_creates_manifest_and_replan_is_clean`:
+  la replan assertion ora verifica che tutti i file installati
+  (workspace_files + plugin_files) siano classificati come
+  `update_tracked_clean` / `extend_section`, ignorando le voci store-only
+  (changelogs, skills, prompts) presenti in `files` ma non nel workspace
+  fisico (Bug C / replan assertion).
+- `spark/boot/tools_packages_install.py` — aggiunto pre-check conflitti per
+  `plugin_files` nel branch v3 prima dell'avvio del download nello store. Se
+  `conflict_mode="abort"` e uno o più `plugin_files` corrispondono a file
+  non tracciati già presenti nel workspace, `scf_install_package` restituisce
+  `success=False` senza toccare store né manifest (Bug E).
+
 ### Added — Merge Readiness Step 5 (2026-05-09)
 
 - `tests/test_onboarding_manager.py` — test E2E minimal-mock

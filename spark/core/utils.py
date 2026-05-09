@@ -156,6 +156,34 @@ def _normalize_string_list(value: Any) -> list[str]:
     return [item for item in items if item]
 
 
+def _normalize_dependency_ids(value: Any) -> list[str]:
+    """Return a list of dependency IDs from either string or object format.
+
+    Handles both legacy string format and schema-3.1 object format:
+    - String format: ``["spark-base", "scf-master-codecrafter"]``
+    - Object format: ``[{"id": "spark-base", "min_version": "1.6.1"}, ...]``
+    - Mixed format: supported transparently.
+
+    Args:
+        value: Raw ``dependencies`` field from a package manifest.
+
+    Returns:
+        List of package-ID strings with empty entries removed.
+    """
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        if isinstance(item, dict):
+            # Schema-3.1 object format: extract the "id" field.
+            dep_id = str(item.get("id", "")).strip()
+        else:
+            dep_id = str(item).strip()
+        if dep_id:
+            result.append(dep_id)
+    return result
+
+
 def _parse_semver_triplet(version: str) -> tuple[int, int, int] | None:
     """Parse the numeric core of a semantic version string."""
     match = _SEMVER_RE.match(version.strip())

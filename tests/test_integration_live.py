@@ -86,6 +86,30 @@ def _tool(
 def tmp_workspace(tmp_path: Path) -> LiveWorkspace:
     github_root = tmp_path / ".github"
     github_root.mkdir(parents=True, exist_ok=True)
+    # Inizializza lo stato runtime con github_write_authorized=True in modo che
+    # il gate _is_github_write_authorized_v3() in lifecycle.py non blocchi le
+    # scritture su .github/ durante i test di installazione. Senza questo file
+    # tutti i tool install/remove restituiscono 'not authorized' prima ancora
+    # di toccare la rete o lo store.
+    runtime_dir = github_root / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "orchestrator-state.json").write_text(
+        json.dumps(
+            {
+                "github_write_authorized": True,
+                "current_phase": "",
+                "current_agent": "",
+                "retry_count": 0,
+                "confidence": 1.0,
+                "execution_mode": "autonomous",
+                "last_updated": "",
+                "phase_history": [],
+                "active_task_id": "",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     context = WorkspaceContext(
         workspace_root=tmp_path,
         github_root=github_root,
@@ -105,7 +129,16 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
     install_package = _tool(tmp_workspace, "scf_install_package")
     plan_install = _tool(tmp_workspace, "scf_plan_install")
     master_manifest = _remote_manifest(tmp_workspace, "scf-master-codecrafter")
-    expected_files = {path.removeprefix(".github/") for path in master_manifest["files"]}
+    # workspace_files e plugin_files sono le categorie scritte su disco.
+    # Le altre voci in "files" (changelogs, skills, prompts) sono servite
+    # solo via MCP dallo store del motore e non compaiono nel workspace.
+    installed_paths: list[str] = list(
+        dict.fromkeys(
+            master_manifest.get("workspace_files", [])
+            + master_manifest.get("plugin_files", [])
+        )
+    )
+    expected_files = {path.removeprefix(".github/") for path in installed_paths}
 
     base_result = asyncio.run(install_package("spark-base"))
 
@@ -114,13 +147,21 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
     result = asyncio.run(install_package("scf-master-codecrafter"))
 
     assert result["success"] is True, result
-    for file_rel in master_manifest["files"]:
+    for file_rel in installed_paths:
         assert (tmp_workspace.workspace_root / file_rel).is_file()
 
     manifest_path = tmp_workspace.github_root / ".scf-manifest.json"
     assert manifest_path.is_file()
     entries = _manifest_entries(tmp_workspace.github_root)
-    master_entries = [entry for entry in entries if entry["package"] == "scf-master-codecrafter"]
+    # Le entry `__store__/{pkg}` sono sentinelle interne del v3 store e non
+    # corrispondono a file fisici nel workspace — vanno escluse dall'assertion
+    # che verifica i file scritti su disco.
+    master_entries = [
+        entry
+        for entry in entries
+        if entry["package"] == "scf-master-codecrafter"
+        and not str(entry.get("file", "")).startswith("__store__/")
+    ]
     assert {entry["file"] for entry in master_entries} == expected_files
     for entry in master_entries:
         assert set(entry) >= {"file", "package", "package_version", "installed_at", "sha256"}
@@ -134,13 +175,29 @@ def test_install_clean_master_package_creates_manifest_and_replan_is_clean(
     assert replan["preserve_plan"] == []
     assert replan["can_install"] is True
     assert replan["can_install_with_replace"] is True
-    assert len(replan["write_plan"]) + len(replan["extend_plan"]) == len(expected_files)
+    # scf_plan_install usa `files` (19 voci: agenti + changelogs + skills + prompts).
+    # Le voci store-only (changelogs, skills, prompts) appaiono come "create_new"
+    # perché sono solo nello store MCP, non nel workspace. Verifichiamo che
+    # tutti i file *installati* (workspace_files + plugin_files = 14) siano
+    # classificati come update/extend e non finiscano in conflict/preserve_plan.
+    planned_files = {item["file"] for item in replan["write_plan"] + replan["extend_plan"]}
+    for rel in expected_files:
+        assert f".github/{rel}" in planned_files, f".github/{rel} not in write/extend plan"
+    installed_items = [
+        item
+        for item in replan["write_plan"] + replan["extend_plan"]
+        if item["file"].removeprefix(".github/") in expected_files
+    ]
+    assert len(installed_items) == len(expected_files)
+    assert all(
+        item.get("classification") in ("update_tracked_clean", "extend_section")
+        for item in installed_items
+    )
     assert any(
         item["file"] == ".github/copilot-instructions.md"
         and item["classification"] == "extend_section"
         for item in replan["extend_plan"]
     )
-    assert all(item["classification"] == "update_tracked_clean" for item in replan["write_plan"])
 
 
 @pytest.mark.integration
@@ -177,7 +234,10 @@ def test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace(
 
     assert base_result["success"] is True, base_result
 
-    conflict_rel = ".github/agents/Agent-Code.md"
+    # Il file di conflitto deve corrispondere a un file nei plugin_files del
+    # pacchetto master; il nome corretto dopo il rinominamento con prefisso
+    # "code-" è "code-Agent-Code.md", non il vecchio "Agent-Code.md".
+    conflict_rel = ".github/agents/code-Agent-Code.md"
     conflict_path = tmp_workspace.workspace_root / conflict_rel
     conflict_path.parent.mkdir(parents=True, exist_ok=True)
     conflict_path.write_text("file utente non tracciato", encoding="utf-8")
