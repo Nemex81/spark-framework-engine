@@ -8,6 +8,27 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — Legacy Init Audit v1.0 (2026-05-XX)
+
+- `spark/boot/tools_bootstrap.py` — aggiunto `_classify_bootstrap_conflict(dest_path: Path) -> str`,
+  helper module-level che legge il frontmatter YAML di un file preesistente nel workspace e
+  restituisce `"spark_outdated"` (se `spark: true` presente) oppure `"non_spark"` (altrimenti).
+- `spark/boot/tools_bootstrap.py` — `scf_bootstrap_workspace` ora espone 3 nuovi campi nel
+  payload di risposta:
+  - `files_conflict_non_spark`: file protetti che NON hanno frontmatter `spark: true` (Scenario X).
+  - `files_conflict_spark_outdated`: file protetti che hanno frontmatter `spark: true` (Scenario Y).
+  - `spark_outdated_details`: lista di dict `{file, existing_version}` per i file SPARK obsoleti,
+    con la versione letta dal frontmatter del file esistente nel workspace.
+  Nessun cambio comportamentale: i file continuano a essere protetti esattamente come prima.
+  Cambia solo il payload MCP, che ora permette agli utenti di distinguere i conflitti
+  e decidere consapevolmente se usare `force=True`.
+- `tests/test_legacy_init_audit.py` — 5 nuovi test (TDD, Scenario X + Y):
+  `test_bootstrap_classifies_non_spark_conflict_file`,
+  `test_bootstrap_non_spark_conflict_payload_is_empty_on_clean_workspace`,
+  `test_bootstrap_classifies_spark_outdated_conflict_file`,
+  `test_bootstrap_spark_outdated_includes_version_details`,
+  `test_bootstrap_non_md_file_classified_as_non_spark`.
+
 ### Fixed
 
 - `tests/test_multi_owner_policy.py` —
@@ -25,6 +46,13 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - Aggiornare `min_engine_version` in `scf-master-codecrafter`
   e `scf-pycode-crafter` a `"3.2.0"` nei rispettivi
   `package-manifest.json` (task post-merge, repo separati).
+- **GAP-Y-2 — Preservazione personalizzazioni durante update SPARK** (BLOCCO-ARCHITETTURALE):
+  Quando un file SPARK (`spark: true`) viene aggiornato con `force=True`, le
+  personalizzazioni utente nelle sezioni non-gestite dal framework vengono
+  sovrascritte. Risoluzione richiede decisione architetturale su formato
+  per sezioni "managed" (opzioni: commenti `<!-- SPARK-MANAGED -->`,
+  `merge_sections` marker o frontmatter-only update).
+  Non implementato senza approvazione esplicita.
 
 ---
 

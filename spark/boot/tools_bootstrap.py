@@ -28,12 +28,37 @@ from spark.workspace import (
     _write_update_policy_payload,
 )
 from spark.boot import install_helpers as _ih
-from spark.core.utils import _utc_now
+from spark.core.utils import _utc_now, parse_markdown_frontmatter
 
 if TYPE_CHECKING:
     from spark.boot.engine import SparkFrameworkEngine  # pragma: no cover
 
 _log = logging.getLogger("spark-framework-engine")
+
+
+def _classify_bootstrap_conflict(dest_path: Path) -> str:
+    """Classifica il tipo di conflitto per un file preesistente nel workspace.
+
+    Legge il frontmatter YAML del file esistente per determinare se è un file
+    SPARK (con ``spark: true``) o un file utente/non-SPARK.
+
+    Args:
+        dest_path: Path assoluto del file preesistente nel workspace.
+
+    Returns:
+        ``"spark_outdated"`` se il file ha frontmatter ``spark: true``;
+        ``"non_spark"`` altrimenti (nessun frontmatter, frontmatter diverso, file binario).
+    """
+    if dest_path.suffix != ".md":
+        return "non_spark"
+    try:
+        content = dest_path.read_text(encoding="utf-8", errors="replace")
+        fm = parse_markdown_frontmatter(content)
+        if bool(fm.get("spark", False)):
+            return "spark_outdated"
+    except OSError:
+        pass
+    return "non_spark"
 
 
 def _gateway_write_text(
@@ -554,6 +579,9 @@ def register_bootstrap_tools(
             result.setdefault("files_copied", result.get("files_written", []))
             result.setdefault("files_skipped", [])
             result.setdefault("files_protected", [])
+            result.setdefault("files_conflict_non_spark", [])
+            result.setdefault("files_conflict_spark_outdated", [])
+            result.setdefault("spark_outdated_details", [])
             result.setdefault("sentinel_present", sentinel.is_file())
             result.setdefault("message", result.get("note", ""))
             if not legacy_bootstrap_mode:
@@ -769,6 +797,9 @@ def register_bootstrap_tools(
         preserved: list[str] = []
         written_paths: list[Path] = []
         identical_paths: list[Path] = []
+        files_conflict_non_spark: list[str] = []
+        files_conflict_spark_outdated: list[str] = []
+        spark_outdated_details: list[dict[str, Any]] = []
 
         try:
             for source_path, dest_path in bootstrap_targets:
@@ -781,9 +812,29 @@ def register_bootstrap_tools(
                         files_skipped.append(rel_path)
                         continue
                     if not force:
-                        _log.warning(
-                            "Bootstrap file preserved (existing different content): %s", rel_path
-                        )
+                        conflict_type = _classify_bootstrap_conflict(dest_path)
+                        if conflict_type == "spark_outdated":
+                            try:
+                                fm = parse_markdown_frontmatter(
+                                    dest_path.read_text(encoding="utf-8", errors="replace")
+                                )
+                                existing_version = str(fm.get("version", "unknown"))
+                            except OSError:
+                                existing_version = "unknown"
+                            files_conflict_spark_outdated.append(rel_path)
+                            spark_outdated_details.append(
+                                {"file": rel_path, "existing_version": existing_version}
+                            )
+                            _log.warning(
+                                "Bootstrap file preserved (spark_outdated v%s): %s",
+                                existing_version,
+                                rel_path,
+                            )
+                        else:
+                            files_conflict_non_spark.append(rel_path)
+                            _log.warning(
+                                "Bootstrap file preserved (non_spark conflict): %s", rel_path
+                            )
                         preserved.append(rel_path)
                         files_protected.append(rel_path)
                         continue
@@ -839,6 +890,9 @@ def register_bootstrap_tools(
                 "files_copied": files_copied,
                 "files_skipped": files_skipped,
                 "files_protected": files_protected,
+                "files_conflict_non_spark": files_conflict_non_spark,
+                "files_conflict_spark_outdated": files_conflict_spark_outdated,
+                "spark_outdated_details": spark_outdated_details,
                 "sentinel_present": sentinel.is_file(),
                 "message": f"Bootstrap failed while copying files: {exc}.{rollback_note}",
                 "preserved": preserved,
@@ -876,6 +930,9 @@ def register_bootstrap_tools(
             "files_copied": files_copied,
             "files_skipped": files_skipped,
             "files_protected": files_protected,
+            "files_conflict_non_spark": files_conflict_non_spark,
+            "files_conflict_spark_outdated": files_conflict_spark_outdated,
+            "spark_outdated_details": spark_outdated_details,
             "sentinel_present": sentinel.is_file(),
             "message": (
                 "Bootstrap simulated (dry_run=True). No files were written."
