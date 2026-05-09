@@ -8,6 +8,31 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — Pending Resolution v1.0 (2026-05-09)
+
+- `spark/boot/tools_plugins.py` — i tool legacy `scf_list_plugins` e
+  `scf_install_plugin` ora espongono in tutti i payload JSON i campi
+  `removal_target_version: "3.4.0"` (due minor release dopo l'engine
+  3.2.0 corrente) e `migrate_to` con il nome esplicito del tool
+  store-based equivalente (`scf_plugin_list` / `scf_plugin_install`).
+  Aggiunte le costanti modulo `_LEGACY_REMOVAL_TARGET_VERSION` e
+  `_LEGACY_MIGRATION_MAP`. Risolve SP-1 (R3 del report
+  `SPARK-REPORT-DualUniverse-Consolidation-v1.0.md`).
+- `packages/spark-base/.github/agents/spark-guide.agent.md` — aggiunta
+  sezione "Architettura — pacchetti interni vs plugin workspace" con
+  cross-reference a `spark-assistant` come fonte canonica del dettaglio
+  operativo. Bump frontmatter `version: 1.0.0 → 1.1.0`. Risolve SP-2
+  (R4 — narrativa dual-universe coerente nel layer di orientamento).
+- `tests/test_no_orphan_imports.py` — test di regressione che importa
+  ricorsivamente tutti i moduli `spark.*` (62 moduli oggi) per
+  intercettare in CI/local la classe di anomalie tipo ANOMALIA-NEW
+  (import path errato silenziato a runtime). Risolve SP-3 (R5).
+- `CONTRIBUTING.md` — nuovo file con la procedura "Rinomina agenti
+  SCF" (6 step: manifest, file fisico, test, CHANGELOG, doc cross-ref,
+  validazione suite). Risolve SP-5.
+- `docs/reports/SPARK-REPORT-PendingResolution-v1.0.md` — report di
+  risoluzione dei 5 sospesi pre-merge.
+
 ### Fixed — Live Fixture Fix v1.0 (2026-05-09)
 
 - `tests/test_integration_live.py` — fixture `tmp_workspace`: aggiunto

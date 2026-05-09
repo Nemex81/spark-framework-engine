@@ -35,16 +35,29 @@ _log = logging.getLogger("spark-framework-engine")
 __all__ = ["register_plugin_tools"]
 
 # Marker uniforme per i tool legacy (TASK-4 Dual-Mode v1.0).
-# Esposto a Copilot via campi ``deprecated`` + ``deprecation_notice`` nei
-# payload JSON dei tool ``scf_list_plugins`` e ``scf_install_plugin`` per
-# pilotarne l'uso solo in workflow di compat (no tracking nello store).
+# Esposto a Copilot via campi ``deprecated`` + ``deprecation_notice`` +
+# ``removal_target_version`` + ``migrate_to`` nei payload JSON dei tool
+# ``scf_list_plugins`` e ``scf_install_plugin`` per pilotarne l'uso solo
+# in workflow di compat (no tracking nello store).
 # TODO: centralizzare in spark/boot/_legacy_markers.py se altri tool
 # diventano legacy in moduli diversi (oggi: 2 tool in 1 solo modulo).
 _LEGACY_DEPRECATION_NOTICE: str = (
     "Tool legacy senza tracking nello store. Preferire i tool store-based: "
     "'scf_plugin_list' (al posto di 'scf_list_plugins') e "
-    "'scf_plugin_install' (al posto di 'scf_install_plugin')."
+    "'scf_plugin_install' (al posto di 'scf_install_plugin'). "
+    "Rimozione pianificata in engine 3.4.0 (due minor release dopo 3.2.0)."
 )
+
+# Versione engine in cui i tool legacy verranno rimossi (R3 — DualUniverse).
+# Politica: due minor release dopo l'introduzione del marker deprecated.
+_LEGACY_REMOVAL_TARGET_VERSION: str = "3.4.0"
+
+# Mappa esplicita tool legacy -> tool store-based equivalente, esposta
+# nei payload come campo ``migrate_to`` per indirizzare i client MCP.
+_LEGACY_MIGRATION_MAP: dict[str, str] = {
+    "scf_list_plugins": "scf_plugin_list",
+    "scf_install_plugin": "scf_plugin_install",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +427,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 "count": 0,
                 "deprecated": True,
                 "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
+                "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
+                "migrate_to": _LEGACY_MIGRATION_MAP["scf_list_plugins"],
                 "message": str(exc),
             }
         _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: done count=%d", len(plugins))
@@ -423,6 +438,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "count": len(plugins),
             "deprecated": True,
             "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
+            "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
+            "migrate_to": _LEGACY_MIGRATION_MAP["scf_list_plugins"],
             "message": f"{len(plugins)} plugin disponibili per il download diretto.",
         }
 
@@ -511,6 +528,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 "errors": [str(exc)],
                 "deprecated": True,
                 "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
+                "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
+                "migrate_to": _LEGACY_MIGRATION_MAP["scf_install_plugin"],
                 "message": str(exc),
             }
 
@@ -535,6 +554,8 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "errors": errors,
             "deprecated": True,
             "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
+            "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
+            "migrate_to": _LEGACY_MIGRATION_MAP["scf_install_plugin"],
             "message": (
                 f"Plugin '{package_id}' v{effective_version}: "
                 f"{len(written)} file scritti, {len(skipped)} saltati."
