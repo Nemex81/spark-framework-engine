@@ -62,6 +62,6 @@ L'utente non li chiama direttamente.
 
 - **Ruolo**: fallback per linguaggi senza plugin SCF specializzato
 - **Visibilità**: internal
-- **Invocato da**: Agent-Analyze, Agent-Plan, Agent-Docs, Agent-Validate e, se installato, Agent-Orchestrator da `spark-ops`
+- **Invocato da**: Agent-Analyze, Agent-Plan, Agent-Docs, Agent-Validate e, se installato, Agent-Orchestrator
 - **Produce**: context brief in `.github/runtime/research-cache/{language}-{task-type}.md`
 - **Limite**: non sostituisce un plugin testato — fallback trasparente dichiarato

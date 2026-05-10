@@ -3,7 +3,7 @@
 # packages/spark-base/ — Layer Fondazionale SCF
 
 **ID pacchetto:** `spark-base`  
-**Versione corrente:** `2.0.0`  
+**Versione corrente:** `2.1.0`  
 **Schema manifest:** `3.1`  
 **Delivery mode:** `mcp_only`  
 **Motore minimo richiesto:** `3.1.0`
@@ -30,7 +30,7 @@ Tutte le risorse sono servite esclusivamente via MCP dall'engine store.
 packages/spark-base/
 ├── package-manifest.json    Manifest pacchetto (schema 3.1)
 └── .github/                 Risorse MCP del pacchetto
-    ├── agents/              10 agenti user-facing/support
+    ├── agents/              9 agenti user-facing/support
     ├── prompts/             25 prompt user-facing e SCF lifecycle
     ├── skills/              20 skill condivise
     └── instructions/        8 instruction
@@ -44,7 +44,7 @@ Non vengono mai scritte nel workspace utente.
 
 ## Risorse MCP esposte
 
-### Agenti (10)
+### Agenti (9)
 
 | Nome | Descrizione sintetica |
 |------|-----------------------|
@@ -52,12 +52,11 @@ Non vengono mai scritte nel workspace utente.
 | `Agent-Docs` | Sincronizzazione documentazione (API.md, ARCHITECTURE.md, CHANGELOG.md) |
 | `Agent-Git` | Operazioni git autorizzate (commit, push, merge, tag) |
 | `Agent-Helper` | Consultivo read-only sul framework installato |
+| `Agent-Orchestrator` | Orchestratore E2E autonomo (ciclo Analyze→Release) |
 | `Agent-Plan` | Breakdown architetturale in fasi implementabili |
 | `Agent-Research` | Fallback per ricerca linguaggio-dominio e best practice |
 | `Agent-Validate` | Validazione, test coverage e quality gates |
 | `Agent-Welcome` | Setup e manutenzione profilo progetto |
-| `spark-assistant` | Gateway workspace: bootstrap, install/update/remove pacchetti |
-| `spark-guide` | Onboarding e routing verso spark-assistant |
 
 ### Prompt (25)
 
@@ -90,7 +89,7 @@ I prompt operativi `orchestrate`, `release`, `framework-changelog`,
 | + 5 altri | `accessibility-output`, `agent-selector`, `personality`, `style-setup`, `verbosity` |
 
 Le skill operative `semantic-gate`, `error-recovery` e `task-scope-guard`
-sono fornite da `spark-ops`.
+sono incluse in `spark-base` da v2.1.0.
 
 ### Instruction (8)
 

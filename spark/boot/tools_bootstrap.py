@@ -427,8 +427,8 @@ def register_bootstrap_tools(
             bootstrap_source_root = ctx.engine_root / ".github"
         agents_source_dir = bootstrap_source_root / "agents"
         workspace_github_root = ctx.github_root
-        sentinel = workspace_github_root / "agents" / "spark-assistant.agent.md"
-        sentinel_rel = "agents/spark-assistant.agent.md"
+        sentinel = workspace_github_root / "agents" / "Agent-Welcome.md"
+        sentinel_rel = "agents/Agent-Welcome.md"
         policy_payload, policy_source = _read_update_policy_payload(ctx.github_root)
         migration_state = _detect_workspace_migration_state()
         legacy_bootstrap_mode = normalized_bootstrap_mode == ""
@@ -738,8 +738,7 @@ def register_bootstrap_tools(
         ]
         _SPARK_BASE_BOOTSTRAP_SENTINELS: list[str] = [
             ".github/AGENTS.md",
-            ".github/agents/spark-guide.agent.md",
-            ".github/agents/spark-assistant.agent.md",
+            ".github/agents/Agent-Welcome.md",
         ]
 
         def _load_bootstrap_workspace_files() -> list[str]:

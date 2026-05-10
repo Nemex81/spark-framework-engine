@@ -66,8 +66,8 @@ class TestBootstrapWorkspace(unittest.TestCase):
 
     def test_bootstrap_copies_prompts_agent_and_guide(self) -> None:
         # Post v3 FIX 2: il bootstrap copia SOLO il perimetro Cat. A definito
-        # in ``workspace_files`` del manifest spark-base + 3 sentinel di
-        # discovery (AGENTS.md, spark-guide.agent.md, spark-assistant.agent.md).
+        # in ``workspace_files`` del manifest spark-base + 2 sentinel di
+        # discovery (AGENTS.md, Agent-Welcome.md).
         # Prompts e instructions operative NON vengono più copiati nel
         # workspace: sono Cat. B serviti via MCP. Il nome del test resta per
         # compat storica ma il contratto verifica il nuovo perimetro.
@@ -90,8 +90,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             )
             # Sentinel di discovery sempre presenti.
             self.assertTrue((workspace_root / ".github" / "AGENTS.md").is_file())
-            self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
-            self.assertTrue((workspace_root / ".github" / "agents" / "spark-guide.agent.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "agents" / "Agent-Welcome.md").is_file())
             # Cat. B NON deve finire nel workspace: i prompt non vengono
             # copiati durante il bootstrap.
             prompts_dir = workspace_root / ".github" / "prompts"
@@ -106,7 +105,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
     def test_bootstrap_repairs_missing_guide_when_agent_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
-            agent_path = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            agent_path = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
             agent_path.parent.mkdir(parents=True, exist_ok=True)
             agent_path.write_text("existing agent", encoding="utf-8")
 
@@ -117,7 +116,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(result["success"])
             self.assertEqual(result["status"], "bootstrapped")
             self.assertTrue((workspace_root / ".github" / "instructions" / "spark-assistant-guide.instructions.md").is_file())
-            self.assertIn(".github/agents/spark-assistant.agent.md", result["preserved"])
+            self.assertIn(".github/agents/Agent-Welcome.md", result["preserved"])
 
     def test_bootstrap_idempotent_manifest_sync(self) -> None:
         """Second bootstrap on an already-populated workspace must keep the manifest in sync.
@@ -143,7 +142,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(
                 snapshots.snapshot_exists(
                     "scf-engine-bootstrap",
-                    "agents/spark-assistant.agent.md",
+                    "agents/Agent-Welcome.md",
                 )
             )
 
@@ -151,7 +150,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             manifest_path.unlink()
             self.assertFalse(manifest_path.is_file())
             deleted_snapshots = snapshots.delete_package_snapshots("scf-engine-bootstrap")
-            self.assertIn("agents/spark-assistant.agent.md", deleted_snapshots)
+            self.assertIn("agents/Agent-Welcome.md", deleted_snapshots)
 
             # Second bootstrap — all files already present with identical SHA-256.
             # The manifest must be re-populated for files with matching hashes.
@@ -171,7 +170,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(
                 snapshots.snapshot_exists(
                     "scf-engine-bootstrap",
-                    "agents/spark-assistant.agent.md",
+                    "agents/Agent-Welcome.md",
                 ),
                 "Snapshots must be recreated for identical bootstrap files",
             )
@@ -204,19 +203,19 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertEqual(result1["status"], "bootstrapped")
 
             # Modify the sentinel on disk to simulate user edit.
-            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
             sentinel.write_text("# user modified content", encoding="utf-8")
 
             # Second bootstrap — sentinel tracked but SHA mismatch.
             result2 = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
             self.assertTrue(result2["success"])
             self.assertEqual(result2["status"], "user_modified")
-            self.assertIn("agents/spark-assistant.agent.md", result2["preserved"])
+            self.assertIn("agents/Agent-Welcome.md", result2["preserved"])
             self.assertEqual(result2["files_written"], [])
             # User modification preserved.
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "# user modified content")
 
-    def test_bootstrap_does_not_retrack_spark_guide_when_owned_by_spark_base(self) -> None:
+    def test_bootstrap_does_not_retrack_agent_welcome_when_owned_by_spark_base(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
@@ -225,17 +224,14 @@ class TestBootstrapWorkspace(unittest.TestCase):
             first = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
             self.assertEqual(first["status"], "bootstrapped")
 
-            guide_path = workspace_root / ".github" / "agents" / "spark-guide.agent.md"
-            manifest.remove_owner_entries("scf-engine-bootstrap", ["agents/spark-guide.agent.md"])
-            manifest.upsert_many("spark-base", "1.2.0", [("agents/spark-guide.agent.md", guide_path)])
-            guide_path.unlink()
-
-            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
-            sentinel.unlink()
+            welcome_path = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
+            manifest.remove_owner_entries("scf-engine-bootstrap", ["agents/Agent-Welcome.md"])
+            manifest.upsert_many("spark-base", "1.2.0", [("agents/Agent-Welcome.md", welcome_path)])
+            welcome_path.unlink()
 
             second = asyncio.run(mcp.tools["scf_bootstrap_workspace"]())
             self.assertEqual(second["status"], "bootstrapped")
-            self.assertEqual(manifest.get_file_owners("agents/spark-guide.agent.md"), ["spark-base"])
+            self.assertEqual(manifest.get_file_owners("agents/Agent-Welcome.md"), ["spark-base"])
 
     def test_bootstrap_repairs_missing_root_asset_when_sentinel_is_still_tracked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,15 +257,15 @@ class TestBootstrapWorkspace(unittest.TestCase):
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
             spark_base_files = [
-                ".github/agents/spark-assistant.agent.md",
-                ".github/agents/spark-guide.agent.md",
+                ".github/agents/Agent-Welcome.md",
+                ".github/agents/Agent-Git.md",
                 ".github/instructions/spark-assistant-guide.instructions.md",
                 ".github/prompts/scf-migrate-workspace.prompt.md",
                 ".github/prompts/scf-update-policy.prompt.md",
             ]
             remote_contents = {
-                ".github/agents/spark-assistant.agent.md": "base assistant",
-                ".github/agents/spark-guide.agent.md": "base guide",
+                ".github/agents/Agent-Welcome.md": "base welcome",
+                ".github/agents/Agent-Git.md": "base git",
                 ".github/instructions/spark-assistant-guide.instructions.md": "base assistant guide",
                 ".github/prompts/scf-migrate-workspace.prompt.md": "base migrate prompt",
                 ".github/prompts/scf-update-policy.prompt.md": "base update policy prompt",
@@ -338,7 +334,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertEqual(result["action_required"], "authorize_github_write")
             self.assertTrue(result["policy_created"])
             self.assertEqual(result["files_written"], [])
-            self.assertFalse((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").exists())
+            self.assertFalse((workspace_root / ".github" / "agents" / "Agent-Welcome.md").exists())
 
     @unittest.skip("SKIP: extended bootstrap authorization flow is dead code after early return in scf_bootstrap_workspace")
     def test_bootstrap_extended_requires_authorization_after_policy_creation(self) -> None:
@@ -355,7 +351,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(result["policy_created"])
             self.assertTrue(prefs_path.is_file())
             self.assertEqual(result["files_written"], [])
-            self.assertFalse((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").exists())
+            self.assertFalse((workspace_root / ".github" / "agents" / "Agent-Welcome.md").exists())
 
     @unittest.skip("SKIP: extended bootstrap policy/phase6 flow is dead code after early return in scf_bootstrap_workspace")
     def test_bootstrap_extended_writes_assets_and_policy_when_authorized(self) -> None:
@@ -372,7 +368,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(result["policy_created"])
             self.assertTrue(result["github_write_authorized"])
             self.assertTrue(prefs_path.is_file())
-            self.assertTrue((workspace_root / ".github" / "agents" / "spark-assistant.agent.md").is_file())
+            self.assertTrue((workspace_root / ".github" / "agents" / "Agent-Welcome.md").is_file())
 
             payload = json.loads(prefs_path.read_text(encoding="utf-8"))
             self.assertTrue(payload["update_policy"]["auto_update"])
@@ -409,7 +405,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
                         "dependencies": [],
                         "conflicts": [],
                         "file_ownership_policy": "error",
-                        "files": [".github/agents/spark-guide.agent.md"],
+                        "files": [".github/agents/Agent-Welcome.md"],
                     },
                 ),
                 patch.object(_module.RegistryClient, "fetch_raw_file", return_value="base guide"),
@@ -433,7 +429,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
     def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
-            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel = workspace_root / ".github" / "AGENTS.md"
             sentinel.parent.mkdir(parents=True, exist_ok=True)
             sentinel.write_text("legacy bootstrap", encoding="utf-8")
             _, mcp = self._build_engine(workspace_root)
@@ -446,10 +442,10 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(result["migration_state"]["legacy_workspace"])
 
     @unittest.skip("SKIP: extended bootstrap legacy-workspace authorization flow is dead code after early return in scf_bootstrap_workspace")
-    def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
+    def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:  # type: ignore[misc]
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
-            sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+            sentinel = workspace_root / ".github" / "AGENTS.md"
             sentinel.parent.mkdir(parents=True, exist_ok=True)
             sentinel.write_text("legacy bootstrap", encoding="utf-8")
             _, mcp = self._build_engine(workspace_root)

@@ -10,6 +10,29 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — bootstrap sentinel legacy → Agent-Welcome.md (2026-05-10)
+
+- `spark/boot/tools_bootstrap.py` — sentinel di idempotenza bootstrap cambiato da
+  `spark-assistant.agent.md` a `Agent-Welcome.md` (agente neutro sempre presente in
+  `spark-base` v2.1.0). Rimossi `spark-guide.agent.md` e `spark-assistant.agent.md`
+  da `_SPARK_BASE_BOOTSTRAP_SENTINELS` (erano legacy post role-inversion v1.1.0).
+  `_SPARK_BASE_BOOTSTRAP_SENTINELS` ora contiene `[".github/AGENTS.md",
+  ".github/agents/Agent-Welcome.md"]`.
+- `spark/boot/install_helpers.py` — `sentinel_path` in `_detect_workspace_migration_state`
+  aggiornato da `agents/spark-assistant.agent.md` a `AGENTS.md` (rilevazione workspace
+  legacy più neutro e stabile).
+- `packages/spark-base/.github/AGENTS.md` — rimosso riferimento errato "da `spark-ops`"
+  nella sezione `Agent-Research` (`Agent-Orchestrator` è in `spark-base` da v2.1.0).
+- `packages/spark-base/README.md` — versione aggiornata a `2.1.0`; tabella agenti
+  corretta (9 agenti: aggiunto `Agent-Orchestrator`, rimossi `spark-assistant` e
+  `spark-guide` ora in `spark-ops`); nota skill aggiornata (`semantic-gate`,
+  `error-recovery`, `task-scope-guard` sono in `spark-base` da v2.1.0).
+- `tests/test_bootstrap_workspace.py` e `tests/test_bootstrap_workspace_extended.py` —
+  aggiornati per riflettere il nuovo sentinel `Agent-Welcome.md`; test
+  `test_bootstrap_does_not_retrack_spark_guide_when_owned_by_spark_base` rinominato
+  e riscritto per `Agent-Welcome.md`; cross-owner test aggiornato su
+  `framework-guard.instructions.md`.
+
 ### Fixed — spark-ops role inversion (2026-05-10)
 
 - `packages/spark-base/package-manifest.json` — bump a `2.1.0`.

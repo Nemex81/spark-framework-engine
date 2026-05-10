@@ -633,7 +633,7 @@ def _detect_workspace_migration_state(
     """
     policy_payload, policy_source = _read_update_policy_payload(github_root)
     manifest_entries = manifest.load()
-    sentinel_path = github_root / "agents" / "spark-assistant.agent.md"
+    sentinel_path = github_root / "AGENTS.md"
     copilot_path = github_root / "copilot-instructions.md"
     copilot_exists = copilot_path.is_file()
     copilot_content = _read_text_if_possible(copilot_path) if copilot_exists else None
