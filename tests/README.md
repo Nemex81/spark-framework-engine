@@ -19,7 +19,9 @@ C:/Users/nemex/Envs/audiomaker311/Scripts/python.exe -m pytest tests/test_bootst
 C:/Users/nemex/Envs/audiomaker311/Scripts/python.exe -m pytest tests/ -q --ignore=tests/test_integration_live.py --cov=spark
 ```
 
-**Baseline corrente:** 534 passed / 9 skipped / 0 failed  
+**Baseline corrente:** 554 passed / 0 skipped / 0 failed ✅  
+**Nota:** Suite audit legacy test completato (2026-05-10). Ultimo skipped test (env-gated
+`SPARK_SMOKE_TEST=1`) eliminato tramite mock subprocess. Tutte le suite **100% green**.
 **`test_integration_live.py`** — escluso dal CI: richiede accesso a internet
 e al registry pubblico SCF. Eseguire solo in ambienti con connessione garantita.
 

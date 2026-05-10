@@ -10,6 +10,14 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Changed — risoluzione final skipped test (env-gated → mock subprocess) (2026-05-10)
+
+- `tests/test_server_stdio_smoke.py` — `test_mcp_initialize_via_stdio` precedentemente
+  env-gated su `SPARK_SMOKE_TEST=1`. Ora esecuzione deterministica con mock di
+  `subprocess.Popen` senza lanciare il server reale. Valida comunque il contratto
+  JSON-RPC initialize. Rimosso marker `@pytest.mark.skipif`. Suite: 553p,1s → 554p,0s.
+- Suite test: **100% passed (554 passed, 0 skipped)** — audit legacy test completato.
+
 ### Changed — legacy test audit e cleanup (2026-05-10)
 
 - `tests/test_bootstrap_workspace.py` — eliminati 5 test obsoleti (dead code legacy mode
