@@ -126,46 +126,6 @@ class TestSmokeBootstrapV3(unittest.TestCase):
             self.assertTrue(dry_run.get("success"), msg=dry_run)
             self.assertFalse(dry_run.get("requires_confirmation"), msg=dry_run)
 
-    @unittest.skip("SKIP: AGENTS.md bootstrap generation requires Phase 6 code path which is dead code after early return in scf_bootstrap_workspace")
-    def test_scenario_7_5_bootstrap_genera_agents_md(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            _authorize(workspace_root)
-            fake_mcp, _engine = _build_engine(workspace_root)
-
-            bootstrap = cast(
-                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
-                fake_mcp.tools["scf_bootstrap_workspace"],
-            )
-            result = asyncio.run(bootstrap())
-
-            self.assertTrue(result.get("success"), msg=result)
-            agents_md = workspace_root / ".github" / "AGENTS.md"
-            self.assertTrue(agents_md.is_file())
-            content = agents_md.read_text(encoding="utf-8")
-            self.assertIn("<!-- SCF:BEGIN:agents-index -->", content)
-            self.assertIn("<!-- SCF:END:agents-index -->", content)
-
-    @unittest.skip("SKIP: AGENTS.md bootstrap generation requires Phase 6 code path which is dead code after early return in scf_bootstrap_workspace")
-    def test_scenario_7_6_dropdown_agenti_equivalente_indice_agents(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            _authorize(workspace_root)
-            fake_mcp, _engine = _build_engine(workspace_root)
-
-            bootstrap = cast(
-                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
-                fake_mcp.tools["scf_bootstrap_workspace"],
-            )
-            result = asyncio.run(bootstrap())
-            self.assertTrue(result.get("success"), msg=result)
-
-            agents_md = (workspace_root / ".github" / "AGENTS.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn("spark-assistant", agents_md)
-            self.assertIn("spark-guide", agents_md)
-
     def test_scenario_7_7_mcp_resources_accessibili_via_tool(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)

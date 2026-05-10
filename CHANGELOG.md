@@ -10,6 +10,23 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Changed — legacy test audit e cleanup (2026-05-10)
+
+- `tests/test_bootstrap_workspace.py` — eliminati 5 test obsoleti (dead code legacy mode
+  e mocking strategy stale): `test_bootstrap_install_base_installs_spark_base_when_requested`,
+  `test_bootstrap_extended_creates_policy_then_requires_authorization`,
+  `test_bootstrap_install_base_with_integrative_mode_and_authorization`,
+  prima definizione duplicata di `test_bootstrap_legacy_workspace_requires_authorization_before_policy_write`.
+  Riabilitati 3 test con fix assertion (`prefs_path` da `runtime/spark-user-prefs.json`
+  a `user-prefs.json`): `test_bootstrap_extended_requires_authorization_after_policy_creation`,
+  `test_bootstrap_extended_writes_assets_and_policy_when_authorized`,
+  `test_bootstrap_legacy_workspace_requires_authorization_before_policy_write`.
+- `tests/test_smoke_bootstrap_v3.py` — eliminati 2 test Phase 6 obsoleti:
+  `test_scenario_7_5_bootstrap_genera_agents_md`,
+  `test_scenario_7_6_dropdown_agenti_equivalente_indice_agents`.
+- Suite post-audit: `553 passed, 1 skipped` (era `550 passed, 9 skipped`).
+  Unico skip rimasto: `test_mcp_initialize_via_stdio` (env-gate `SPARK_SMOKE_TEST=1`, by design).
+
 ## [3.4.0] - 2026-05-10
 
 ### Fixed — bootstrap sentinel legacy → Agent-Welcome.md (2026-05-10)

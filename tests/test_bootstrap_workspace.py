@@ -251,92 +251,6 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertIn(".github/copilot-instructions.md", second["files_written"])
             self.assertTrue(copilot_instructions.is_file())
 
-    @unittest.skip("SKIP: install_base extended flow is dead code after early return in scf_bootstrap_workspace")
-    def test_bootstrap_install_base_installs_spark_base_when_requested(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            _, mcp = self._build_engine(workspace_root)
-            spark_base_files = [
-                ".github/agents/Agent-Welcome.md",
-                ".github/agents/Agent-Git.md",
-                ".github/instructions/spark-assistant-guide.instructions.md",
-                ".github/prompts/scf-migrate-workspace.prompt.md",
-                ".github/prompts/scf-update-policy.prompt.md",
-            ]
-            remote_contents = {
-                ".github/agents/Agent-Welcome.md": "base welcome",
-                ".github/agents/Agent-Git.md": "base git",
-                ".github/instructions/spark-assistant-guide.instructions.md": "base assistant guide",
-                ".github/prompts/scf-migrate-workspace.prompt.md": "base migrate prompt",
-                ".github/prompts/scf-update-policy.prompt.md": "base update policy prompt",
-            }
-
-            with (
-                patch.object(
-                    _module.RegistryClient,
-                    "list_packages",
-                    return_value=[
-                        {
-                            "id": "spark-base",
-                            "description": "SPARK Base Layer",
-                            "repo_url": "https://github.com/example/spark-base",
-                            "latest_version": "1.2.0",
-                            "status": "stable",
-                        }
-                    ],
-                ),
-                patch.object(
-                    _module.RegistryClient,
-                    "fetch_package_manifest",
-                    return_value={
-                        "package": "spark-base",
-                        "version": "1.2.0",
-                        "min_engine_version": "1.0.0",
-                        "dependencies": [],
-                        "conflicts": [],
-                        "file_ownership_policy": "error",
-                        "files": spark_base_files,
-                    },
-                ),
-                patch.object(
-                    _module.RegistryClient,
-                    "fetch_raw_file",
-                    side_effect=lambda raw_url: remote_contents[raw_url.split("/main/", 1)[1]],
-                ),
-            ):
-                result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True, conflict_mode="manual"))
-
-            manifest = ManifestManager(workspace_root / ".github")
-
-            self.assertTrue(result["success"])
-            self.assertTrue(result["install_base_requested"])
-            self.assertEqual(result["conflict_mode"], "manual")
-            self.assertEqual(result["status"], "bootstrapped_and_installed")
-            self.assertTrue(result["base_install"]["success"])
-            self.assertCountEqual(result["base_install"]["adopted_bootstrap_files"], spark_base_files)
-
-            for file_path, expected_content in remote_contents.items():
-                relative_path = file_path.removeprefix(".github/")
-                workspace_file = workspace_root / file_path
-                self.assertEqual(workspace_file.read_text(encoding="utf-8"), expected_content)
-                self.assertEqual(manifest.get_file_owners(relative_path), ["spark-base"])
-
-    @unittest.skip("SKIP: extended bootstrap authorization flow is dead code after early return in scf_bootstrap_workspace")
-    def test_bootstrap_extended_creates_policy_then_requires_authorization(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            _, mcp = self._build_engine(workspace_root)
-
-            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](install_base=True, update_mode="ask"))
-
-            self.assertTrue(result["success"])
-            self.assertEqual(result["status"], "authorization_required")
-            self.assertEqual(result["action_required"], "authorize_github_write")
-            self.assertTrue(result["policy_created"])
-            self.assertEqual(result["files_written"], [])
-            self.assertFalse((workspace_root / ".github" / "agents" / "Agent-Welcome.md").exists())
-
-    @unittest.skip("SKIP: extended bootstrap authorization flow is dead code after early return in scf_bootstrap_workspace")
     def test_bootstrap_extended_requires_authorization_after_policy_creation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
@@ -344,7 +258,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
 
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="integrative"))
 
-            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            prefs_path = workspace_root / ".github" / "user-prefs.json"
             self.assertTrue(result["success"])
             self.assertEqual(result["status"], "authorization_required")
             self.assertEqual(result["action_required"], "authorize_github_write")
@@ -353,7 +267,6 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertEqual(result["files_written"], [])
             self.assertFalse((workspace_root / ".github" / "agents" / "Agent-Welcome.md").exists())
 
-    @unittest.skip("SKIP: extended bootstrap policy/phase6 flow is dead code after early return in scf_bootstrap_workspace")
     def test_bootstrap_extended_writes_assets_and_policy_when_authorized(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
@@ -362,7 +275,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
 
             result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="integrative"))
 
-            prefs_path = workspace_root / ".github" / "runtime" / "spark-user-prefs.json"
+            prefs_path = workspace_root / ".github" / "user-prefs.json"
             self.assertTrue(result["success"])
             self.assertEqual(result["status"], "bootstrapped")
             self.assertTrue(result["policy_created"])
@@ -374,75 +287,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(payload["update_policy"]["auto_update"])
             self.assertEqual(payload["update_policy"]["default_mode"], "integrative")
 
-    @unittest.skip("SKIP: extended bootstrap install_base+update_mode flow is dead code after early return in scf_bootstrap_workspace")
-    def test_bootstrap_install_base_with_integrative_mode_and_authorization(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            self._authorize_github_writes(workspace_root)
-            _, mcp = self._build_engine(workspace_root)
-
-            with (
-                patch.object(
-                    _module.RegistryClient,
-                    "list_packages",
-                    return_value=[
-                        {
-                            "id": "spark-base",
-                            "description": "SPARK Base Layer",
-                            "repo_url": "https://github.com/example/spark-base",
-                            "latest_version": "1.2.0",
-                            "status": "stable",
-                        }
-                    ],
-                ),
-                patch.object(
-                    _module.RegistryClient,
-                    "fetch_package_manifest",
-                    return_value={
-                        "package": "spark-base",
-                        "version": "1.2.0",
-                        "min_engine_version": "1.0.0",
-                        "dependencies": [],
-                        "conflicts": [],
-                        "file_ownership_policy": "error",
-                        "files": [".github/agents/Agent-Welcome.md"],
-                    },
-                ),
-                patch.object(_module.RegistryClient, "fetch_raw_file", return_value="base guide"),
-            ):
-                result = asyncio.run(
-                    mcp.tools["scf_bootstrap_workspace"](
-                        install_base=True,
-                        conflict_mode="manual",
-                        update_mode="integrative",
-                    )
-                )
-
-            self.assertTrue(result["success"])
-            self.assertEqual(result["status"], "bootstrapped_and_installed")
-            self.assertTrue(result["policy_created"])
-            self.assertTrue(result["base_install"]["success"])
-            self.assertEqual(result["base_install"]["resolved_update_mode"], "integrative")
-            self.assertIn("counts", result["diff_summary"])
-
-    @unittest.skip("SKIP: extended bootstrap legacy-workspace authorization flow is dead code after early return in scf_bootstrap_workspace")
     def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            sentinel = workspace_root / ".github" / "AGENTS.md"
-            sentinel.parent.mkdir(parents=True, exist_ok=True)
-            sentinel.write_text("legacy bootstrap", encoding="utf-8")
-            _, mcp = self._build_engine(workspace_root)
-
-            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="ask"))
-
-            self.assertTrue(result["success"])
-            self.assertEqual(result["status"], "authorization_required")
-            self.assertEqual(result["action_required"], "authorize_github_write")
-            self.assertTrue(result["migration_state"]["legacy_workspace"])
-
-    @unittest.skip("SKIP: extended bootstrap legacy-workspace authorization flow is dead code after early return in scf_bootstrap_workspace")
-    def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:  # type: ignore[misc]
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             sentinel = workspace_root / ".github" / "AGENTS.md"
