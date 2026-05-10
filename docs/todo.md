@@ -20,8 +20,10 @@
 - [x] Aggiunto test manifest `tests/test_spark_ops_decoupling_manifest.py`.
 
 - [x] Letto e validato il report `docs/reports/SPARK-REPORT-DualMode-Architecture-v1.0.md`.
+ - [x] Letto e validato il report `docs/reports/archiviati/SPARK-REPORT-DualMode-Architecture-v1.0.md`.
 - [x] Localizzati i punti reali di implementazione in `spark/boot/lifecycle.py` e `spark/boot/tools_packages_install.py`.
 - [x] Creato il piano tecnico self-contained in `docs/implementation-plan-dual-mode-v3.1.md`.
+ - [x] Creato il piano tecnico self-contained in `docs/coding plans/implementation-plan-dual-mode-v3.1.md`.
 - [x] Aggiunto supporto `plugin_files` opzionale con default `[]` nel lifecycle v3.
 - [x] Aggiornato il payload v3 con `mcp_services_activated`, `workspace_files_written`, `plugin_files_installed` e alias deprecato `installed`.
 - [x] Esteso il cleanup v3 per rimuovere o preservare anche i `plugin_files` installati.
