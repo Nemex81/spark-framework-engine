@@ -24,14 +24,15 @@ Usano variabili di input con sintassi `${input:label}`.
 - `start.prompt.md` — riprendi codifica dal primo task non completato in TODO.md
 - `status.prompt.md` — mostra stato attuale del workflow in corso
 - `sync-docs.prompt.md` — avvia Agent-Docs per sync documentazione
+- `release.prompt.md` — avvia Agent-Release per versioning e build
 - `help.prompt.md` — spiega come funziona un agente specifico
 - `git-commit.prompt.md` — wrapper agent commit (input opzionale PUSH per commit + push immediato)
 - `git-merge.prompt.md` — wrapper agent merge (delega ad Agent-Git)
+- `orchestrate.prompt.md` — ciclo E2E completo tramite Agent-Orchestrator
+- `framework-update.prompt.md` — aggiorna AGENTS.md e copilot-instructions.md
+- `framework-changelog.prompt.md` — aggiunge voce a FRAMEWORK_CHANGELOG.md
+- `framework-release.prompt.md` — consolida [Unreleased] in una versione rilasciata
 - `framework-unlock.prompt.md` — sblocca temporaneamente i path protetti del framework
-
-I prompt `orchestrate`, `release`, `framework-update`, `framework-changelog`
-e `framework-release` sono forniti da `spark-ops`.
-
 - `scf-check-updates.prompt.md` — verifica aggiornamenti disponibili per i pacchetti SCF installati
 - `scf-install.prompt.md` — installa un pacchetto SCF con anteprima e conferma esplicita
 - `scf-list-available.prompt.md` — elenca i pacchetti SCF disponibili nel registry

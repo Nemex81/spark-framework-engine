@@ -12,9 +12,13 @@ scf_merge_priority: 10
 
 ## Base Agents (spark-base)
 
-- Agent-Orchestrator — executor — E2E orchestration, gates, runtime-state coordination
+- spark-assistant — executor — workspace entrypoint, onboarding, package lifecycle, diagnostics
+- spark-guide — executor — user entrypoint, framework orientation, routing to spark-assistant
+- Agent-Orchestrator — executor — orchestration, workflow, runtime-state
 - Agent-Git — executor — git, commit, push, merge, tag proposal
 - Agent-Helper — executor — framework-help, discovery, routing hints
+- Agent-Release — executor — release-coordination, semver, packaging guidance
+- Agent-FrameworkDocs — executor — framework-docs, changelog, AGENTS index
 - Agent-Welcome — executor — setup, project-profile, onboarding
 - Agent-Research — support/internal — fallback research, unknown-stack briefing
 - Agent-Analyze — dispatcher — analyze
@@ -26,13 +30,6 @@ scf_merge_priority: 10
 
 Questa sezione viene popolata dai plugin installati tramite file `AGENTS-{plugin-id}.md`.
 Il motore aggrega i file disponibili tramite `scf://agents-index`.
-
-## Operational Agents
-
-Gli agenti di onboarding e sistema (`spark-assistant`, `spark-guide`),
-di manutenzione framework (`Agent-FrameworkDocs`, `Agent-Release`)
-sono forniti dal package `spark-ops`.
-`spark-base` resta il layer core user-operativo e non dipende da `spark-ops`.
 
 ## MCP Runtime Tools (engine v2.4.0 — feature introdotte tra v1.5.0 e v1.6.0)
 
@@ -62,6 +59,6 @@ L'utente non li chiama direttamente.
 
 - **Ruolo**: fallback per linguaggi senza plugin SCF specializzato
 - **Visibilità**: internal
-- **Invocato da**: Agent-Analyze, Agent-Plan, Agent-Docs, Agent-Validate e, se installato, Agent-Orchestrator
+- **Invocato da**: Agent-Analyze, Agent-Plan, Agent-Docs, Agent-Orchestrator, Agent-Validate
 - **Produce**: context brief in `.github/runtime/research-cache/{language}-{task-type}.md`
 - **Limite**: non sostituisce un plugin testato — fallback trasparente dichiarato

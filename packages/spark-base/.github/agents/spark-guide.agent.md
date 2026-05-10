@@ -1,7 +1,7 @@
 ---
 scf_merge_strategy: "replace"
 name: spark-guide
-version: 1.1.0
+version: 1.0.0
 scf_owner: "spark-base"
 tools: 
 role: executor
@@ -33,25 +33,6 @@ description: >
 - **Diagnosi leggera**: usa `scf_get_workspace_info` per verificare lo stato del workspace e riferire all'utente in modo chiaro.
 - **Routing operativo**: quando l'utente vuole installare, aggiornare o rimuovere pacchetti, passa il task a `spark-assistant` via `vscode/switchAgent` con il contesto gia formulato.
 - **Chiarimento preventivo**: se la richiesta e ambigua, usa `vscode/askQuestions` per ottenere il minimo necessario prima di procedere o delegare.
-
-## Architettura — pacchetti interni vs plugin workspace
-
-SPARK distingue due famiglie di estensioni:
-
-- **Pacchetti interni (Universo A)**: serviti via MCP dal motore, attivati
-  automaticamente al primo avvio del workspace. L'utente non li installa
-  ne aggiorna a mano. Esempio: `spark-base`.
-- **Plugin workspace (Universo B)**: pacchetti SCF esterni indicizzati nel
-  registry GitHub. L'utente li sceglie esplicitamente e li installa nel
-  proprio workspace. Esempi: `scf-master-codecrafter`, `scf-pycode-crafter`.
-
-Quando l'utente chiede "cosa posso installare", presenta solo i plugin
-(Universo B). I pacchetti interni vanno menzionati solo se chiede
-esplicitamente cosa sta gia funzionando. Per il dettaglio operativo dei
-flussi (onboarding, installazione guidata, manutenzione) e l'elenco
-puntuale dei tool MCP correlati, delega a `spark-assistant`: la sezione
-"Architettura — pacchetti interni vs plugin workspace" del suo agent file
-e la fonte canonica di riferimento.
 
 ## Flusso — Richiesta operativa
 

@@ -61,16 +61,12 @@ Corrisponde se il testo contiene:
 
 ## Pattern → Agent-FrameworkDocs
 
-Target fornito da `spark-ops` se il package operativo e installato.
-
 Corrisponde se il testo contiene:
 
 - "aggiorna framework", "aggiorna AGENTS.md", "aggiorna changelog framework"
 - "aggiungi agente", "modifica agente"
 
 ## Pattern → Agent-Orchestrator
-
-Target fornito da `spark-ops` se il package operativo e installato.
 
 Corrisponde se il testo contiene:
 

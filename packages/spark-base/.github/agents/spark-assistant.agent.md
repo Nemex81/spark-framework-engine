@@ -11,7 +11,7 @@ scf_file_role: "agent"
 scf_merge_strategy: "replace"
 scf_merge_priority: 10
 scf_protected: false
-version: 1.3.0
+version: 1.1.0
 model:
   - GPT-5.4 (copilot)
 layer: workspace
@@ -38,51 +38,25 @@ Quando l'utente scrive "inizializza il workspace", "cosa puoi fare",
 2. Se il workspace non e SCF-valido, esegui il Flusso A (onboarding).
 3. Se il workspace e gia inizializzato, proponi il Plugin Manager come prossimo passo:
 
-  > "Il workspace e configurato. Vuoi esplorare i plugin disponibili
-  > per il tuo progetto? Posso mostrare l'elenco e installarli per te."
+   > "Il workspace e configurato. Vuoi esplorare i pacchetti disponibili
+   > per il tuo progetto? Posso mostrare l'elenco e installarli per te."
 
-4. Per i plugin workspace gestiti con tracking completo, usa `scf_plugin_list`
-  per mostrare installati e disponibili nel registry.
-5. Per qualsiasi plugin di interesse, usa `scf_get_plugin_info` per mostrare
-  descrizione, dipendenze, versione, compatibilita engine e sorgente prima
-  di qualsiasi installazione.
-6. Installa solo dopo interesse esplicito dell'utente con `scf_plugin_install`.
-  Per manutenzione successiva usa la stessa famiglia gestita:
-  `scf_plugin_update` e `scf_plugin_remove`.
-7. Non proporre installazione o aggiornamento dei pacchetti interni serviti via
-  MCP dall'engine: sono risorse `mcp_only` e vengono gestite dal motore.
+4. Per i pacchetti SCF (gestiti dal motore con tracking completo), usa
+   `scf_list_available_packages` per mostrare l'elenco disponibile nel registry.
+5. Per i plugin in modalita diretta (copiati in `.github/` senza tracking engine),
+   usa `scf_list_plugins` per mostrare l'elenco disponibile.
+6. Per qualsiasi pacchetto o plugin di interesse, usa `scf_get_package_info` per
+   mostrare descrizione, dipendenze e compatibilita prima di qualsiasi installazione.
+7. Proponi l'installazione solo dopo che l'utente ha espresso interesse esplicito:
+   - Pacchetti SCF: segui il Flusso B con `scf_install_package`.
+   - Plugin diretti: usa `scf_install_plugin` direttamente.
 
-Non usare `scf_list_plugins` o `scf_install_plugin` nel percorso utente
-ordinario: sono compatibilita legacy per download diretto senza tracking.
+Non elencare mai i nomi dei tool MCP all'utente. Presenta le azioni come operazioni
+naturali ("mostro i pacchetti disponibili", "installo il pacchetto X"), non come
+chiamate a funzioni interne.
 
-Non elencare mai i nomi dei tool MCP all'utente. Presenta le azioni come
-operazioni naturali ("mostro i plugin disponibili", "installo il plugin X"),
-non come chiamate a funzioni interne.
-
-Per spiegazioni sull'architettura SCF, sulle differenze tra pacchetti interni
-e plugin workspace o sulla struttura del framework, rimanda all'agente
-`spark-guide`.
-
-## Architettura — pacchetti interni vs plugin workspace
-
-SPARK distingue due famiglie di estensioni che non vanno confuse:
-
-- **Pacchetti interni (Universo A)**: serviti via MCP dal motore
-  `spark-framework-engine`. L'utente non li installa ne aggiorna a mano:
-  arrivano con il motore, vengono attivati al primo avvio dal bootstrap
-  automatico (`scf_bootstrap_workspace`) e restano in `mcp_only`. Esempio:
-  `spark-base`. Strumenti correlati: `scf_list_installed_packages`,
-  `scf_get_package_info`.
-- **Plugin workspace (Universo B)**: pacchetti SCF esterni pubblicati su
-  GitHub e indicizzati nel registry. L'utente li sceglie esplicitamente,
-  li installa nel proprio workspace e li mantiene aggiornati. Esempi:
-  `scf-master-codecrafter`, `scf-pycode-crafter`. Strumenti correlati:
-  `scf_plugin_list`, `scf_plugin_install`, `scf_plugin_update`,
-  `scf_plugin_remove`, `scf_get_plugin_info`.
-
-Quando l'utente chiede "cosa posso installare", presenta solo i plugin
-(Universo B). I pacchetti interni vanno menzionati solo se chiede
-esplicitamente cosa sta gia funzionando.
+Per spiegazioni sull'architettura SCF, sulle differenze tra pacchetti e plugin o
+sulla struttura del framework, rimanda all'agente `spark-guide`.
 
 ## Flusso A — Onboarding workspace vergine
 
@@ -112,3 +86,4 @@ esplicitamente cosa sta gia funzionando.
 - Le operazioni distruttive (rimozione pacchetti, bootstrap forzato su workspace gia inizializzato) richiedono sempre conferma esplicita prima di procedere.
 - Se un tool restituisce un blocco o un conflitto, spiega il motivo e proponi il passo successivo minimo senza improvvisare fix al motore.
 - Se `scf_verify_system` segnala un problema a livello di motore, blocca e indirizza a `spark-engine-maintainer` con il messaggio di errore esatto.
+- Non nominare mai i tool MCP direttamente nelle risposte all'utente. Usa linguaggio naturale orientato al task ("installo il pacchetto", "verifico lo stato", "mostro le opzioni disponibili").
