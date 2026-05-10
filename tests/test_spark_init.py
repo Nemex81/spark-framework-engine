@@ -726,6 +726,12 @@ def test_main_prompts_for_conflict_mode_and_retries_bootstrap(
             return "installato"
 
     monkeypatch.setattr(_MODULE, "_BootstrapInstaller", _FakeBootstrapInstaller)
+    monkeypatch.setattr(
+        _MODULE,
+        "_propagate_spark_base_to_workspace",
+        lambda _engine_root, _workspace_root: {"written": [], "preserved": []},
+    )
+    monkeypatch.setattr(_MODULE, "_write_spark_start_file", lambda _workspace_root: None)
 
     exit_code = _MODULE.main()
 
@@ -736,6 +742,7 @@ def test_main_prompts_for_conflict_mode_and_retries_bootstrap(
         f"[SPARK] .code-workspace → creato: {workspace_file.name}",
         "[SPARK] .vscode/mcp.json → creato",
         "[SPARK] spark-base → installato",
+        "[SPARK] SPARK-START.md → apri Copilot e segui le istruzioni",
     ]
 
 
@@ -772,6 +779,12 @@ def test_main_prints_ordered_summary(
             return "installato"
 
     monkeypatch.setattr(_MODULE, "_BootstrapInstaller", _FakeBootstrapInstaller)
+    monkeypatch.setattr(
+        _MODULE,
+        "_propagate_spark_base_to_workspace",
+        lambda _engine_root, _workspace_root: {"written": [], "preserved": []},
+    )
+    monkeypatch.setattr(_MODULE, "_write_spark_start_file", lambda _workspace_root: None)
 
     exit_code = _MODULE.main()
 
@@ -782,4 +795,132 @@ def test_main_prints_ordered_summary(
         f"[SPARK] .code-workspace → creato: {workspace_file.name}",
         "[SPARK] .vscode/mcp.json → creato",
         "[SPARK] spark-base → installato",
+        "[SPARK] SPARK-START.md → apri Copilot e segui le istruzioni",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Tests: _propagate_spark_base_to_workspace
+# ---------------------------------------------------------------------------
+
+
+def test_propagate_writes_new_files(tmp_path: Path) -> None:
+    engine_root = tmp_path / "engine"
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    src_github = engine_root / "packages" / "spark-base" / ".github"
+    src_github.mkdir(parents=True)
+    (src_github / "AGENTS.md").write_text("agents\n", encoding="utf-8")
+    (src_github / "project-profile.md").write_text("profile\n", encoding="utf-8")
+
+    result = _MODULE._propagate_spark_base_to_workspace(engine_root, workspace_root)
+
+    dst_github = workspace_root / ".github"
+    assert (dst_github / "AGENTS.md").read_text(encoding="utf-8") == "agents\n"
+    assert (dst_github / "project-profile.md").read_text(encoding="utf-8") == "profile\n"
+    assert sorted(result["written"]) == ["AGENTS.md", "project-profile.md"]
+    assert result["preserved"] == []
+
+
+def test_propagate_skip_identical(tmp_path: Path) -> None:
+    engine_root = tmp_path / "engine"
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    src_github = engine_root / "packages" / "spark-base" / ".github"
+    src_github.mkdir(parents=True)
+    content = "same content\n"
+    (src_github / "AGENTS.md").write_text(content, encoding="utf-8")
+    dst_github = workspace_root / ".github"
+    dst_github.mkdir(parents=True)
+    dst_file = dst_github / "AGENTS.md"
+    dst_file.write_text(content, encoding="utf-8")
+    mtime_before = dst_file.stat().st_mtime
+
+    result = _MODULE._propagate_spark_base_to_workspace(engine_root, workspace_root)
+
+    assert result["written"] == []
+    assert result["preserved"] == []
+    assert dst_file.stat().st_mtime == mtime_before  # file not touched
+
+
+def test_propagate_preserve_modified(tmp_path: Path) -> None:
+    engine_root = tmp_path / "engine"
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    src_github = engine_root / "packages" / "spark-base" / ".github"
+    src_github.mkdir(parents=True)
+    (src_github / "AGENTS.md").write_text("upstream content\n", encoding="utf-8")
+    dst_github = workspace_root / ".github"
+    dst_github.mkdir(parents=True)
+    dst_file = dst_github / "AGENTS.md"
+    original_content = "user modified content\n"
+    dst_file.write_text(original_content, encoding="utf-8")
+
+    result = _MODULE._propagate_spark_base_to_workspace(engine_root, workspace_root)
+
+    assert result["written"] == []
+    assert result["preserved"] == ["AGENTS.md"]
+    # user content preserved
+    assert dst_file.read_text(encoding="utf-8") == original_content
+
+
+def test_propagate_missing_src_root(tmp_path: Path) -> None:
+    engine_root = tmp_path / "engine"
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    # packages/spark-base/.github does NOT exist
+
+    result = _MODULE._propagate_spark_base_to_workspace(engine_root, workspace_root)
+
+    assert result["written"] == []
+    assert result["preserved"] == []
+    # no .github created in workspace
+    assert not (workspace_root / ".github").exists()
+
+
+def test_propagate_creates_nested_dirs(tmp_path: Path) -> None:
+    engine_root = tmp_path / "engine"
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    src_github = engine_root / "packages" / "spark-base" / ".github"
+    nested_dir = src_github / "agents"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "spark-assistant.agent.md").write_text("assistant\n", encoding="utf-8")
+
+    result = _MODULE._propagate_spark_base_to_workspace(engine_root, workspace_root)
+
+    dst_nested = workspace_root / ".github" / "agents"
+    assert dst_nested.is_dir()
+    assert (dst_nested / "spark-assistant.agent.md").read_text(encoding="utf-8") == "assistant\n"
+    assert result["written"] == ["agents/spark-assistant.agent.md"]
+    assert result["preserved"] == []
+
+
+# ---------------------------------------------------------------------------
+# Tests: _write_spark_start_file
+# ---------------------------------------------------------------------------
+
+
+def test_write_spark_start_creates_file(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+
+    _MODULE._write_spark_start_file(workspace_root)
+
+    dest = workspace_root / "SPARK-START.md"
+    assert dest.exists()
+    content = dest.read_text(encoding="utf-8")
+    assert "spark-assistant" in content
+    assert "inizializza il workspace" in content
+
+
+def test_write_spark_start_idempotent(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    dest = workspace_root / "SPARK-START.md"
+    custom_content = "# Custom content — do not overwrite\n"
+    dest.write_text(custom_content, encoding="utf-8")
+
+    _MODULE._write_spark_start_file(workspace_root)
+
+    assert dest.read_text(encoding="utf-8") == custom_content

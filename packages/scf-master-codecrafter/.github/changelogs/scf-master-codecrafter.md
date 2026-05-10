@@ -14,6 +14,12 @@ scf_merge_priority: 20
 
 ## [Unreleased]
 
+### Changed
+
+- Manifest aggiornato a `2.7.0`: il layer master embedded richiede ora
+	`spark-base >= 2.0.0` e `spark-ops >= 1.0.0` per usare gli agenti operativi
+	disaccoppiati dal layer base.
+
 ## [2.6.0] — agent-prefix-cleanup
 
 ### Changed

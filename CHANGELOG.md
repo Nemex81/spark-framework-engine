@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD022 MD024 MD032 MD038 -->
+
 # Changelog
 
 Tutte le modifiche importanti a questo progetto sono documentate in questo file.
@@ -8,7 +10,325 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
-### Added
+### Changed — risoluzione final skipped test (env-gated → mock subprocess) (2026-05-10)
+
+- `tests/test_server_stdio_smoke.py` — `test_mcp_initialize_via_stdio` precedentemente
+  env-gated su `SPARK_SMOKE_TEST=1`. Ora esecuzione deterministica con mock di
+  `subprocess.Popen` senza lanciare il server reale. Valida comunque il contratto
+  JSON-RPC initialize. Rimosso marker `@pytest.mark.skipif`. Suite: 553p,1s → 554p,0s.
+- Suite test: **100% passed (554 passed, 0 skipped)** — audit legacy test completato.
+
+### Changed — legacy test audit e cleanup (2026-05-10)
+
+- `tests/test_bootstrap_workspace.py` — eliminati 5 test obsoleti (dead code legacy mode
+  e mocking strategy stale): `test_bootstrap_install_base_installs_spark_base_when_requested`,
+  `test_bootstrap_extended_creates_policy_then_requires_authorization`,
+  `test_bootstrap_install_base_with_integrative_mode_and_authorization`,
+  prima definizione duplicata di `test_bootstrap_legacy_workspace_requires_authorization_before_policy_write`.
+  Riabilitati 3 test con fix assertion (`prefs_path` da `runtime/spark-user-prefs.json`
+  a `user-prefs.json`): `test_bootstrap_extended_requires_authorization_after_policy_creation`,
+  `test_bootstrap_extended_writes_assets_and_policy_when_authorized`,
+  `test_bootstrap_legacy_workspace_requires_authorization_before_policy_write`.
+- `tests/test_smoke_bootstrap_v3.py` — eliminati 2 test Phase 6 obsoleti:
+  `test_scenario_7_5_bootstrap_genera_agents_md`,
+  `test_scenario_7_6_dropdown_agenti_equivalente_indice_agents`.
+- Suite post-audit: `553 passed, 1 skipped` (era `550 passed, 9 skipped`).
+  Unico skip rimasto: `test_mcp_initialize_via_stdio` (env-gate `SPARK_SMOKE_TEST=1`, by design).
+
+## [3.4.0] - 2026-05-10
+
+### Fixed — bootstrap sentinel legacy → Agent-Welcome.md (2026-05-10)
+
+- `spark/boot/tools_bootstrap.py` — sentinel di idempotenza bootstrap cambiato da
+  `spark-assistant.agent.md` a `Agent-Welcome.md` (agente neutro sempre presente in
+  `spark-base` v2.1.0). Rimossi `spark-guide.agent.md` e `spark-assistant.agent.md`
+  da `_SPARK_BASE_BOOTSTRAP_SENTINELS` (erano legacy post role-inversion v1.1.0).
+  `_SPARK_BASE_BOOTSTRAP_SENTINELS` ora contiene `[".github/AGENTS.md",
+  ".github/agents/Agent-Welcome.md"]`.
+- `spark/boot/install_helpers.py` — `sentinel_path` in `_detect_workspace_migration_state`
+  aggiornato da `agents/spark-assistant.agent.md` a `AGENTS.md` (rilevazione workspace
+  legacy più neutro e stabile).
+- `packages/spark-base/.github/AGENTS.md` — rimosso riferimento errato "da `spark-ops`"
+  nella sezione `Agent-Research` (`Agent-Orchestrator` è in `spark-base` da v2.1.0).
+- `packages/spark-base/README.md` — versione aggiornata a `2.1.0`; tabella agenti
+  corretta (9 agenti: aggiunto `Agent-Orchestrator`, rimossi `spark-assistant` e
+  `spark-guide` ora in `spark-ops`); nota skill aggiornata (`semantic-gate`,
+  `error-recovery`, `task-scope-guard` sono in `spark-base` da v2.1.0).
+- `tests/test_bootstrap_workspace.py` e `tests/test_bootstrap_workspace_extended.py` —
+  aggiornati per riflettere il nuovo sentinel `Agent-Welcome.md`; test
+  `test_bootstrap_does_not_retrack_spark_guide_when_owned_by_spark_base` rinominato
+  e riscritto per `Agent-Welcome.md`; cross-owner test aggiornato su
+  `framework-guard.instructions.md`.
+
+### Fixed — spark-ops role inversion (2026-05-10)
+
+- `packages/spark-base/package-manifest.json` — bump a `2.1.0`.
+  `Agent-Orchestrator` (orchestrazione ciclo E2E) ritorna in `spark-base` come agente
+  core user-operativo. Skill operative correlate (`error-recovery`, `semantic-gate`,
+  `task-scope-guard`) e prompt `orchestrate` seguono il trasferimento in `spark-base`.
+- `packages/spark-ops/package-manifest.json` — bump a `1.1.0`.
+  `spark-assistant` e `spark-guide` (gateway onboarding e routing) si spostano in
+  `spark-ops` come layer sistemico di accesso; le 3 skill E2E vengono rimosse dal
+  catalogo `spark-ops` poiche ora in `spark-base`.
+- `tests/test_spark_ops_decoupling_manifest.py` — `MIGRATED_AGENTS`,
+  `MIGRATED_PROMPTS`, `MIGRATED_SKILLS` e `BASE_OWNED_AFTER_SPLIT` aggiornati
+  per riflettere la nuova distribuzione.
+- `packages/spark-ops/.github/AGENTS.md` e `packages/spark-base/.github/AGENTS.md`
+  aggiornati con i riferimenti corretti agli agenti per package.
+- `packages/spark-ops/README.md` — aggiornato con la nuova lista risorse MCP.
+- `packages/spark-ops/.github/agents/spark-assistant.agent.md` e
+  `packages/spark-ops/.github/agents/spark-guide.agent.md` — creati con
+  `scf_owner: "spark-ops"` (file fisici nel package corretto).
+
+### Added - spark-ops decoupling (2026-05-10)
+
+- `packages/spark-ops/` - nuovo package MCP-only operativo per `Agent-Orchestrator`,
+  `Agent-FrameworkDocs`, `Agent-Release`, skill E2E e prompt di framework maintenance.
+- `tests/test_spark_ops_decoupling_manifest.py` - regressione sul contratto manifest
+  `spark-base`/`spark-ops` e sulle dipendenze dei package embedded.
+
+### Changed - spark-ops decoupling (2026-05-10)
+
+- `packages/spark-base/package-manifest.json` - bump a `2.0.0` e perimetro
+  ridotto a risorse user-facing/shared; gli asset operativi sono rimossi dal
+  catalogo distribuito senza eliminazione fisica dei file legacy.
+- `packages/scf-master-codecrafter/package-manifest.json` - bump a `2.7.0`,
+  dipendenza minima `spark-base >= 2.0.0` e nuova dipendenza `spark-ops >= 1.0.0`.
+- `packages/scf-pycode-crafter/package-manifest.json` - bump a `2.3.0` e
+  dipendenza minima `scf-master-codecrafter >= 2.7.0`.
+- `README.md`, `docs/architecture.md` e README package aggiornati con la
+  separazione `spark-base` user-facing / `spark-ops` operational.
+
+### Added — Legacy Init Audit v1.0 (2026-05-XX)
+
+- `spark/boot/tools_bootstrap.py` — aggiunto `_classify_bootstrap_conflict(dest_path: Path) -> str`,
+  helper module-level che legge il frontmatter YAML di un file preesistente nel workspace e
+  restituisce `"spark_outdated"` (se `spark: true` presente) oppure `"non_spark"` (altrimenti).
+- `spark/boot/tools_bootstrap.py` — `scf_bootstrap_workspace` ora espone 3 nuovi campi nel
+  payload di risposta:
+  - `files_conflict_non_spark`: file protetti che NON hanno frontmatter `spark: true` (Scenario X).
+  - `files_conflict_spark_outdated`: file protetti che hanno frontmatter `spark: true` (Scenario Y).
+  - `spark_outdated_details`: lista di dict `{file, existing_version}` per i file SPARK obsoleti,
+    con la versione letta dal frontmatter del file esistente nel workspace.
+  Nessun cambio comportamentale: i file continuano a essere protetti esattamente come prima.
+  Cambia solo il payload MCP, che ora permette agli utenti di distinguere i conflitti
+  e decidere consapevolmente se usare `force=True`.
+- `tests/test_legacy_init_audit.py` — 5 nuovi test (TDD, Scenario X + Y):
+  `test_bootstrap_classifies_non_spark_conflict_file`,
+  `test_bootstrap_non_spark_conflict_payload_is_empty_on_clean_workspace`,
+  `test_bootstrap_classifies_spark_outdated_conflict_file`,
+  `test_bootstrap_spark_outdated_includes_version_details`,
+  `test_bootstrap_non_md_file_classified_as_non_spark`.
+
+### Fixed
+
+- `tests/test_multi_owner_policy.py` —
+  `test_extend_policy_can_create_section_file_when_shared_target_is_missing`:
+  rimossa race condition mtime nella validazione della cache di `ManifestManager`.
+  Il test riusava la stessa istanza per setup e assertion; su filesystem veloci
+  (es. Windows NTFS in run brevi) le due scritture avvenivano nello stesso clock
+  tick (T1 == T2), impedendo l'invalidazione della cache e restituendo dati stale
+  (`["pkg-a"]` invece di `["pkg-a", "pkg-b"]`). Fix: l'assertion finale crea una
+  fresh instance `ManifestManager(github_root)` — stessa semantica, lettura
+  garantita da disco.
+
+### Added — GAP-Y-2 Frontmatter-Only Update (2026-05-XX)
+
+- `spark/boot/tools_bootstrap.py` — aggiunto `_apply_frontmatter_only_update(source_path, dest_path) -> str | None`,
+  helper module-level che ricostruisce il contenuto di un file SPARK obsoleto
+  combinando il frontmatter verbatim del file sorgente engine con il body
+  verbatim del file utente esistente nel workspace. Restituisce `None` se il
+  frontmatter sorgente è malformato (fallback a protezione).
+- `spark/boot/tools_bootstrap.py` — `scf_bootstrap_workspace` ora gestisce i file
+  SPARK obsoleti (`spark_outdated`) con `force=True` tramite frontmatter-only update:
+  aggiorna solo il blocco YAML tra i marker `---` dal sorgente engine, lasciando
+  il body utente intatto. I file non-SPARK continuano a ricevere sovrascrittura
+  completa (comportamento invariato). Fallback a `files_protected` se il
+  frontmatter-only update fallisce.
+- `spark/boot/tools_bootstrap.py` — nuovo campo nel payload di risposta:
+  - `files_updated_frontmatter_only`: file SPARK obsoleti aggiornati con la
+    strategia frontmatter-only (aggiunto anche a `files_written` e `files_copied`
+    per compatibilità backward).
+- `tests/test_legacy_init_audit.py` — 7 nuovi test (GAP-Y-2):
+  `test_force_true_updates_frontmatter_only_for_spark_outdated`,
+  `test_force_true_preserves_user_body_when_spark_outdated`,
+  `test_force_true_non_spark_file_still_gets_full_overwrite`,
+  `test_force_true_spark_outdated_payload_on_clean_workspace`,
+  `test_apply_frontmatter_only_unit_builds_merged_content`,
+  `test_apply_frontmatter_only_unit_returns_none_on_malformed_source`,
+  `test_apply_frontmatter_only_unit_handles_empty_user_body`.
+  Suite totale: 546 passed / 9 skipped (baseline pre-sessione: 539).
+
+### Planned
+
+- Aggiornare `min_engine_version` in `scf-master-codecrafter`
+  e `scf-pycode-crafter` a `"3.2.0"` nei rispettivi
+  `package-manifest.json` (task post-merge, repo separati).
+
+---
+
+## [3.3.0] - 2026-05-09
+
+### Added — Pending Resolution v1.0 (2026-05-09)
+
+- `spark/boot/tools_plugins.py` — i tool legacy `scf_list_plugins` e
+  `scf_install_plugin` ora espongono in tutti i payload JSON i campi
+  `removal_target_version: "3.4.0"` (due minor release dopo l'engine
+  3.2.0 corrente) e `migrate_to` con il nome esplicito del tool
+  store-based equivalente (`scf_plugin_list` / `scf_plugin_install`).
+  Aggiunte le costanti modulo `_LEGACY_REMOVAL_TARGET_VERSION` e
+  `_LEGACY_MIGRATION_MAP`. Risolve SP-1 (R3 del report
+  `SPARK-REPORT-DualUniverse-Consolidation-v1.0.md`).
+- `packages/spark-base/.github/agents/spark-guide.agent.md` — aggiunta
+  sezione "Architettura — pacchetti interni vs plugin workspace" con
+  cross-reference a `spark-assistant` come fonte canonica del dettaglio
+  operativo. Bump frontmatter `version: 1.0.0 → 1.1.0`. Risolve SP-2
+  (R4 — narrativa dual-universe coerente nel layer di orientamento).
+- `tests/test_no_orphan_imports.py` — test di regressione che importa
+  ricorsivamente tutti i moduli `spark.*` (62 moduli oggi) per
+  intercettare in CI/local la classe di anomalie tipo ANOMALIA-NEW
+  (import path errato silenziato a runtime). Risolve SP-3 (R5).
+- `CONTRIBUTING.md` — nuovo file con la procedura "Rinomina agenti
+  SCF" (6 step: manifest, file fisico, test, CHANGELOG, doc cross-ref,
+  validazione suite). Risolve SP-5.
+- `docs/reports/SPARK-REPORT-PendingResolution-v1.0.md` — report di
+  risoluzione dei 5 sospesi pre-merge.
+- `README.md` — aggiunta nota sui tool legacy `scf_list_plugins` /
+  `scf_install_plugin` con `removal_target_version` e `migrate_to`.
+  Aggiunta sezione "Architettura — Pacchetti interni vs Plugin Workspace"
+  che spiega la distinzione Universo A (mcp_only) / Universo B (plugin
+  workspace) e cross-reference a `spark-assistant` come fonte canonica.
+
+### Fixed — Live Fixture Fix v1.0 (2026-05-09)
+
+- `tests/test_integration_live.py` — fixture `tmp_workspace`: aggiunto
+  blocco di inizializzazione di `runtime/orchestrator-state.json` con
+  `github_write_authorized: true`. Senza questo file tutti e 4 i live test
+  erano bloccati dal gate `_is_github_write_authorized_v3()` prima ancora di
+  toccare la rete (Bug A).
+- `spark/core/utils.py` — aggiunta helper `_normalize_dependency_ids()` che
+  gestisce dipendenze in formato schema 3.1 (`{"id": ..., "min_version": ...}`)
+  oltre al formato stringa legacy. Risolve il `missing_dependencies` errato
+  per pacchetti con dipendenze object-typed (Bug B).
+- `spark/boot/install_helpers.py` — `_get_package_install_context()` ora usa
+  `_normalize_dependency_ids()` al posto di `_normalize_string_list()` per il
+  campo `dependencies` del manifest (Bug B).
+- `tests/test_integration_live.py` — `test_plan_install_detects_untracked_conflict_and_abort_preserves_workspace`:
+  aggiornato `conflict_rel` da `".github/agents/Agent-Code.md"` (nome
+  pre-rename) a `".github/agents/code-Agent-Code.md"` (nome attuale dopo
+  razionalizzazione prefisso `code-`) (Bug D).
+- `tests/test_integration_live.py` — `test_install_clean_master_package_creates_manifest_and_replan_is_clean`:
+  le entry manifest `__store__/{pkg}` sono sentinelle interne v3 store e non
+  corrispondono a file fisici nel workspace; filtrate dall'assertion sui file
+  tracciati (Bug C).
+- `tests/test_integration_live.py` — `test_install_clean_master_package_creates_manifest_and_replan_is_clean`:
+  la replan assertion ora verifica che tutti i file installati
+  (workspace_files + plugin_files) siano classificati come
+  `update_tracked_clean` / `extend_section`, ignorando le voci store-only
+  (changelogs, skills, prompts) presenti in `files` ma non nel workspace
+  fisico (Bug C / replan assertion).
+- `spark/boot/tools_packages_install.py` — aggiunto pre-check conflitti per
+  `plugin_files` nel branch v3 prima dell'avvio del download nello store. Se
+  `conflict_mode="abort"` e uno o più `plugin_files` corrispondono a file
+  non tracciati già presenti nel workspace, `scf_install_package` restituisce
+  `success=False` senza toccare store né manifest (Bug E).
+
+### Added — Merge Readiness Step 5 (2026-05-09)
+
+- `tests/test_onboarding_manager.py` — test E2E minimal-mock
+  `test_run_onboarding_e2e_minimal_mock_virgin_workspace` (R2): verifica
+  `run_onboarding()` end-to-end su workspace vergine con `auto_install: true`,
+  controlla `status == "completed"`, `packages_installed == ["spark-base"]` e
+  idempotenza post-install (`is_first_run() is False` dopo l'esecuzione).
+  Porta il totale dei test `OnboardingManager` a 18.
+
+### Changed — Merge Readiness Step 5 (2026-05-09)
+
+- `packages/spark-base/.github/agents/spark-assistant.agent.md` — bump
+  versione da `1.2.0` a `1.3.0` (minor: la sezione "Architettura — pacchetti
+  interni vs plugin workspace" introduce regole comportamentali per l'agente,
+  non solo narrativa descrittiva. SemVer minor corretto).
+- `spark/boot/tools_plugins.py` — aggiunto commento
+  `# TODO: centralizzare in spark/boot/_legacy_markers.py se altri tool
+  diventano legacy in moduli diversi` sopra la costante
+  `_LEGACY_DEPRECATION_NOTICE` (D2: lasciata in loco, oggi 2 tool legacy
+  in un solo modulo — estrazione non giustificata).
+- `docs/reports/rapporto perplexity - audit-system-state-v1.0.md` — aggiunta
+  nota inline su V2: classificazione rivista da CRITICO a MEDIO nel report
+  `SPARK-REPORT-DualUniverse-Consolidation-v1.0.md` post analisi statica
+  entry point FastMCP.
+
+### Added — Dual-Universe Consolidation (audit 2026-05-09)
+
+- `tests/test_onboarding_manager.py` — 17 test unitari per
+  `spark.boot.onboarding.OnboardingManager` (gap V6 del rapporto
+  `docs/reports/rapporto perplexity - audit-system-state-v1.0.md`):
+  copre `is_first_run` (manifest popolato/vuoto, fallback legacy,
+  `auto_install: false`, packages list vuota, file corrotto),
+  `_install_declared_packages` (no file, `auto_install: false`,
+  pacchetto gia installato, install OK / KO / RuntimeError, campo
+  `packages` non lista) e `run_onboarding` (status `completed`,
+  `partial`, `skipped`).
+- `packages/spark-base/.github/agents/spark-assistant.agent.md` — nuova
+  sezione "Architettura — pacchetti interni vs plugin workspace" che
+  esplicita all'utente finale la distinzione tra Universo A
+  (pacchetti `mcp_only` serviti dall'engine) e Universo B (plugin
+  esterni installati esplicitamente). Colma il gap narrativo V5.
+- `spark/boot/tools_plugins.py` — costante `_LEGACY_DEPRECATION_NOTICE`.
+  I tool legacy `scf_list_plugins` e `scf_install_plugin` ora
+  espongono `deprecated: true` e `deprecation_notice` in tutti i
+  payload JSON di risposta (success ed error). Permette a Copilot di
+  preferire automaticamente i tool store-based `scf_plugin_list` /
+  `scf_plugin_install`.
+- `docs/reports/SPARK-REPORT-DualUniverse-Consolidation-v1.0.md` —
+  report di consolidamento dual-universe.
+
+### Fixed — Dual-Universe Consolidation (audit 2026-05-09)
+
+- `spark/boot/onboarding.py` — corretto import errato in
+  `OnboardingManager._ensure_store_populated`: `PackageResourceStore`
+  vive in `spark.registry.store`, non in `spark.packages.store`.
+  L'import errato sollevava `ImportError` silenziosamente ad ogni
+  esecuzione, trasformando ogni `run_onboarding()` in
+  `status: "partial"` con errore `"No module named
+  'spark.packages.store'"`. Anomalia non rilevata dal rapporto
+  Perplexity originale, scoperta in fase di test del Modulo 3.
+
+### Added — Dual-Mode Architecture v1.0 (TASK-1..TASK-4)
+
+- `packages/spark-base/package-manifest.json` — `delivery_mode: "mcp_only"`,
+  `schema_version: "3.0" → "3.1"`, `workspace_files: []`, `plugin_files: []`.
+  I pacchetti built-in sono ora serviti esclusivamente via MCP dallo store
+  interno del motore; nessun file viene copiato nel workspace utente.
+- `packages/scf-master-codecrafter/package-manifest.json` — `delivery_mode: "mcp_only"`,
+  `workspace_files: []`. `plugin_files` resta `[]`.
+- `packages/scf-pycode-crafter/package-manifest.json` — `delivery_mode: "mcp_only"`,
+  `workspace_files: []`, `plugin_files: []`.
+- `spark/plugins/manager.py` — nuovo modulo con `PluginManager`,
+  `download_plugin()` e `list_available_plugins()`. Implementa il download
+  diretto di plugin nella directory `.github/` senza passare per lo store
+  interno del motore. I pacchetti `mcp_only` sono filtrati automaticamente
+  dal listing. (TASK-3)
+- `spark/plugins/__init__.py` — aggiornato: esporta anche `PluginManager`,
+  `download_plugin`, `list_available_plugins` oltre a `PluginManagerFacade`.
+- `spark/boot/tools_plugins.py` — aggiunti 2 nuovi tool MCP (TASK-4):
+  - `scf_list_plugins()` — elenca i plugin disponibili per download diretto
+    (esclude `mcp_only`). Usa `list_available_plugins()` di `manager.py`.
+  - `scf_install_plugin(package_id, version, workspace_root, overwrite)` —
+    scarica un plugin nel workspace utente tramite `download_plugin()`.
+    Nessun tracking nello store; il contatore tool passa da 4 a 6 in questo modulo.
+- `README.md` — sezione "Tools Disponibili" aggiornata da 44 a 46 con i
+  nuovi tool `scf_list_plugins` e `scf_install_plugin`.
+
+### Changed — Dual-Mode Architecture v1.0
+
+- `spark/plugins/installer.py` — aggiunto guard `delivery_mode == "mcp_only"` in
+  `install_from_store()`: i pacchetti con `delivery_mode: "mcp_only"` non scrivono
+  mai `workspace_files` nel workspace utente. Aggiunto anche `import logging` e
+  `_log` per il nuovo guard. (TASK-2)
+- `spark/boot/tools_plugins.py` — docstring aggiornato: "Registers 6 MCP tools"
+  (era 4). Aggiunti import `download_plugin`, `list_available_plugins`,
+  `RegistryClient` a livello di modulo.
 
 - `spark/boot/tools_packages.py` — nuovo modulo factory per i 15 tool package
   lifecycle e conflict resolution: `scf_list_available_packages`,

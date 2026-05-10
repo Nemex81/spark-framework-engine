@@ -21,6 +21,7 @@ from spark.core.constants import ENGINE_VERSION, _BOOTSTRAP_PACKAGE_ID
 from spark.core.utils import (
     _infer_scf_file_role,
     _is_engine_version_compatible,
+    _normalize_dependency_ids,
     _normalize_manifest_relative_path,
     _normalize_string_list,
     _sha256_text,
@@ -632,7 +633,7 @@ def _detect_workspace_migration_state(
     """
     policy_payload, policy_source = _read_update_policy_payload(github_root)
     manifest_entries = manifest.load()
-    sentinel_path = github_root / "agents" / "spark-assistant.agent.md"
+    sentinel_path = github_root / "AGENTS.md"
     copilot_path = github_root / "copilot-instructions.md"
     copilot_exists = copilot_path.is_file()
     copilot_content = _read_text_if_possible(copilot_path) if copilot_exists else None
@@ -797,7 +798,10 @@ def _get_package_install_context(
     min_engine_version = str(
         pkg_manifest.get("min_engine_version", _get_registry_min_engine_version(pkg))
     ).strip()
-    dependencies = _normalize_string_list(pkg_manifest.get("dependencies", []))
+    # Usa _normalize_dependency_ids (non _normalize_string_list) perché i manifest
+    # schema 3.1 dichiarano le dipendenze come oggetti {"id": ..., "min_version": ...}
+    # invece che come semplici stringhe. Il normalizzatore estrae il campo "id".
+    dependencies = _normalize_dependency_ids(pkg_manifest.get("dependencies", []))
     declared_conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
     file_ownership_policy = (
         str(pkg_manifest.get("file_ownership_policy", "error")).strip() or "error"

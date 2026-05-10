@@ -99,20 +99,20 @@ async def test_bootstrap_preserves_missing_cross_owner_file_without_rewriting(
     bootstrap_tool: Any,
 ) -> None:
     manifest = ManifestManager(workspace_root / ".github")
-    guide_rel = "agents/spark-guide.agent.md"
-    guide_path = workspace_root / ".github" / guide_rel
-    guide_path.parent.mkdir(parents=True, exist_ok=True)
-    guide_path.write_text("spark-base owned guide\n", encoding="utf-8")
-    manifest.upsert_many("spark-base", "1.2.0", [(guide_rel, guide_path)])
-    guide_path.unlink()
+    guard_rel = "instructions/framework-guard.instructions.md"
+    guard_path = workspace_root / ".github" / guard_rel
+    guard_path.parent.mkdir(parents=True, exist_ok=True)
+    guard_path.write_text("spark-base owned guard\n", encoding="utf-8")
+    manifest.upsert_many("spark-base", "1.2.0", [(guard_rel, guard_path)])
+    guard_path.unlink()
 
     result = await bootstrap_tool()
 
     assert result["success"] is True
     assert result["status"] == "bootstrapped"
-    assert ".github/agents/spark-guide.agent.md" in result["preserved"]
-    assert not guide_path.exists()
-    assert manifest.get_file_owners(guide_rel) == ["spark-base"]
+    assert ".github/instructions/framework-guard.instructions.md" in result["preserved"]
+    assert not guard_path.exists()
+    assert manifest.get_file_owners(guard_rel) == ["spark-base"]
 
 
 async def test_bootstrap_writes_sentinel_last(
@@ -145,8 +145,8 @@ async def test_bootstrap_writes_sentinel_last(
 
     assert result["success"] is True
     assert write_order
-    assert write_order[-1] == "agents/spark-assistant.agent.md"
-    assert write_order.count("agents/spark-assistant.agent.md") == 1
+    assert write_order[-1] == "agents/Agent-Welcome.md"
+    assert write_order.count("agents/Agent-Welcome.md") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +169,7 @@ async def test_bootstrap_dry_run_reports_would_copy_without_writing(
     assert result["files_written"] == []
     # No actual files created on disk
     github_root = workspace_root / ".github"
-    assert not (github_root / "agents" / "spark-assistant.agent.md").exists()
+    assert not (github_root / "agents" / "Agent-Welcome.md").exists()
     assert not (github_root / "AGENTS.md").exists()
 
 
@@ -225,7 +225,7 @@ async def test_bootstrap_returns_files_protected_for_non_sentinel_user_modified(
     copilot_md.write_text("# user customized content\n", encoding="utf-8")
 
     # Delete sentinel to force re-run through copy loop
-    sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+    sentinel = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
     sentinel.unlink()
 
     # Second bootstrap without force — copilot-instructions.md should be protected
@@ -251,7 +251,7 @@ async def test_bootstrap_force_overwrites_user_modified_non_sentinel_file(
     copilot_md.write_text("# user customized content\n", encoding="utf-8")
 
     # Delete sentinel to force re-run through copy loop
-    sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+    sentinel = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
     sentinel.unlink()
 
     # Second bootstrap with force=True — copilot-instructions.md should be overwritten
@@ -273,13 +273,13 @@ async def test_bootstrap_force_overwrites_user_modified_sentinel(
     assert first["status"] == "bootstrapped"
 
     # Modify the sentinel so is_user_modified returns True
-    sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+    sentinel = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
     sentinel.write_text("# user modified sentinel\n", encoding="utf-8")
 
     # Without force: user_modified
     no_force = await bootstrap_tool()
     assert no_force["status"] == "user_modified"
-    assert no_force["files_protected"] == ["agents/spark-assistant.agent.md"]
+    assert no_force["files_protected"] == ["agents/Agent-Welcome.md"]
 
     # With force=True: should proceed and NOT return user_modified
     with_force = await bootstrap_tool(force=True)
@@ -299,7 +299,7 @@ async def test_bootstrap_files_skipped_populated_after_identical_rerun(
     assert first["status"] == "bootstrapped"
 
     # Delete sentinel to force re-run through copy loop
-    sentinel = workspace_root / ".github" / "agents" / "spark-assistant.agent.md"
+    sentinel = workspace_root / ".github" / "agents" / "Agent-Welcome.md"
     sentinel.unlink()
 
     # Second bootstrap: all files except sentinel are present with matching SHA

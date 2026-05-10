@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sys
 from pathlib import Path
 
 from spark.boot.validation import resolve_runtime_dir, validate_engine_manifest
@@ -192,4 +193,9 @@ def _build_app(engine_root: Path) -> FastMCP:
             onboarding_result.get("status", "unknown"),
         )
 
+    sys.stderr.write("\n[SPARK] Inizializzazione completata.\n")
+    sys.stderr.write(
+        '[SPARK] Prossimo passo: apri VS Code e di\' a Copilot'
+        ' "inizializza il workspace SPARK"\n\n'
+    )
     return mcp

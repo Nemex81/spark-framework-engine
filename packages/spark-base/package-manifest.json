@@ -5,7 +5,7 @@
   "display_name": "SPARK Base Layer",
   "description": "Layer fondazionale SCF con agenti base, skill condivise, instruction comuni e prompt framework general-purpose.",
   "author": "Nemex81",
-  "min_engine_version": "3.1.0",
+  "min_engine_version": "3.4.0",
   "dependencies": [],
   "conflicts": [],
   "file_ownership_policy": "error",

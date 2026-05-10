@@ -2,9 +2,11 @@
 
 **Autore:** Perplexity AI (Coordinatore)
 **Approvato da:** Nemex81
-**Branch target:** `main`
+**Branch target:** `feature/dual-mode-manifest-v3.1`
 **Data:** 2026-05-08
 **Agente designato:** `@spark-engine-maintainer`
+** mode: agent **
+** execute_mode: autonomus **
 
 ---
 
@@ -254,7 +256,7 @@ con il formato seguente:
 # SPARK Init Strategy Validation — Report v1.0
 
 **Data:** [data]
-**Branch:** main
+**Branch:** feature/dual-mode-manifest-v3.1
 **Agente:** @spark-engine-maintainer
 **Iterazioni di convalida:** [N]
 

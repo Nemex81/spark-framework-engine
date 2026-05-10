@@ -11,11 +11,20 @@ scf_merge_priority: 30
 
 # CHANGELOG — scf-pycode-crafter
 
+## [Unreleased]
+
+### Changed
+
+- Manifest aggiornato a `2.3.0`: la dipendenza minima da
+  `scf-master-codecrafter` passa a `2.7.0`, ereditando il nuovo layer operativo
+  `spark-ops`.
+
 ## [2.2.1] — 2026-04-28
 
 ### Changed
 
-- Bump patch di compatibilita: `min_engine_version` aggiornata a `3.1.0` senza cambiamenti funzionali agli agenti/tool Python del pacchetto.
+- Bump patch di compatibilita: `min_engine_version` aggiornata a `3.1.0` senza
+  cambiamenti funzionali agli agenti/tool Python del pacchetto.
 
 ## [2.0.1] — 2026-04-15
 

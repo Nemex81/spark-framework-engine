@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD022 MD031 MD040 MD060 -->
+
 # SPARK Framework Engine
 
 Motore MCP universale per il **SPARK Code Framework (SCF)**.
@@ -7,7 +9,7 @@ come Resources e Tools consumabili da GitHub Copilot in Agent mode.
 Il motore legge il `.github/` del progetto attivo dinamicamente —
 non contiene dati di dominio, si adatta a qualsiasi progetto.
 
-> **Versione corrente:** 3.2.0 (06 maggio 2026). Per le note di migrazione
+> **Versione corrente:** 3.3.0 (09 maggio 2026). Per le note di migrazione
 > consultare il [CHANGELOG.md](CHANGELOG.md).
 
 ---
@@ -63,7 +65,7 @@ scf://runtime-state
 > Il numero effettivo a runtime è superiore perché i pacchetti installati registrano
 > risorse aggiuntive al boot tramite `_v3_repopulate_registry()`.
 
-## Tools Disponibili (44)
+## Tools Disponibili (50)
 
 ```
 scf_list_overrides(resource_type=None)
@@ -104,7 +106,43 @@ scf_finalize_update(session_id)
 scf_resolve_conflict_ai(session_id, conflict_id)
 scf_approve_conflict(session_id, conflict_id)
 scf_reject_conflict(session_id, conflict_id)
+scf_plugin_install(pkg_id)
+scf_plugin_remove(pkg_id)
+scf_plugin_update(pkg_id)
+scf_plugin_list()
+scf_list_plugins()
+scf_install_plugin(package_id, version="latest", workspace_root="", overwrite=False)
 ```
+
+### Nota sui tool legacy
+
+I tool `scf_list_plugins()` e `scf_install_plugin()` sono **deprecati** a favore
+di `scf_plugin_list()` e `scf_plugin_install()` (introdotti nella v3.0).
+Rimangono disponibili per retrocompatibilità ma con la segnalazione nei payload
+`deprecated: true` e `removal_target_version: "3.4.0"` (due minor release dopo
+l'attuale 3.2.0). Il campo `migrate_to` nei return block specifica il tool
+sostitutivo esplicito. I client dovrebbero transitare verso i nuovi tool nelle
+prossime versioni.
+
+## Architettura — Pacchetti interni vs Plugin Workspace
+
+Il motore espone due **Universi** distinti di componenti:
+
+- **Universo A (MCP-Only)**: i pacchetti `spark-base`, `spark-ops`,
+  `scf-master-codecrafter` e `scf-pycode-crafter` sono serviti esclusivamente via MCP dallo store engine
+  centralizzato. Non generano file nel workspace utente. Accesso tramite
+  resource URI `agents://`, `skills://`, `instructions://`, `prompts://`.
+  `spark-base` copre bootstrap/onboarding/workflow utente; `spark-ops` copre
+  orchestrazione E2E, framework docs e release coordination.
+- **Universo B (Plugin Workspace)**: i plugin esterni (category "plugin") e i
+  pacchetti con `delivery_mode: "file"` possono installare file fisici nel
+  workspace utente tramite `scf_plugin_install()` o `scf_install_package()`.
+  Il file editing avviene direttamente nel filesystem di VS Code.
+
+Per il dettaglio operativo dei flussi e l'elenco dei tool MCP correlati a
+ciascun Universo, consulta l'agente `spark-assistant`: la sezione
+"Architettura — pacchetti interni vs plugin workspace" è la fonte canonica
+per questo argomento.
 
 ## Migrazione Da Workspace Pre-Ownership
 
@@ -196,6 +234,18 @@ Quando il flusso policy e attivo, il payload include anche:
 - `diff_summary` senza i file `unchanged`
 - `authorization_required` / `github_write_authorized`
 - `backup_path` per i percorsi `replace`
+
+Per i package manifest schema `3.1`, l'installazione distingue esplicitamente
+tre categorie nel payload v3:
+
+- `mcp_services_activated`: URI MCP attivati dal package (`agents://`,
+  `skills://`, `instructions://`, `prompts://`)
+- `workspace_files_written`: file editor-binding dichiarati in `workspace_files`
+- `plugin_files_installed`: file fisici dichiarati in `plugin_files`, installati
+  nel workspace con lo stesso preservation gate dei `workspace_files`
+
+La chiave `installed` resta presente come alias deprecato dei file fisici scritti
+nel workspace per compatibilita con client esistenti.
 
 `scf_plan_install(package_id)` restituisce un'anteprima read-only del risultato
 di installazione: file scrivibili, file da preservare, conflitti che richiedono
@@ -303,7 +353,8 @@ euristiche conservative e i validator; i casi ambigui vengono degradati a una
 sessione manuale attiva.
 
 Lo script standalone `spark-init.py` usa il `package-manifest.json` di `spark-base`
-come source of truth per la prima inizializzazione. Se trova file gia presenti ma
+come source of truth user-facing per la prima inizializzazione. Le risorse
+operative opzionali sono invece fornite da `spark-ops`. Se trova file gia presenti ma
 non tracciati, chiede all'utente se vuole `replace`, `preserve` oppure un'integrazione
 best-effort `integrate` prima di toccare il workspace.
 
@@ -326,6 +377,16 @@ I file `.github/` di questo repo seguono lo stesso schema ownership che il motor
 - **File nativi engine**: agenti, skill, instruction e prompt specifici del motore hanno `scf_owner: "spark-framework-engine"`.
 - **File shadow di pacchetti**: i prompt `scf-*.prompt.md` e l'agente `spark-guide.agent.md` appartengono a `spark-base` e sono riallineati al contenuto del pacchetto sorgente con `scf_owner: "spark-base"`.
 - **File condivisi**: `.github/copilot-instructions.md` è un file `merge_sections` con sezioni `SCF:BEGIN/END` per tutti i pacchetti installati e serve da implementazione di riferimento del formato canonico.
+
+---
+
+## Contribuire
+
+Le procedure per rinominare agenti SCF, aggiungere/rimuovere tool MCP e gestire
+fixture pytest condivise sono documentate in:
+
+→ **[CONTRIBUTING.md](CONTRIBUTING.md)**
+
 ---
 
 ## Progetto Correlati

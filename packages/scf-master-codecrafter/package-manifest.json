@@ -1,24 +1,27 @@
 {
-  "schema_version": "3.0",
+  "schema_version": "3.1",
   "package": "scf-master-codecrafter",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "display_name": "SCF Master CodeCrafter",
   "description": "Plugin CORE-CRAFT per il master-layer SCF. Fornisce design, code routing, code UI e contesto MCP sopra spark-base.",
   "author": "Nemex81",
-  "min_engine_version": "3.1.0",
+  "min_engine_version": "3.4.0",
   "dependencies": [
     {
       "id": "spark-base",
-      "min_version": "1.6.1"
+      "min_version": "2.0.0"
+    },
+    {
+      "id": "spark-ops",
+      "min_version": "1.0.0"
     }
   ],
   "conflicts": [],
   "file_ownership_policy": "error",
   "changelog_path": ".github/changelogs/scf-master-codecrafter.md",
-  "workspace_files": [
-    ".github/copilot-instructions.md",
-    ".github/instructions/mcp-context.instructions.md"
-  ],
+  "delivery_mode": "mcp_only",
+  "workspace_files": [],
+  "plugin_files": [],
   "mcp_resources": {
     "agents": [
       "code-Agent-Analyze",

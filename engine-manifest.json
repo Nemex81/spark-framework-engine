@@ -1,7 +1,7 @@
 {
   "schema_version": "3.0",
   "package": "spark-framework-engine",
-  "version": "3.1.0",
+  "version": "3.4.0",
   "display_name": "SPARK Framework Engine",
   "description": "Motore MCP universale del SPARK Code Framework. Espone risorse engine-proprie (agenti onboarding/maintenance, instruction MCP-only) non appartenenti a nessun pacchetto installato.",
   "author": "Nemex81",

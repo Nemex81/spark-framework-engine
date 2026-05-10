@@ -174,6 +174,7 @@ from spark.boot.tools_override import register_override_tools
 from spark.boot.tools_bootstrap import register_bootstrap_tools
 from spark.boot.tools_policy import register_policy_tools
 from spark.boot.tools_packages import register_package_tools
+from spark.boot.tools_plugins import register_plugin_tools
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -275,6 +276,7 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         self._snapshots: SnapshotManager | None = None
         self._sessions: MergeSessionManager | None = None
         self._install_package_tool_fn: Any | None = None
+        self._plugin_manager: Any | None = None  # PluginManagerFacade, inizializzato lazy
 
     def _init_runtime_objects(self) -> None:
         """Inizializza (idempotente) gli oggetti runtime come instance attributes.
@@ -292,6 +294,11 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         self._snapshots = SnapshotManager(self._runtime_dir / _SNAPSHOTS_SUBDIR)
         self._sessions = MergeSessionManager(self._runtime_dir / _MERGE_SESSIONS_SUBDIR)
         self._sessions.cleanup_expired_sessions()
+        from spark.plugins.facade import PluginManagerFacade  # noqa: PLC0415
+        self._plugin_manager = PluginManagerFacade(
+            workspace_root=self._ctx.workspace_root,
+            registry_url=_REGISTRY_URL,
+        )
 
     def _minimal_bootstrap_required_paths(self) -> tuple[Path, ...]:
         """Return the minimal workspace files required for SPARK agent discovery."""
@@ -628,7 +635,7 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         _log.info("[SPARK-ENGINE][INFO] Resources registrate: %d", len(resource_uris))
 
     def register_tools(self) -> None:  # noqa: C901
-        """Register all MCP tools. Resources (15) and Tools (44)."""
+        """Register all MCP tools. Resources (15) and Tools (51)."""
         inventory = self._inventory
         tool_names: list[str] = []
 
@@ -679,6 +686,9 @@ class SparkFrameworkEngine(_V3LifecycleMixin):
         register_package_tools(self, self._mcp, tool_names)
         # D.3: i 4 tool bootstrap sono registrati dopo packages (dipendono da _install_package_tool_fn).
         register_bootstrap_tools(self, self._mcp, tool_names)
+
+        # D.6: i 7 tool plugin lifecycle/compat sono registrati dalla factory in tools_plugins.py.
+        register_plugin_tools(self, self._mcp, tool_names)
 
         _log.info("[SPARK-ENGINE][INFO] Tools registered: %d total", len(tool_names))
 

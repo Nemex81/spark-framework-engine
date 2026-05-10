@@ -370,7 +370,7 @@ class TestMultiOwnerPolicy(unittest.TestCase):
             self.assertIn("<!-- SCF:BEGIN:pkg-b@2.0.0 -->", written_text)
             self.assertIn("pkg-b created section", written_text)
             self.assertEqual(
-                manifest.get_file_owners("copilot-instructions.md"),
+                ManifestManager(github_root).get_file_owners("copilot-instructions.md"),
                 ["pkg-a", "pkg-b"],
             )
 

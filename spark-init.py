@@ -716,6 +716,92 @@ class _BootstrapInstaller:
         )
 
 
+_SPARK_START_CONTENT = """\
+# Avvia SPARK
+
+Il workspace è configurato. Per iniziare:
+
+1. Apri il pannello Copilot in VS Code (`Ctrl+Shift+I`).
+2. Seleziona la modalità **Agent**.
+3. Scegli l'agente **spark-assistant**.
+4. Scrivi: `inizializza il workspace`
+
+SPARK avvierà l'orientamento e proporrà i pacchetti
+necessari per il tuo progetto.
+
+---
+
+*Puoi eliminare questo file dopo il primo avvio.*
+*Per domande sull'architettura SPARK, usa l'agente `spark-guide`.*
+"""
+
+
+def _propagate_spark_base_to_workspace(
+    engine_root: Path,
+    workspace_root: Path,
+) -> dict[str, list[str]]:
+    """Propaga i file di packages/spark-base/.github/ nel workspace utente.
+
+    Operazione locale, idempotente, senza chiamate di rete.
+    Policy default: preserve (file utente modificati non vengono
+    sovrascritti; aggiornamenti tramite scf_update_packages via MCP).
+
+    Args:
+        engine_root: Path radice del repo spark-framework-engine.
+        workspace_root: Path radice del workspace utente.
+
+    Returns:
+        Dict con "written" (file copiati) e "preserved" (file
+        esistenti con contenuto diverso, non sovrascritti).
+    """
+    src_root = engine_root / "packages" / "spark-base" / ".github"
+    dst_root = workspace_root / ".github"
+    written: list[str] = []
+    preserved: list[str] = []
+
+    if not src_root.is_dir():
+        _log("WARNING", f"packages/spark-base/.github/ non trovata in {engine_root}; step 4 saltato.")
+        return {"written": written, "preserved": preserved}
+
+    for src_file in sorted(src_root.rglob("*")):
+        if not src_file.is_file():
+            continue
+        rel = src_file.relative_to(src_root)
+        rel_str = rel.as_posix()
+        dst_file = dst_root / rel
+        try:
+            if dst_file.exists():
+                if _sha256_file(dst_file) == _sha256_file(src_file):
+                    continue  # identici: skip silenzioso
+                preserved.append(rel_str)
+                _log("INFO", f".github/{rel_str} → preservato (modificato dall'utente)")
+                continue
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
+            dst_file.write_bytes(src_file.read_bytes())
+            written.append(rel_str)
+            _log("INFO", f".github/{rel_str} → scritto")
+        except OSError as exc:
+            _log("ERROR", f".github/{rel_str} → errore di copia: {exc}")
+
+    return {"written": written, "preserved": preserved}
+
+
+def _write_spark_start_file(workspace_root: Path) -> None:
+    """Crea SPARK-START.md nella root del workspace con istruzioni di avvio rapido.
+
+    Idempotente: se il file esiste già non viene sovrascritto.
+
+    Args:
+        workspace_root: Path radice del workspace utente.
+    """
+    dest = workspace_root / "SPARK-START.md"
+    if dest.exists():
+        _log("INFO", "SPARK-START.md → già presente, skip.")
+        return
+    dest.write_text(_SPARK_START_CONTENT, encoding="utf-8")
+    _log("INFO", "SPARK-START.md → scritto.")
+
+
 def main() -> int:
     """Entry point for standalone workspace initialization."""
     _configure_stdio()
@@ -807,9 +893,21 @@ def main() -> int:
         _log("ERROR", str(exc))
         return 1
 
+    # Step 4 — Propagazione locale spark-base nel workspace
+    propagate_result = _propagate_spark_base_to_workspace(engine_root, project_root)
+    if propagate_result["preserved"]:
+        _log(
+            "INFO",
+            f"{len(propagate_result['preserved'])} file preservati (modificati dall'utente).",
+        )
+
+    # Step 5 — File di avvio rapido per l'utente
+    _write_spark_start_file(project_root)
+
     print(f"[SPARK] .code-workspace → {workspace_action}: {workspace_path.name}")
     print(f"[SPARK] .vscode/mcp.json → {settings_action}")
     print(f"[SPARK] spark-base → {bootstrap_action}")
+    print("[SPARK] SPARK-START.md → apri Copilot e segui le istruzioni")
     return 0
 
 

@@ -186,6 +186,23 @@ def _v3_manifest_with_empty_standalone(package_id: str) -> dict[str, Any]:
     }
 
 
+def _v3_manifest_with_plugin_file(package_id: str) -> dict[str, Any]:
+    """Manifest v3.1 con plugin_files e senza standalone_copy."""
+    plugin_path = ".github/workflows/notify-engine.yml"
+    return {
+        "schema_version": "3.1",
+        "package": package_id,
+        "version": "3.1.0",
+        "min_engine_version": "3.0.0",
+        "dependencies": [],
+        "conflicts": [],
+        "file_ownership_policy": "error",
+        "files": [f".github/agents/{package_id}.agent.md", plugin_path],
+        "mcp_resources": {"agents": [f"{package_id}"]},
+        "plugin_files": [plugin_path],
+    }
+
+
 def _registry_pkg_dm(package_id: str) -> dict[str, Any]:
     return {
         "id": package_id,
@@ -301,6 +318,46 @@ class TestDeploymentNotice(unittest.TestCase):
             summary = result.get("deployment_summary", {})
             self.assertTrue(summary.get("engine_store"))
             self.assertTrue(summary.get("standalone_copy"))
+
+    def test_auto_mode_installs_plugin_files_without_standalone_notice(self) -> None:
+        """plugin_files espliciti vengono installati in auto senza deployment_notice."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            _authorize_dm(ws)
+            fake_mcp, _engine = _build_engine_dm(ws)
+            install = cast(
+                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+                fake_mcp.tools["scf_install_package"],
+            )
+            pkg_id = "pkg-plugin-file"
+            with (
+                patch.object(
+                    RegistryClient, "list_packages",
+                    return_value=[_registry_pkg_dm(pkg_id)],
+                ),
+                patch.object(
+                    RegistryClient, "fetch_package_manifest",
+                    return_value=_v3_manifest_with_plugin_file(pkg_id),
+                ),
+                patch.object(
+                    RegistryClient, "fetch_raw_file",
+                    return_value="name: Notify Engine",
+                ),
+            ):
+                result = asyncio.run(install(pkg_id))
+
+            self.assertTrue(result.get("success"), msg=result)
+            self.assertNotIn("deployment_notice", result)
+            self.assertEqual(
+                result.get("plugin_files_installed"),
+                [".github/workflows/notify-engine.yml"],
+            )
+            self.assertIn(".github/workflows/notify-engine.yml", result.get("installed", []))
+            self.assertIn("agents://pkg-plugin-file", result.get("mcp_services_activated", []))
+            summary = result.get("deployment_summary", {})
+            self.assertEqual(summary.get("plugin_files_count"), 1)
+            target = ws / ".github" / "workflows" / "notify-engine.yml"
+            self.assertTrue(target.is_file())
 
     def test_copy_mode_empty_standalone_files_adds_warning(self) -> None:
         """copy + standalone_files=[] → deployment_warning; standalone_copy=False nel summary."""
