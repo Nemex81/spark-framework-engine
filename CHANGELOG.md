@@ -10,6 +10,26 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — spark-ops role inversion (2026-05-10)
+
+- `packages/spark-base/package-manifest.json` — bump a `2.1.0`.
+  `Agent-Orchestrator` (orchestrazione ciclo E2E) ritorna in `spark-base` come agente
+  core user-operativo. Skill operative correlate (`error-recovery`, `semantic-gate`,
+  `task-scope-guard`) e prompt `orchestrate` seguono il trasferimento in `spark-base`.
+- `packages/spark-ops/package-manifest.json` — bump a `1.1.0`.
+  `spark-assistant` e `spark-guide` (gateway onboarding e routing) si spostano in
+  `spark-ops` come layer sistemico di accesso; le 3 skill E2E vengono rimosse dal
+  catalogo `spark-ops` poiche ora in `spark-base`.
+- `tests/test_spark_ops_decoupling_manifest.py` — `MIGRATED_AGENTS`,
+  `MIGRATED_PROMPTS`, `MIGRATED_SKILLS` e `BASE_OWNED_AFTER_SPLIT` aggiornati
+  per riflettere la nuova distribuzione.
+- `packages/spark-ops/.github/AGENTS.md` e `packages/spark-base/.github/AGENTS.md`
+  aggiornati con i riferimenti corretti agli agenti per package.
+- `packages/spark-ops/README.md` — aggiornato con la nuova lista risorse MCP.
+- `packages/spark-ops/.github/agents/spark-assistant.agent.md` e
+  `packages/spark-ops/.github/agents/spark-guide.agent.md` — creati con
+  `scf_owner: "spark-ops"` (file fisici nel package corretto).
+
 ### Added - spark-ops decoupling (2026-05-10)
 
 - `packages/spark-ops/` - nuovo package MCP-only operativo per `Agent-Orchestrator`,

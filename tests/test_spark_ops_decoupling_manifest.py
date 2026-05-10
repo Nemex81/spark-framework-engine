@@ -10,18 +10,17 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGES_ROOT = REPO_ROOT / "packages"
 
-MIGRATED_AGENTS = {"Agent-FrameworkDocs", "Agent-Orchestrator", "Agent-Release"}
+MIGRATED_AGENTS = {"Agent-FrameworkDocs", "Agent-Release", "spark-assistant", "spark-guide"}
 MIGRATED_PROMPTS = {
     "framework-changelog",
     "framework-release",
     "framework-update",
-    "orchestrate",
     "release",
 }
-MIGRATED_SKILLS = {"error-recovery", "semantic-gate", "task-scope-guard"}
+MIGRATED_SKILLS: set[str] = set()
 
 BASE_OWNED_AFTER_SPLIT = {
-    "agents": {"Agent-Research", "Agent-Git", "spark-assistant", "spark-guide"},
+    "agents": {"Agent-Research", "Agent-Git", "Agent-Orchestrator"},
     "prompts": {"framework-unlock", "git-commit", "git-merge", "scf-install"},
     "skills": {
         "rollback-procedure",
@@ -65,7 +64,7 @@ def test_spark_base_manifest_no_longer_exports_operational_resources() -> None:
     metadata_paths = {item["path"] for item in manifest["files_metadata"]}
     engine_skills = set(manifest["engine_provided_skills"])
 
-    assert manifest["version"] == "2.0.0"
+    assert manifest["version"] == "2.1.0"
     assert set(resources["agents"]).isdisjoint(MIGRATED_AGENTS)
     assert set(resources["prompts"]).isdisjoint(MIGRATED_PROMPTS)
     assert set(resources["skills"]).isdisjoint(MIGRATED_SKILLS)

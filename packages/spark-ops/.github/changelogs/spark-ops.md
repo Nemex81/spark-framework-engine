@@ -16,7 +16,13 @@ scf_merge_priority: 15
 
 ### Added
 
-- Initial operational package with `Agent-Orchestrator`, `Agent-FrameworkDocs`, `Agent-Release`, E2E gate skills, and framework maintenance prompts.
+- `spark-assistant` e `spark-guide` ora forniti da `spark-ops` (spostati da `spark-base`).
+
+### Removed
+
+- `Agent-Orchestrator` spostato in `spark-base` (agente core del ciclo E2E utente).
+- Skill operative `error-recovery`, `semantic-gate`, `task-scope-guard` ora in `spark-base`.
+- Prompt `orchestrate` ora in `spark-base`.
 
 ## [1.0.0] - 2026-05-10
 

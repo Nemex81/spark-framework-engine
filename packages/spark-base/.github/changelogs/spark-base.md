@@ -14,20 +14,25 @@ scf_merge_priority: 10
 
 ## [Unreleased]
 
+### Added
+
+- `Agent-Orchestrator` ritorna in `spark-base` come agente core del ciclo E2E.
+- Skill operative `error-recovery`, `semantic-gate`, `task-scope-guard` ora in `spark-base`.
+- Prompt `orchestrate` ora in `spark-base`.
+
 ### Removed
 
+- `spark-assistant` e `spark-guide` spostati in `spark-ops` (layer sistemico).
 - Rimossi dal catalogo distribuito MCP di `spark-base` gli agenti operativi
-	`Agent-Orchestrator`, `Agent-FrameworkDocs` e `Agent-Release`, ora forniti
-	dal nuovo package `spark-ops`.
-- Rimossi dal catalogo distribuito i prompt `orchestrate`, `release`,
-	`framework-changelog`, `framework-release` e `framework-update`, ora forniti
+	`Agent-FrameworkDocs` e `Agent-Release`, forniti
+	dal package `spark-ops`.
+- Rimossi dal catalogo distribuito i prompt `release`,
+	`framework-changelog`, `framework-release` e `framework-update`, forniti
 	da `spark-ops`.
-- Rimossi dal catalogo distribuito le skill operative `semantic-gate`,
-	`error-recovery` e `task-scope-guard`, ora fornite da `spark-ops`.
 
 ### Changed
 
-- `spark-base` passa a `2.0.0` e diventa il layer user-facing/shared; i file
+- `spark-base` passa a `2.1.0`.
 	sorgente legacy non vengono eliminati fisicamente finche non viene confermata
 	la procedura `file-deletion-guard`.
 

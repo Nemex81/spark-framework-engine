@@ -12,8 +12,7 @@ scf_merge_priority: 10
 
 ## Base Agents (spark-base)
 
-- spark-assistant — executor — workspace entrypoint, onboarding, package lifecycle, diagnostics
-- spark-guide — executor — user entrypoint, framework orientation, routing to spark-assistant
+- Agent-Orchestrator — executor — E2E orchestration, gates, runtime-state coordination
 - Agent-Git — executor — git, commit, push, merge, tag proposal
 - Agent-Helper — executor — framework-help, discovery, routing hints
 - Agent-Welcome — executor — setup, project-profile, onboarding
@@ -30,9 +29,10 @@ Il motore aggrega i file disponibili tramite `scf://agents-index`.
 
 ## Operational Agents
 
-Gli agenti di ciclo E2E e manutenzione framework (`Agent-Orchestrator`,
-`Agent-FrameworkDocs`, `Agent-Release`) sono forniti dal package `spark-ops`.
-`spark-base` resta il layer user-facing e non dipende da `spark-ops`.
+Gli agenti di onboarding e sistema (`spark-assistant`, `spark-guide`),
+di manutenzione framework (`Agent-FrameworkDocs`, `Agent-Release`)
+sono forniti dal package `spark-ops`.
+`spark-base` resta il layer core user-operativo e non dipende da `spark-ops`.
 
 ## MCP Runtime Tools (engine v2.4.0 — feature introdotte tra v1.5.0 e v1.6.0)
 

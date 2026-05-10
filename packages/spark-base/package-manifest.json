@@ -1,7 +1,7 @@
 {
   "schema_version": "3.1",
   "package": "spark-base",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "display_name": "SPARK Base Layer",
   "description": "Layer fondazionale SCF user-facing con onboarding, package lifecycle, workflow progetto e policy condivise.",
   "author": "Nemex81",
@@ -21,10 +21,9 @@
       "Agent-Helper",
       "Agent-Plan",
       "Agent-Research",
+      "Agent-Orchestrator",
       "Agent-Validate",
-      "Agent-Welcome",
-      "spark-assistant",
-      "spark-guide"
+      "Agent-Welcome"
     ],
     "prompts": [
       "framework-unlock",
@@ -32,6 +31,7 @@
       "git-merge",
       "help",
       "init",
+      "orchestrate",
       "personality",
       "project-setup",
       "project-update",
@@ -59,6 +59,7 @@
       "changelog-entry",
       "conventional-commit",
       "document-template",
+      "error-recovery",
       "file-deletion-guard",
       "framework-guard",
       "framework-index",
@@ -70,8 +71,10 @@
       "project-profile",
       "project-reset",
       "rollback-procedure",
+      "semantic-gate",
       "semver-bump",
       "style-setup",
+      "task-scope-guard",
       "validate-accessibility",
       "verbosity"
     ],
@@ -92,12 +95,11 @@
     ".github/agents/Agent-Docs.md",
     ".github/agents/Agent-Git.md",
     ".github/agents/Agent-Helper.md",
+    ".github/agents/Agent-Orchestrator.md",
     ".github/agents/Agent-Plan.md",
     ".github/agents/Agent-Research.md",
     ".github/agents/Agent-Validate.md",
     ".github/agents/Agent-Welcome.md",
-    ".github/agents/spark-assistant.agent.md",
-    ".github/agents/spark-guide.agent.md",
     ".github/changelogs/spark-base.md",
     ".github/copilot-instructions.md",
     ".github/instructions/framework-guard.instructions.md",
@@ -114,6 +116,7 @@
     ".github/prompts/git-merge.prompt.md",
     ".github/prompts/help.prompt.md",
     ".github/prompts/init.prompt.md",
+    ".github/prompts/orchestrate.prompt.md",
     ".github/prompts/personality.prompt.md",
     ".github/prompts/project-setup.prompt.md",
     ".github/prompts/project-update.prompt.md",
@@ -140,6 +143,7 @@
     ".github/skills/changelog-entry/SKILL.md",
     ".github/skills/conventional-commit.skill.md",
     ".github/skills/document-template.skill.md",
+    ".github/skills/error-recovery/SKILL.md",
     ".github/skills/file-deletion-guard.skill.md",
     ".github/skills/framework-guard.skill.md",
     ".github/skills/framework-index/SKILL.md",
@@ -152,8 +156,10 @@
     ".github/skills/project-profile.skill.md",
     ".github/skills/project-reset.skill.md",
     ".github/skills/rollback-procedure.skill.md",
+    ".github/skills/semantic-gate.skill.md",
     ".github/skills/semver-bump.skill.md",
     ".github/skills/style-setup.skill.md",
+    ".github/skills/task-scope-guard.skill.md",
     ".github/skills/validate-accessibility/SKILL.md",
     ".github/skills/verbosity.skill.md"
   ],
@@ -204,6 +210,15 @@
       "scf_protected": false
     },
     {
+      "path": ".github/agents/Agent-Orchestrator.md",
+      "scf_owner": "spark-base",
+      "scf_version": "2.1.0",
+      "scf_file_role": "agent",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 10,
+      "scf_protected": false
+    },
+    {
       "path": ".github/agents/Agent-Plan.md",
       "scf_owner": "spark-base",
       "scf_version": "1.4.0",
@@ -234,24 +249,6 @@
       "path": ".github/agents/Agent-Welcome.md",
       "scf_owner": "spark-base",
       "scf_version": "1.4.0",
-      "scf_file_role": "agent",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/agents/spark-assistant.agent.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.4.0",
-      "scf_file_role": "agent",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/agents/spark-guide.agent.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.2.0",
       "scf_file_role": "agent",
       "scf_merge_strategy": "replace",
       "scf_merge_priority": 10,
@@ -396,6 +393,15 @@
       "path": ".github/prompts/init.prompt.md",
       "scf_owner": "spark-base",
       "scf_version": "1.2.0",
+      "scf_file_role": "prompt",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 10,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/prompts/orchestrate.prompt.md",
+      "scf_owner": "spark-base",
+      "scf_version": "1.0.0",
       "scf_file_role": "prompt",
       "scf_merge_strategy": "replace",
       "scf_merge_priority": 10,
@@ -636,6 +642,15 @@
       "scf_protected": false
     },
     {
+      "path": ".github/skills/error-recovery/SKILL.md",
+      "scf_owner": "spark-base",
+      "scf_version": "1.0.0",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 10,
+      "scf_protected": false
+    },
+    {
       "path": ".github/skills/file-deletion-guard.skill.md",
       "scf_owner": "spark-base",
       "scf_version": "engine-managed",
@@ -744,6 +759,15 @@
       "scf_protected": false
     },
     {
+      "path": ".github/skills/semantic-gate.skill.md",
+      "scf_owner": "spark-base",
+      "scf_version": "1.0.0",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 10,
+      "scf_protected": false
+    },
+    {
       "path": ".github/skills/semver-bump.skill.md",
       "scf_owner": "spark-base",
       "scf_version": "engine-managed",
@@ -756,6 +780,15 @@
       "path": ".github/skills/style-setup.skill.md",
       "scf_owner": "spark-base",
       "scf_version": "engine-managed",
+      "scf_file_role": "skill",
+      "scf_merge_strategy": "replace",
+      "scf_merge_priority": 10,
+      "scf_protected": false
+    },
+    {
+      "path": ".github/skills/task-scope-guard.skill.md",
+      "scf_owner": "spark-base",
+      "scf_version": "1.0.0",
       "scf_file_role": "skill",
       "scf_merge_strategy": "replace",
       "scf_merge_priority": 10,
@@ -785,6 +818,7 @@
     "changelog-entry",
     "conventional-commit",
     "document-template",
+    "error-recovery",
     "file-deletion-guard",
     "framework-guard",
     "framework-index",
@@ -793,8 +827,10 @@
     "git-execution",
     "personality",
     "rollback-procedure",
+    "semantic-gate",
     "semver-bump",
     "style-setup",
+    "task-scope-guard",
     "validate-accessibility",
     "verbosity"
   ],

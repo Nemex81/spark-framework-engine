@@ -1,7 +1,7 @@
 {
   "schema_version": "3.1",
   "package": "spark-ops",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "display_name": "SPARK Ops Layer",
   "description": "Layer operativo SCF per orchestrazione E2E, manutenzione framework e release coordination sopra spark-base.",
   "author": "Nemex81",
@@ -21,57 +21,44 @@
   "mcp_resources": {
     "agents": [
       "Agent-FrameworkDocs",
-      "Agent-Orchestrator",
-      "Agent-Release"
+      "Agent-Release",
+      "spark-assistant",
+      "spark-guide"
     ],
     "prompts": [
       "framework-changelog",
       "framework-release",
       "framework-update",
-      "orchestrate",
       "release"
     ],
-    "skills": [
-      "error-recovery",
-      "semantic-gate",
-      "task-scope-guard"
-    ],
+    "skills": [],
+    "instructions": [],
     "instructions": []
   },
   "files": [
     ".github/AGENTS.md",
     ".github/agents/Agent-FrameworkDocs.md",
-    ".github/agents/Agent-Orchestrator.md",
     ".github/agents/Agent-Release.md",
+    ".github/agents/spark-assistant.agent.md",
+    ".github/agents/spark-guide.agent.md",
     ".github/changelogs/spark-ops.md",
     ".github/prompts/framework-changelog.prompt.md",
     ".github/prompts/framework-release.prompt.md",
     ".github/prompts/framework-update.prompt.md",
-    ".github/prompts/orchestrate.prompt.md",
-    ".github/prompts/release.prompt.md",
-    ".github/skills/error-recovery/SKILL.md",
-    ".github/skills/semantic-gate.skill.md",
-    ".github/skills/task-scope-guard.skill.md"
+    ".github/prompts/release.prompt.md"
   ],
   "files_metadata": [
     {"path": ".github/AGENTS.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "config", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
     {"path": ".github/agents/Agent-FrameworkDocs.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "agent", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
-    {"path": ".github/agents/Agent-Orchestrator.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "agent", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
     {"path": ".github/agents/Agent-Release.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "agent", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
+    {"path": ".github/agents/spark-assistant.agent.md", "scf_owner": "spark-ops", "scf_version": "1.1.0", "scf_file_role": "agent", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
+    {"path": ".github/agents/spark-guide.agent.md", "scf_owner": "spark-ops", "scf_version": "1.1.0", "scf_file_role": "agent", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
     {"path": ".github/changelogs/spark-ops.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "config", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
     {"path": ".github/prompts/framework-changelog.prompt.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "prompt", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
     {"path": ".github/prompts/framework-release.prompt.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "prompt", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
     {"path": ".github/prompts/framework-update.prompt.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "prompt", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
-    {"path": ".github/prompts/orchestrate.prompt.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "prompt", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
-    {"path": ".github/prompts/release.prompt.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "prompt", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
-    {"path": ".github/skills/error-recovery/SKILL.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "skill", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
-    {"path": ".github/skills/semantic-gate.skill.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "skill", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false},
-    {"path": ".github/skills/task-scope-guard.skill.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "skill", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false}
+    {"path": ".github/prompts/release.prompt.md", "scf_owner": "spark-ops", "scf_version": "1.0.0", "scf_file_role": "prompt", "scf_merge_strategy": "replace", "scf_merge_priority": 15, "scf_protected": false}
   ],
-  "engine_provided_skills": [
-    "error-recovery",
-    "semantic-gate",
-    "task-scope-guard"
-  ],
+  "engine_provided_skills": [],
   "engine_provided_instructions": []
 }

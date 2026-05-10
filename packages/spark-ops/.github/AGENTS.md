@@ -12,7 +12,8 @@ scf_merge_priority: 15
 
 ## Operational Agents
 
-- Agent-Orchestrator - executor - E2E orchestration, gates, runtime-state coordination
+- spark-assistant - executor - workspace entrypoint, onboarding, package lifecycle, diagnostics
+- spark-guide - executor - user entrypoint, framework orientation, routing to spark-assistant
 - Agent-FrameworkDocs - executor - framework docs, changelog, AGENTS index alignment
 - Agent-Release - executor - semver, packaging guidance, release coordination
 
@@ -20,3 +21,4 @@ scf_merge_priority: 15
 
 `spark-ops` depends on `spark-base` for shared policies, git guard rails, output style, and user-facing entrypoints.
 `spark-base` must not depend on `spark-ops`.
+`Agent-Orchestrator` is provided by `spark-base` as a core user-operative agent.
