@@ -2,9 +2,9 @@
 
 # Architettura — SPARK Framework Engine
 
-> **Versione documentata:** 3.3.0  
+> **Versione documentata:** 3.4.0  
 > **Branch:** `feature/dual-mode-manifest-v3.1`  
-> **Fonte:** `spark/core/constants.py:12` → `ENGINE_VERSION = "3.3.0"`
+> **Fonte:** `spark/core/constants.py:12` → `ENGINE_VERSION = "3.4.0"`
 
 ---
 
@@ -239,7 +239,7 @@ spark-framework-engine/
 ```python
 # spark/core/constants.py
 
-ENGINE_VERSION                 = "3.3.0"
+ENGINE_VERSION                 = "3.4.0"
 _MANIFEST_FILENAME             = ".scf-manifest.json"
 _MANIFEST_SCHEMA_VERSION       = "3.0"
 _SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {"1.0", "2.0", "2.1", "3.0"}

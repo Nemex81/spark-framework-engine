@@ -5,7 +5,7 @@
   "display_name": "SCF Python Code Crafter",
   "description": "Agenti, skill e istruzioni specializzati per lo sviluppo Python. Richiede scf-master-codecrafter.",
   "author": "Nemex81",
-  "min_engine_version": "3.1.0",
+  "min_engine_version": "3.4.0",
   "dependencies": [
     {
       "id": "scf-master-codecrafter",

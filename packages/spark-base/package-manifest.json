@@ -5,7 +5,7 @@
   "display_name": "SPARK Base Layer",
   "description": "Layer fondazionale SCF user-facing con onboarding, package lifecycle, workflow progetto e policy condivise.",
   "author": "Nemex81",
-  "min_engine_version": "3.1.0",
+  "min_engine_version": "3.4.0",
   "delivery_mode": "mcp_only",
   "dependencies": [],
   "conflicts": [],

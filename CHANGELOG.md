@@ -10,6 +10,8 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-05-10
+
 ### Fixed — bootstrap sentinel legacy → Agent-Welcome.md (2026-05-10)
 
 - `spark/boot/tools_bootstrap.py` — sentinel di idempotenza bootstrap cambiato da
