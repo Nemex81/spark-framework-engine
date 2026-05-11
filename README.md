@@ -65,7 +65,7 @@ scf://runtime-state
 > Il numero effettivo a runtime è superiore perché i pacchetti installati registrano
 > risorse aggiuntive al boot tramite `_v3_repopulate_registry()`.
 
-## Tools Disponibili (50)
+## Tools Disponibili (51)
 
 ```
 scf_list_overrides(resource_type=None)

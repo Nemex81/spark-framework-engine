@@ -75,7 +75,7 @@ centralizzato.
 - **Non generano file nel workspace utente.**
 - Accesso tramite URI resource: `agents://`, `skills://`, `instructions://`, `prompts://`.
 - `delivery_mode: "mcp_only"` nel `package-manifest.json`
-  (`packages/spark-base/package-manifest.json:12`).
+  (`packages/spark-base/package-manifest.json`).
 - `schema_version: "3.1"` richiesto per dichiarare `mcp_resources`.
 
 `spark-base` resta il layer fondazionale user-facing; `spark-ops` ospita gli
@@ -92,6 +92,45 @@ nel workspace utente tramite `scf_plugin_install()` o `scf_install_package()`.
 - Tracciamento in `.github/.scf-manifest.json` (ManifestManager).
 - Preservation gate attivo: i file modificati dall'utente non vengono sovrascritti
   senza conferma esplicita (`force=True` o `conflict_mode` diverso da `abort`).
+
+### 3.1 Flusso Decisionale Dual-Universe Package Resolution
+
+Implementato in `spark/boot/tools_bootstrap.py` — funzioni
+`_resolve_local_manifest()`, `_try_local_install_context()` e
+`_get_package_install_context()` (closure dentro `register_bootstrap_tools()`).
+
+```
+scf_bootstrap_workspace(install_base=True)
+        │
+        ▼
+_get_package_install_context(package_id)
+        │
+        ├─► _try_local_install_context(package_id)
+        │           │
+        │           ├─► _resolve_local_manifest(engine_root, package_id)
+        │           │       └─► legge packages/{id}/package-manifest.json dal disco
+        │           │
+        │           ├── manifest trovato E delivery_mode == "mcp_only"?
+        │           │       YES ──► ritorna context dict con _universe="A"
+        │           │       NO  ──► ritorna None  (Universe B fallback)
+        │           │
+        ├── result is not None?
+        │       YES ──► UNIVERSO A: legge file da packages/{id}/ su disco locale
+        │               (nessuna chiamata HTTP, no RegistryClient.fetch_package_manifest)
+        │
+        └── result is None?
+                YES ──► UNIVERSO B: _ih._get_package_install_context()
+                         └─► RegistryClient.fetch()  →  remote registry HTTPS
+```
+
+**Invariante:** i pacchetti con `delivery_mode=mcp_only` e manifest locale
+risolvono SEMPRE da `packages/` senza rete. Il fallback al registry remoto
+(Universo B) si attiva solo per pacchetti senza entry locale o con
+`delivery_mode` diverso da `mcp_only`.
+
+**File toccati:** `spark/boot/tools_bootstrap.py`, tutti i
+`packages/*/package-manifest.json` (campo `delivery_mode` aggiunto).
+**Test gate:** `tests/test_dual_universe_resolution.py` — 4 test, tutti PASS.
 
 ---
 
@@ -228,7 +267,7 @@ spark-framework-engine/
 │   ├── workspace/                 WorkspaceLocator e helper path
 │   └── assets/                    Phase6 bootstrap batch assets
 ├── docs/                          Documentazione tecnica e piani
-├── tests/                         Suite pytest (≥ 534 test, esclude test_integration_live.py)
+├── tests/                         Suite pytest (≥ 538 test, esclude test_integration_live.py)
 └── runtime/                       Directory locale engine (snapshots, merge-sessions, backups)
 ```
 

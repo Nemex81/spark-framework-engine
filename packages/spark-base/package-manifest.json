@@ -8,6 +8,7 @@
   "min_engine_version": "3.4.0",
   "dependencies": [],
   "conflicts": [],
+  "delivery_mode": "mcp_only",
   "file_ownership_policy": "error",
   "changelog_path": ".github/changelogs/spark-base.md",
   "workspace_files": [

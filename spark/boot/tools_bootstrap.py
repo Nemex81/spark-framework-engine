@@ -28,12 +28,44 @@ from spark.workspace import (
     _write_update_policy_payload,
 )
 from spark.boot import install_helpers as _ih
-from spark.core.utils import _utc_now, parse_markdown_frontmatter
+from spark.core.utils import (
+    _infer_scf_file_role,
+    _normalize_dependency_ids,
+    _normalize_manifest_relative_path,
+    _normalize_string_list,
+    _sha256_text,
+    _utc_now,
+    parse_markdown_frontmatter,
+)
 
 if TYPE_CHECKING:
     from spark.boot.engine import SparkFrameworkEngine  # pragma: no cover
 
 _log = logging.getLogger("spark-framework-engine")
+
+
+def _resolve_local_manifest(engine_root: Path, package_id: str) -> dict[str, Any] | None:
+    """Load the local package manifest from the engine packages store.
+
+    Args:
+        engine_root: Root directory of the SCF engine.
+        package_id: Package identifier.
+
+    Returns:
+        Parsed manifest dict if found and readable, else None.
+    """
+    manifest_path = engine_root / "packages" / package_id / "package-manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+    except (OSError, json.JSONDecodeError) as exc:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Cannot read local manifest for '%s': %s",
+            package_id,
+            exc,
+        )
+        return None
 
 
 def _classify_bootstrap_conflict(dest_path: Path) -> str:
@@ -205,8 +237,177 @@ def register_bootstrap_tools(
 
     _build_diff_summary = _ih._build_diff_summary
 
+    # ------------------------------------------------------------------
+    # Universe A/B routing helpers
+    # ------------------------------------------------------------------
+
+    def _try_local_install_context(package_id: str) -> dict[str, Any] | None:
+        """Probe Universe A: resolve package context from the local engine store.
+
+        Returns a context dict with ``_universe="A"`` when the local
+        ``packages/`` store has a manifest for *package_id* that declares
+        ``delivery_mode=mcp_only``.  Returns ``None`` to signal that
+        Universe B (remote registry) should be used instead.
+
+        Args:
+            package_id: Package identifier.
+
+        Returns:
+            Install context dict on success (Universe A), else None.
+        """
+        pkg_manifest = _resolve_local_manifest(ctx.engine_root, package_id)
+        if pkg_manifest is None:
+            return None
+        if str(pkg_manifest.get("delivery_mode", "")).strip() != "mcp_only":
+            return None
+        files: list[str] = pkg_manifest.get("files", [])
+        if not files:
+            return None
+
+        pkg_version = str(pkg_manifest.get("version", "")).strip()
+        min_engine_version = str(pkg_manifest.get("min_engine_version", "")).strip()
+        dependencies = _normalize_dependency_ids(pkg_manifest.get("dependencies", []))
+        declared_conflicts = _normalize_string_list(pkg_manifest.get("conflicts", []))
+        file_ownership_policy = (
+            str(pkg_manifest.get("file_ownership_policy", "error")).strip() or "error"
+        )
+        file_policies = _ih._normalize_file_policies(
+            pkg_manifest.get("file_policies", {}),
+            pkg_manifest.get("files_metadata", []),
+        )
+        installed_versions = manifest.get_installed_versions()
+        missing_dependencies = [d for d in dependencies if d not in installed_versions]
+        present_conflicts = [c for c in declared_conflicts if c in installed_versions]
+
+        _log.info(
+            "[SPARK-ENGINE][INFO] Universe A: resolved '%s' from local store (delivery_mode=mcp_only).",
+            package_id,
+        )
+        return {
+            "success": True,
+            "pkg": {"id": package_id, "latest_version": pkg_version, "status": "active"},
+            "pkg_manifest": pkg_manifest,
+            "files": files,
+            "pkg_version": pkg_version,
+            "min_engine_version": min_engine_version,
+            "dependencies": dependencies,
+            "declared_conflicts": declared_conflicts,
+            "file_ownership_policy": file_ownership_policy,
+            "file_policies": file_policies,
+            "missing_dependencies": missing_dependencies,
+            "present_conflicts": present_conflicts,
+            "_universe": "A",
+        }
+
+    def _build_local_file_records(
+        package_id: str,
+        pkg_version: str,
+        pkg_manifest: dict[str, Any],
+        files: list[str],
+        file_policies: dict[str, str],
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Build file records from the local engine packages store (Universe A).
+
+        Reads file content from disk (``packages/{package_id}/``) instead of
+        fetching from a remote URL.  The returned record format is identical
+        to ``_build_remote_file_records`` so the rest of the install flow
+        remains unchanged.
+
+        Args:
+            package_id: Package identifier.
+            pkg_version: Resolved package version string.
+            pkg_manifest: Parsed package manifest dict.
+            files: List of relative file paths declared in the manifest.
+            file_policies: Per-file policy map.
+
+        Returns:
+            Tuple (local_files, read_errors).
+        """
+        store_root = ctx.engine_root / "packages" / package_id
+
+        metadata_by_path: dict[str, dict[str, Any]] = {}
+        raw_files_metadata = pkg_manifest.get("files_metadata", [])
+        if isinstance(raw_files_metadata, list):
+            for item in raw_files_metadata:
+                if not isinstance(item, dict):
+                    continue
+                raw_path = str(item.get("path", "")).strip()
+                normalized_rel = _normalize_manifest_relative_path(raw_path)
+                if normalized_rel is None:
+                    continue
+                metadata_by_path[f".github/{normalized_rel}"] = item
+
+        local_files: list[dict[str, Any]] = []
+        read_errors: list[str] = []
+
+        for file_path in files:
+            metadata = metadata_by_path.get(file_path, {})
+            merge_strategy = str(metadata.get("scf_merge_strategy", "")).strip()
+            if not merge_strategy:
+                policy = file_policies.get(file_path, "error")
+                if policy == "extend":
+                    merge_strategy = "merge_sections"
+                elif policy == "delegate":
+                    merge_strategy = "user_protected"
+                else:
+                    merge_strategy = "replace"
+
+            try:
+                merge_priority = int(metadata.get("scf_merge_priority", 0) or 0)
+            except (TypeError, ValueError):
+                merge_priority = 0
+
+            local_path = store_root / file_path
+            if not local_path.is_file():
+                read_errors.append(
+                    f"{file_path}: not found in local store {store_root}"
+                )
+                continue
+
+            try:
+                content = local_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                read_errors.append(f"{file_path}: {exc}")
+                continue
+
+            local_files.append(
+                {
+                    "path": file_path,
+                    "content": content,
+                    "sha256": _sha256_text(content),
+                    "scf_owner": (
+                        str(metadata.get("scf_owner", package_id)).strip() or package_id
+                    ),
+                    "scf_version": (
+                        str(metadata.get("scf_version", pkg_version)).strip() or pkg_version
+                    ),
+                    "scf_file_role": (
+                        str(
+                            metadata.get(
+                                "scf_file_role",
+                                _infer_scf_file_role(file_path.removeprefix(".github/")),
+                            )
+                        ).strip()
+                        or _infer_scf_file_role(file_path.removeprefix(".github/"))
+                    ),
+                    "scf_merge_strategy": merge_strategy,
+                    "scf_merge_priority": merge_priority,
+                    "scf_protected": bool(metadata.get("scf_protected", False)),
+                }
+            )
+
+        return local_files, read_errors
+
     def _get_package_install_context(package_id: str) -> dict[str, Any]:
-        """Shim: injects ``registry`` and ``manifest`` from factory scope."""
+        """Universe A/B router with registry injection.
+
+        Probes the local engine store first (Universe A: delivery_mode=mcp_only).
+        Falls back to the remote registry (Universe B) when the package is not
+        present locally or does not declare ``delivery_mode=mcp_only``.
+        """
+        local_ctx = _try_local_install_context(package_id)
+        if local_ctx is not None:
+            return local_ctx
         return _ih._get_package_install_context(package_id, registry, manifest)
 
     # ------------------------------------------------------------------
@@ -558,14 +759,23 @@ def register_bootstrap_tools(
                         "update_mode": update_mode,
                         "policy_source": policy_source,
                     }
-                remote_files, remote_fetch_errors = _build_remote_file_records(
-                    "spark-base",
-                    install_context["pkg_version"],
-                    install_context["pkg"],
-                    install_context["pkg_manifest"],
-                    install_context["files"],
-                    install_context["file_policies"],
-                )
+                if install_context.get("_universe") == "A":
+                    remote_files, remote_fetch_errors = _build_local_file_records(
+                        "spark-base",
+                        install_context["pkg_version"],
+                        install_context["pkg_manifest"],
+                        install_context["files"],
+                        install_context["file_policies"],
+                    )
+                else:
+                    remote_files, remote_fetch_errors = _build_remote_file_records(
+                        "spark-base",
+                        install_context["pkg_version"],
+                        install_context["pkg"],
+                        install_context["pkg_manifest"],
+                        install_context["files"],
+                        install_context["file_policies"],
+                    )
                 if remote_fetch_errors:
                     return {
                         **base_result,

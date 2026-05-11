@@ -10,6 +10,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — Dual Universe Package Resolution (2026-05-11)
+
+- `spark/boot/tools_bootstrap.py` — aggiunta logica di routing `delivery_mode`-based:
+  se `delivery_mode=mcp_only` e manifest locale presente in `packages/{id}/` →
+  Universo A (risoluzione da disco, zero chiamate HTTP); altrimenti → Universo B
+  (registry remoto HTTPS via `RegistryClient`). Funzioni aggiunte:
+  `_resolve_local_manifest(engine_root, package_id)` (standalone),
+  `_try_local_install_context(package_id)` (closure),
+  `_build_local_file_records(...)` (closure).
+  Il routing in `_get_package_install_context()` chiama prima `_try_local_install_context()`
+  e fa fallback a `_ih._get_package_install_context()` solo se ritorna `None`.
+- `packages/spark-base/package-manifest.json` — aggiunto `"delivery_mode": "mcp_only"`
+  per allineamento con gli altri 3 pacchetti engine-embedded già conformi.
+- `tests/test_dual_universe_resolution.py` — 4 nuovi test: `test_local_context_returned_for_mcp_only_package`,
+  `test_local_context_returns_none_when_no_local_manifest`,
+  `test_local_context_returns_none_without_mcp_only`,
+  `test_spark_base_real_manifest_qualifies_for_universe_a`.
+  Suite: **538 passed (+4), 1 failed (pre-esistente), 19 skipped, 0 regressioni**.
+
 ### Changed — risoluzione final skipped test (env-gated → mock subprocess) (2026-05-10)
 
 - `tests/test_server_stdio_smoke.py` — `test_mcp_initialize_via_stdio` precedentemente
