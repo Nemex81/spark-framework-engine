@@ -2,18 +2,6 @@
   "folders": [
     {
       "path": "."
-    },
-    {
-      "path": "../scf-registry"
-    },
-    {
-      "path": "../scf-master-codecrafter"
-    },
-    {
-      "path": "../scf-pycode-crafter"
-    },
-    {
-      "path": "../spark-base"
     }
   ],
   "settings": {

@@ -359,7 +359,33 @@ non tracciati, chiede all'utente se vuole `replace`, `preserve` oppure un'integr
 best-effort `integrate` prima di toccare il workspace.
 
 ---
+## Registry e Pacchetti (HTTPS-first)
 
+Il motore ottiene il registro dei pacchetti SCF e i file dei pacchetti
+esclusivamente via HTTPS da GitHub. Non è necessario clonare i repository
+dei pacchetti localmente — il motore gestisce tutto tramite tool MCP.
+
+**Registry principale (fonte di verità per `scf_list_available_packages`):**
+
+```
+https://raw.githubusercontent.com/Nemex81/scf-registry/main/registry.json
+```
+
+**Pacchetti disponibili (plugin indipendenti per il `.github/` dell'utente):**
+
+| Pacchetto | Repository |
+|---|---|
+| `spark-base` | https://github.com/Nemex81/spark-base |
+| `scf-master-codecrafter` | https://github.com/Nemex81/scf-master-codecrafter |
+| `scf-pycode-crafter` | https://github.com/Nemex81/scf-pycode-crafter |
+
+> Il motore scarica i file di ciascun pacchetto da `raw.githubusercontent.com`
+> al momento dell'installazione e li memorizza nella store locale
+> (`packages/{id}/.github/`). L'utente non deve gestire i repository dei
+> pacchetti: usa `scf_install_package(id)`, `scf_update_package(id)` e
+> `scf_remove_package(id)`.
+
+---
 ## Architettura SCF
 
 Questo motore è il Livello 1 dell’ecosistema SPARK Code Framework.
