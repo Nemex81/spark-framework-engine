@@ -189,7 +189,7 @@ def test_save_cache_logs_warning_on_os_error(tmp_path: Path) -> None:
     cache_file = tmp_path / "readonly.json"
     client = RegistryClient(tmp_path, cache_path=cache_file)
 
-    with patch("builtins.open", side_effect=OSError("read only")):
+    with patch.object(type(cache_file), "write_text", side_effect=OSError("read only")):
         # Deve completare senza eccezioni
         client._save_cache(_SAMPLE_REGISTRY)
 
@@ -271,3 +271,44 @@ def test_fetch_raw_file_returns_content_from_url(tmp_path: Path) -> None:
         result = client.fetch_raw_file(raw_url)
 
     assert result == expected_content
+
+
+# ---------------------------------------------------------------------------
+# _fetch_remote — direct urlopen coverage
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_remote_calls_urlopen_and_returns_parsed_json(tmp_path: Path) -> None:
+    """_fetch_remote() chiama urlopen e restituisce il JSON parsato."""
+    client = RegistryClient(
+        tmp_path,
+        registry_url=_VALID_REGISTRY_URL,
+    )
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.read.return_value = json.dumps(_SAMPLE_REGISTRY).encode("utf-8")
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        result = client._fetch_remote()
+
+    assert result["schema_version"] == "2.0"
+    assert len(result["packages"]) == 2
+
+
+def test_fetch_remote_sends_user_agent_header(tmp_path: Path) -> None:
+    """_fetch_remote() invia un header User-Agent contenente 'spark-framework-engine'."""
+    client = RegistryClient(
+        tmp_path,
+        registry_url=_VALID_REGISTRY_URL,
+    )
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.read.return_value = json.dumps(_SAMPLE_REGISTRY).encode("utf-8")
+
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+        client._fetch_remote()
+
+    called_req = mock_urlopen.call_args[0][0]
+    assert "spark-framework-engine" in called_req.get_header("User-agent")

@@ -10,6 +10,19 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — coverage gap + skipped test (2026-05-11)
+
+- `tests/test_registry_client.py` — +2 test:
+  `test_fetch_remote_calls_urlopen_and_returns_parsed_json` (linee 78-84)
+  e `test_fetch_remote_sends_user_agent_header` (header User-Agent).
+  Fix `test_save_cache_logs_warning_on_os_error`: sostituito `patch("builtins.open")`
+  con `patch.object(type(cache_file), "write_text")` per intercettare
+  correttamente l'OSError su `Path.write_text` (linee 92-93).
+  Coverage `spark.registry.client`: 90% → **100%** (20 test, 0 miss).
+- `tests/test_server_stdio_smoke.py` — già non-gated (mock subprocess);
+  0 skipped in suite confermato.
+- Suite: **578 passed, 0 failed, 0 skipped**.
+
 ### Fixed — DISTRO-1/2 + PKG-1: registry sync + spark-base v2.1.0 (2026-05-11)
 
 - `scf-registry/registry.json` (repo esterno) — aggiunto pacchetto `spark-ops v1.1.0`
