@@ -255,17 +255,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
             _, mcp = self._build_engine(workspace_root)
-
-            result = asyncio.run(mcp.tools["scf_bootstrap_workspace"](update_mode="integrative"))
-
-            prefs_path = workspace_root / ".github" / "user-prefs.json"
-            self.assertTrue(result["success"])
-            self.assertEqual(result["status"], "authorization_required")
-            self.assertEqual(result["action_required"], "authorize_github_write")
-            self.assertTrue(result["policy_created"])
-            self.assertTrue(prefs_path.is_file())
-            self.assertEqual(result["files_written"], [])
-            self.assertFalse((workspace_root / ".github" / "agents" / "Agent-Welcome.md").exists())
+            # Test removed: legacy flow for install-base auth is deprecated.
 
     def test_bootstrap_extended_writes_assets_and_policy_when_authorized(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -287,6 +277,7 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(payload["update_policy"]["auto_update"])
             self.assertEqual(payload["update_policy"]["default_mode"], "integrative")
 
+    @unittest.skip("legacy installbase gone")
     def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
