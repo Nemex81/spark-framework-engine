@@ -10,6 +10,15 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — docs: SPARK-REPORT-MCP-Server-Flow-v1.0 (2026-05-11)
+
+- `docs/reports/SPARK-REPORT-MCP-Server-Flow-v1.0.md` — report tecnico completo
+  del flusso server MCP: sequenza `_build_app` (13 passi), architettura Dual-Universe
+  (Universe A locale vs Universe B registry remoto), separazione spark-base v2.1.0 /
+  spark-ops v1.1.0, flusso `scf_bootstrap_workspace`, gestione primo avvio e
+  riavvii successivi, riepilogo tool e resource URI. Documentazione interna, nessuna
+  modifica al codice.
+
 ### Fixed — coverage gap + skipped test (2026-05-11)
 
 - `tests/test_registry_client.py` — +2 test:
