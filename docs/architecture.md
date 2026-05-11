@@ -3,7 +3,7 @@
 # Architettura — SPARK Framework Engine
 
 > **Versione documentata:** 3.4.0  
-> **Branch:** `feature/dual-mode-manifest-v3.1`  
+> **Branch:** `workspace-slim-registry-sync-20260511`  
 > **Fonte:** `spark/core/constants.py:12` → `ENGINE_VERSION = "3.4.0"`
 
 ---
@@ -267,7 +267,7 @@ spark-framework-engine/
 │   ├── workspace/                 WorkspaceLocator e helper path
 │   └── assets/                    Phase6 bootstrap batch assets
 ├── docs/                          Documentazione tecnica e piani
-├── tests/                         Suite pytest (≥ 538 test, esclude test_integration_live.py)
+└── tests/                         Suite pytest (≥ 575 test, esclude test_integration_live.py)
 └── runtime/                       Directory locale engine (snapshots, merge-sessions, backups)
 ```
 

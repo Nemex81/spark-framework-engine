@@ -10,6 +10,16 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Changed — doc audit Flutter purge + coerenza (2026-05-11)
+
+- `docs/architecture.md` — aggiornati contatore test `≥ 538` → `≥ 575` (Section 8)
+  e branch reference `feature/dual-mode-manifest-v3.1` → `workspace-slim-registry-sync-20260511`.
+  Nessun riferimento Flutter/VoiceOver/TalkBack trovato — documentazione già pulita.
+  Coerenza: **8.5/10** — Solidità inizializzazione: **8/10**.
+  Gap P1 residui: DISTRO-1 (spark-ops assente da registry.json, repo esterno),
+  DISTRO-2 (scf-registry/registry.json non pushato, repo esterno),
+  PKG-1 (spark-base v1.7.3 vs test che attende v2.1.0, pre-esistente).
+
 ### Added — Post-Dual-Universe Cleanup (2026-05-11)
 
 - `tests/conftest.py` — hook `pytest_pyfunc_call` per eseguire `async def test_*`
