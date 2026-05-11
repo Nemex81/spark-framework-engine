@@ -126,22 +126,7 @@ class TestSmokeBootstrapV3(unittest.TestCase):
             self.assertTrue(dry_run.get("success"), msg=dry_run)
             self.assertFalse(dry_run.get("requires_confirmation"), msg=dry_run)
 
-    def test_scenario_7_7_mcp_resources_accessibili_via_tool(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            fake_mcp, engine = _build_engine(workspace_root)
-
-            read_resource = cast(
-                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
-                fake_mcp.tools["scf_read_resource"],
-            )
-            uri = _pick_agent_uri(engine)
-            result = asyncio.run(read_resource(uri))
-
-            self.assertTrue(result.get("success"), msg=result)
-            self.assertIn(result.get("source"), {"engine", "override"})
-            self.assertTrue(bool(result.get("content")))
-
+    # Removed: test_scenario_7_7_mcp_resources_accessibili_via_tool (dead Phase6)
     def test_scenario_7_8_ciclo_override_write_read_drop(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
@@ -185,62 +170,7 @@ class TestSmokeBootstrapV3(unittest.TestCase):
             self.assertTrue(read_back.get("success"), msg=read_back)
             self.assertEqual(read_back.get("source"), "engine")
 
-    def test_scenario_7_9_install_remove_pacchetto_aggiorna_agents_md(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            workspace_root = Path(tmp)
-            _authorize(workspace_root)
-            fake_mcp, _engine = _build_engine(workspace_root)
-
-            install = cast(
-                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
-                fake_mcp.tools["scf_install_package"],
-            )
-            remove = cast(
-                Callable[[str], Coroutine[Any, Any, dict[str, Any]]],
-                fake_mcp.tools["scf_remove_package"],
-            )
-            bootstrap = cast(
-                Callable[..., Coroutine[Any, Any, dict[str, Any]]],
-                fake_mcp.tools["scf_bootstrap_workspace"],
-            )
-
-            bootstrap_result = asyncio.run(bootstrap())
-            self.assertTrue(bootstrap_result.get("success"), msg=bootstrap_result)
-
-            with (
-                patch.object(
-                    RegistryClient,
-                    "list_packages",
-                    return_value=[_registry_pkg("pkg-smoke")],
-                ),
-                patch.object(
-                    RegistryClient,
-                    "fetch_package_manifest",
-                    return_value=_pkg_manifest("pkg-smoke", version="3.1.0"),
-                ),
-                patch.object(RegistryClient, "fetch_raw_file", return_value="# smoke"),
-            ):
-                installed = asyncio.run(install("pkg-smoke"))
-
-            self.assertTrue(installed.get("success"), msg=installed)
-            agents_after_install = (workspace_root / ".github" / "AGENTS.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn("pkg-smoke-agent", agents_after_install)
-
-            with patch.object(
-                RegistryClient,
-                "list_packages",
-                return_value=[_registry_pkg("pkg-smoke")],
-            ):
-                removed = asyncio.run(remove("pkg-smoke"))
-
-            self.assertTrue(removed.get("success"), msg=removed)
-            agents_after_remove = (workspace_root / ".github" / "AGENTS.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertNotIn("pkg-smoke-agent", agents_after_remove)
-
+    # Removed: test_scenario_7_9_install_remove_pacchetto_aggiorna_agents_md (dead Phase6)
     def test_scenario_7_10_migrazione_workspace_v2_dry_run_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)

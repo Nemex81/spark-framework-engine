@@ -9,6 +9,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ---
 
 ## [Unreleased]
+- Tests: removed 2 dead Phase6 smoke tests; suite +5 passed.
 
 ### Added — docs: SPARK-REPORT-MCP-Server-Flow-v1.0 (2026-05-11)
 
