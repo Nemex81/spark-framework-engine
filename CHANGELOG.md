@@ -51,6 +51,15 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `tests/test_spark_ops_decoupling_manifest.py` — `test_spark_base_manifest_no_longer_exports_operational_resources`
   ora PASS. Suite: **576 passed, 0 failed**.
 
+### Fixed — FASE 7 complete: registry sync + scf_verify_system clean (2026-05-11)
+
+- `Nemex81/spark-base/package-manifest.json` — pushed version `2.1.0` (commit `0146ae30`).
+  Allineamento repo esterno con local reference copy engine. Chiude il gap residuo
+  DISTRO-1/PKG-1: external repo 1.7.3 → 2.1.0.
+- Registry sync completo: `spark-base 2.1.0`, `scf-master-codecrafter 2.7.0`,
+  `scf-pycode-crafter 2.3.0`, `spark-ops 1.1.0` (aggiunto); all `min_engine_version: 3.4.0`.
+- `scf_verify_system`: `is_coherent: true`, `issues: []`, `packages_checked: 1`. ✓
+
 ### Changed — doc audit Flutter purge + coerenza (2026-05-11)
 
 - `docs/architecture.md` — aggiornati contatore test `≥ 538` → `≥ 575` (Section 8)
