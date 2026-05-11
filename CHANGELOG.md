@@ -10,6 +10,22 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — Post-Dual-Universe Cleanup (2026-05-11)
+
+- `tests/conftest.py` — hook `pytest_pyfunc_call` per eseguire `async def test_*`
+  via `asyncio.run()` senza dipendenza pytest-asyncio. Riabilita 19 test async
+  precedentemente saltati in `test_bootstrap_workspace_extended.py` e
+  `test_legacy_init_audit.py`. Zero nuove dipendenze.
+- `tests/test_registry_client.py` — 18 nuovi test per `RegistryClient`:
+  coprono `fetch`, `list_packages`, `_load_cache`, `_save_cache`,
+  `fetch_package_manifest`, `fetch_raw_file` con mock completo (zero rete).
+  Coverage `spark.registry.client`: **39% → 90%**.
+- `.scf-registry-cache.json` e `.github/.scf-registry-cache.json` — allineati:
+  `min_engine_version` 3.1.0 → 3.4.0 per `spark-base`, `scf-master-codecrafter`,
+  `scf-pycode-crafter`. Risolve il `engine_min_mismatch` segnalato da `scf_verify_system`.
+- `docs/reports/SPARK-REPORT-PostDualUniverse-v1.0.md` — report di chiusura post dual-universe.
+  Suite finale: **575 passed (+37), 1 failed (pre-esistente), 0 skipped, 0 regressioni**.
+
 ### Added — Dual Universe Package Resolution (2026-05-11)
 
 - `spark/boot/tools_bootstrap.py` — aggiunta logica di routing `delivery_mode`-based:
