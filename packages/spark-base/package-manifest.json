@@ -1,7 +1,7 @@
 {
   "schema_version": "3.0",
   "package": "spark-base",
-  "version": "1.7.3",
+  "version": "2.1.0",
   "display_name": "SPARK Base Layer",
   "description": "Layer fondazionale SCF con agenti base, skill condivise, instruction comuni e prompt framework general-purpose.",
   "author": "Nemex81",
@@ -27,23 +27,16 @@
     "agents": [
       "Agent-Analyze",
       "Agent-Docs",
-      "Agent-FrameworkDocs",
       "Agent-Git",
       "Agent-Helper",
       "Agent-Orchestrator",
       "Agent-Plan",
-      "Agent-Release",
       "Agent-Research",
       "Agent-Validate",
-      "Agent-Welcome",
-      "spark-assistant",
-      "spark-guide"
+      "Agent-Welcome"
     ],
     "prompts": [
-      "framework-changelog",
-      "framework-release",
       "framework-unlock",
-      "framework-update",
       "git-commit",
       "git-merge",
       "help",
@@ -52,7 +45,6 @@
       "personality",
       "project-setup",
       "project-update",
-      "release",
       "scf-check-updates",
       "scf-install",
       "scf-list-available",
@@ -111,17 +103,13 @@
     ".github/AGENTS.md",
     ".github/agents/Agent-Analyze.md",
     ".github/agents/Agent-Docs.md",
-    ".github/agents/Agent-FrameworkDocs.md",
     ".github/agents/Agent-Git.md",
     ".github/agents/Agent-Helper.md",
     ".github/agents/Agent-Orchestrator.md",
     ".github/agents/Agent-Plan.md",
-    ".github/agents/Agent-Release.md",
     ".github/agents/Agent-Research.md",
     ".github/agents/Agent-Validate.md",
     ".github/agents/Agent-Welcome.md",
-    ".github/agents/spark-assistant.agent.md",
-    ".github/agents/spark-guide.agent.md",
     ".github/changelogs/spark-base.md",
     ".github/copilot-instructions.md",
     ".github/instructions/framework-guard.instructions.md",
@@ -133,10 +121,7 @@
     ".github/instructions/verbosity.instructions.md",
     ".github/instructions/workflow-standard.instructions.md",
     ".github/project-profile.md",
-    ".github/prompts/framework-changelog.prompt.md",
-    ".github/prompts/framework-release.prompt.md",
     ".github/prompts/framework-unlock.prompt.md",
-    ".github/prompts/framework-update.prompt.md",
     ".github/prompts/git-commit.prompt.md",
     ".github/prompts/git-merge.prompt.md",
     ".github/prompts/help.prompt.md",
@@ -146,7 +131,6 @@
     ".github/prompts/project-setup.prompt.md",
     ".github/prompts/project-update.prompt.md",
     ".github/prompts/README.md",
-    ".github/prompts/release.prompt.md",
     ".github/prompts/scf-check-updates.prompt.md",
     ".github/prompts/scf-install.prompt.md",
     ".github/prompts/scf-list-available.prompt.md",
@@ -218,15 +202,6 @@
       "scf_protected": false
     },
     {
-      "path": ".github/agents/Agent-FrameworkDocs.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.4.0",
-      "scf_file_role": "agent",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
       "path": ".github/agents/Agent-Git.md",
       "scf_owner": "spark-base",
       "scf_version": "1.4.0",
@@ -263,15 +238,6 @@
       "scf_protected": false
     },
     {
-      "path": ".github/agents/Agent-Release.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.4.0",
-      "scf_file_role": "agent",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
       "path": ".github/agents/Agent-Research.md",
       "scf_owner": "spark-base",
       "scf_version": "1.2.0",
@@ -293,24 +259,6 @@
       "path": ".github/agents/Agent-Welcome.md",
       "scf_owner": "spark-base",
       "scf_version": "1.4.0",
-      "scf_file_role": "agent",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/agents/spark-assistant.agent.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.4.0",
-      "scf_file_role": "agent",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/agents/spark-guide.agent.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.2.0",
       "scf_file_role": "agent",
       "scf_merge_strategy": "replace",
       "scf_merge_priority": 10,
@@ -416,34 +364,7 @@
       "scf_protected": true
     },
     {
-      "path": ".github/prompts/framework-changelog.prompt.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.2.0",
-      "scf_file_role": "prompt",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/prompts/framework-release.prompt.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.2.0",
-      "scf_file_role": "prompt",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
       "path": ".github/prompts/framework-unlock.prompt.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.2.0",
-      "scf_file_role": "prompt",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/prompts/framework-update.prompt.md",
       "scf_owner": "spark-base",
       "scf_version": "1.2.0",
       "scf_file_role": "prompt",
@@ -525,15 +446,6 @@
     },
     {
       "path": ".github/prompts/README.md",
-      "scf_owner": "spark-base",
-      "scf_version": "1.2.0",
-      "scf_file_role": "prompt",
-      "scf_merge_strategy": "replace",
-      "scf_merge_priority": 10,
-      "scf_protected": false
-    },
-    {
-      "path": ".github/prompts/release.prompt.md",
       "scf_owner": "spark-base",
       "scf_version": "1.2.0",
       "scf_file_role": "prompt",

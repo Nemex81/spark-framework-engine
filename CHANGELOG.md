@@ -10,6 +10,22 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — DISTRO-1/2 + PKG-1: registry sync + spark-base v2.1.0 (2026-05-11)
+
+- `scf-registry/registry.json` (repo esterno) — aggiunto pacchetto `spark-ops v1.1.0`
+  con `min_engine_version: 3.4.0`, `engine_managed_resources: true`, tag ops/orchestration/release.
+  `spark-base` aggiornato a `latest_version: 2.1.0`, `min_engine_version: 3.4.0`.
+  (DISTRO-1 closed; DISTRO-2: push in attesa dell'utente via comandi proposti sotto).
+- `packages/spark-base/package-manifest.json` — version bump `1.7.3 → 2.1.0`.
+  Rimossi da `mcp_resources.agents`, `files` e `files_metadata` i 4 agenti migrati
+  a spark-ops: `Agent-FrameworkDocs`, `Agent-Release`, `spark-assistant`, `spark-guide`.
+  Rimossi da `mcp_resources.prompts`, `files` e `files_metadata` i 4 prompt migrati:
+  `framework-changelog`, `framework-release`, `framework-update`, `release`. (PKG-1 closed).
+- `.scf-registry-cache.json` — spark-base `1.6.1 → 2.1.0` + aggiunto spark-ops v1.1.0.
+- `.github/.scf-registry-cache.json` — spark-base `1.7.3 → 2.1.0` + aggiunto spark-ops v1.1.0.
+- `tests/test_spark_ops_decoupling_manifest.py` — `test_spark_base_manifest_no_longer_exports_operational_resources`
+  ora PASS. Suite: **576 passed, 0 failed**.
+
 ### Changed — doc audit Flutter purge + coerenza (2026-05-11)
 
 - `docs/architecture.md` — aggiornati contatore test `≥ 538` → `≥ 575` (Section 8)
