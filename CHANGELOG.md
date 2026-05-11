@@ -9,6 +9,30 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ---
 
 ## [Unreleased]
+
+### Added — universe: v3.0 core spark-ops MCP distribution
+
+- `packages/spark-ops/package-manifest.json` v1.2.0: aggiunto `orchestrate`
+  a `mcp_resources.prompts` e `files`; aggiornati `workspace_files` con i file
+  sentinella (`spark-assistant.agent.md`, `spark-guide.agent.md`); fix bug JSON
+  con chiave `instructions` duplicata rimossa.
+- Dispatcher U1/U2: `scf_get_agent` e `scf_get_prompt` espongono i campi
+  `universe` (`"U1"` = engine local store, `"U2"` = workspace/external) e
+  `source_package` per identificare il package sorgente di ogni risorsa MCP.
+- Boot transfer idempotente: `_ensure_spark_ops_workspace_files()` in
+  `spark/boot/sequence.py` — copia i `workspace_files` di spark-ops nel workspace
+  utente dopo `ensure_minimal_bootstrap()`, senza sovrascrivere file esistenti.
+- `tests/test_universe_v3_distribution.py` — 4 test coprono manifest v1.2.0,
+  assenza duplicati JSON, logica U1/U2 e idempotenza del boot transfer.
+- `docs/reports/SPARK-REPORT-UniverseV3-v1.0.md` — report architetturale
+  completo del sistema Universe V3 con mappa U1/U2 e analisi gap.
+
+### Changed — universe: v3.0 core spark-ops MCP distribution
+
+- `tests/test_spark_ops_decoupling_manifest.py`: `MIGRATED_PROMPTS` aggiornato
+  con `"orchestrate"`; asserzione `workspace_files == []` sostituita con
+  `MIGRATED_WORKSPACE_FILES.issubset(...)` per riflettere il nuovo design.
+
 - Tests: removed 2 dead Phase6 smoke tests; suite +5 passed.
 - Tests: removed dead test_spark_init.py (spark-init.py deleted in 392af92).
 - Tests: 0 pytest warnings — pytest.ini attivo, asyncio_mode globale silente; suite 544 passed, 1 skipped.

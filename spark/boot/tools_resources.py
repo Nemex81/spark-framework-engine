@@ -255,10 +255,21 @@ def register_resource_tools(
     @_register_tool("scf_get_agent")
     async def scf_get_agent(name: str) -> dict[str, Any]:
         """Return full content and metadata for a single SCF agent by name."""
+        packages_root = engine_root / "packages"
         for ff in inventory.list_agents():
             if ff.name.lower() == name.lower():
                 result = _ff_to_dict(ff)
                 result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                # U1/U2 detection: U1 = engine local store, U2 = workspace/external.
+                resolved = ff.path.resolve()
+                packages_root_resolved = packages_root.resolve()
+                if resolved.is_relative_to(packages_root_resolved):
+                    result["universe"] = "U1"
+                    rel = resolved.relative_to(packages_root_resolved)
+                    result["source_package"] = rel.parts[0] if rel.parts else "unknown"
+                else:
+                    result["universe"] = "U2"
+                    result["source_package"] = "workspace"
                 # AP.1 — rileva divergenza silenziosa tra scf_get_agent e scf_get_agent_resource.
                 # scf_get_agent_resource risolve via McpResourceRegistry.resolve(uri) che
                 # copre solo override e store; se l'agente è solo nel workspace fisico
@@ -328,11 +339,22 @@ def register_resource_tools(
     @_register_tool("scf_get_prompt")
     async def scf_get_prompt(name: str) -> dict[str, Any]:
         """Return full content of a SCF prompt file by stem name."""
+        packages_root = engine_root / "packages"
         query = name.lower().removesuffix(".prompt")
         for ff in inventory.list_prompts():
             if ff.name.lower().removesuffix(".prompt") == query:
                 result = _ff_to_dict(ff)
                 result["content"] = ff.path.read_text(encoding="utf-8", errors="replace")
+                # U1/U2 detection: U1 = engine local store, U2 = workspace/external.
+                resolved = ff.path.resolve()
+                packages_root_resolved = packages_root.resolve()
+                if resolved.is_relative_to(packages_root_resolved):
+                    result["universe"] = "U1"
+                    rel = resolved.relative_to(packages_root_resolved)
+                    result["source_package"] = rel.parts[0] if rel.parts else "unknown"
+                else:
+                    result["universe"] = "U2"
+                    result["source_package"] = "workspace"
                 return result
         return {
             "success": False,

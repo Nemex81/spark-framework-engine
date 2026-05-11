@@ -17,10 +17,12 @@ Fase 3 (Separazione Runtime):
 """
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from spark.boot.validation import resolve_runtime_dir, validate_engine_manifest
 from spark.core.constants import _MERGE_SESSIONS_SUBDIR
@@ -112,6 +114,77 @@ def _migrate_runtime_to_engine_dir(github_root: Path, runtime_dir: Path) -> bool
     return True
 
 
+def _ensure_spark_ops_workspace_files(context: Any, engine_root: Path) -> None:
+    """Copia i workspace_files di spark-ops nel workspace utente se non presenti.
+
+    Legge il manifest da ``packages/spark-ops/package-manifest.json`` e copia
+    ogni file dichiarato in ``workspace_files`` dalla sorgente locale del package
+    store verso ``context.github_root``.
+
+    Idempotente: non sovrascrive file già presenti nel workspace.
+
+    Args:
+        context: WorkspaceContext con ``github_root`` del workspace utente.
+        engine_root: Root del motore SPARK.
+    """
+    ops_manifest_path = engine_root / "packages" / "spark-ops" / "package-manifest.json"
+    if not ops_manifest_path.is_file():
+        _log.debug(
+            "[SPARK-ENGINE][DEBUG] spark-ops manifest non trovato, skip boot transfer: %s",
+            ops_manifest_path,
+        )
+        return
+
+    try:
+        ops_manifest = json.loads(ops_manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Errore lettura spark-ops manifest, skip boot transfer: %s",
+            exc,
+        )
+        return
+
+    workspace_files = ops_manifest.get("workspace_files", [])
+    if not workspace_files:
+        return
+
+    ops_source_root = engine_root / "packages" / "spark-ops"
+    github_root = context.github_root
+
+    for rel_path in workspace_files:
+        # rel_path è relativo alla root del package, es. ".github/agents/spark-assistant.agent.md"
+        # Il dest è dentro github_root: strip del prefisso ".github/"
+        if rel_path.startswith(".github/"):
+            within_github = rel_path[len(".github/"):]
+        else:
+            within_github = rel_path
+
+        dest = github_root / within_github
+        source = ops_source_root / rel_path
+
+        if dest.is_file():
+            _log.debug(
+                "[SPARK-ENGINE][DEBUG] spark-ops workspace file già presente, skip: %s",
+                dest,
+            )
+            continue
+
+        if not source.is_file():
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] spark-ops source file non trovato, skip: %s",
+                source,
+            )
+            continue
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(source), str(dest))
+        _log.info(
+            "[SPARK-ENGINE][INFO] spark-ops workspace file copiato: %s → %s",
+            source,
+            dest,
+        )
+
+
 def _build_app(engine_root: Path) -> FastMCP:
     # Import here to avoid circular import at module level; engine.py imports
     # from spark.inventory and spark.workspace which are always safe.
@@ -182,6 +255,11 @@ def _build_app(engine_root: Path) -> FastMCP:
         "[SPARK-ENGINE][INFO] Auto-bootstrap status: %s",
         bootstrap_result.get("status", "unknown"),
     )
+
+    # Trasferisci workspace_files di spark-ops nel workspace se non ancora presenti.
+    # Idempotente: non sovrascrive file esistenti. Eseguito dopo ensure_minimal_bootstrap
+    # affinché la dir .github/ esista già.
+    _ensure_spark_ops_workspace_files(context, engine_root)
 
     # Esegui onboarding completo al primo avvio (idempotente)
     from spark.boot.onboarding import OnboardingManager  # noqa: PLC0415

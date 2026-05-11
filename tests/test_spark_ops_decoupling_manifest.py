@@ -15,6 +15,7 @@ MIGRATED_PROMPTS = {
     "framework-changelog",
     "framework-release",
     "framework-update",
+    "orchestrate",
     "release",
 }
 MIGRATED_SKILLS: set[str] = set()
@@ -43,13 +44,20 @@ def _dependency_versions(manifest: dict[str, Any]) -> dict[str, str]:
     }
 
 
+MIGRATED_WORKSPACE_FILES = {
+    ".github/agents/spark-assistant.agent.md",
+    ".github/agents/spark-guide.agent.md",
+}
+
+
 def test_spark_ops_manifest_exposes_only_operational_resources() -> None:
     manifest = _load_manifest("spark-ops")
     resources = manifest["mcp_resources"]
 
     assert manifest["schema_version"] == "3.1"
     assert manifest["delivery_mode"] == "mcp_only"
-    assert manifest["workspace_files"] == []
+    # workspace_files contiene i file sentinella necessari per il boot transfer
+    assert MIGRATED_WORKSPACE_FILES.issubset(set(manifest["workspace_files"]))
     assert _dependency_versions(manifest) == {"spark-base": "2.0.0"}
     assert set(resources["agents"]) == MIGRATED_AGENTS
     assert set(resources["prompts"]) == MIGRATED_PROMPTS
