@@ -10,6 +10,8 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 - Tests: removed 2 dead Phase6 smoke tests; suite +5 passed.
+- Tests: removed dead test_spark_init.py (spark-init.py deleted in 392af92).
+- Tests: 0 pytest warnings — pytest.ini attivo, asyncio_mode globale silente; suite 544 passed, 1 skipped.
 
 ### Added — docs: SPARK-REPORT-MCP-Server-Flow-v1.0 (2026-05-11)
 
