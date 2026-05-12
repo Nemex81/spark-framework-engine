@@ -25,7 +25,7 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   skip, quit anticipato al passo 1 e 2, input non riconosciuto.
 - `docs/INIT-WIZARD.md` — guida utente completa con quickstart, tabella
   passi, note accessibilita' NVDA e riferimento API per i test.
-- Suite locale non-live verificata post-aggiunta: `595 passed`.
+- Suite locale non-live verificata post-aggiunta: `596 passed`.
 
 ### Fixed — DeepAudit v4.1 P0-P2 hardening
 
