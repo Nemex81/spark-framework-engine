@@ -1,0 +1,104 @@
+﻿.........s.................................FF........................... [ 12%]
+........................................................................ [ 25%]
+........................................................................ [ 38%]
+........................................................................ [ 51%]
+........................................................................ [ 63%]
+........................................................................ [ 76%]
+........................................................................ [ 89%]
+...........................................................              [100%]
+================================== FAILURES ===================================
+________________________ test_tool_counter_consistency ________________________
+
+    def test_tool_counter_consistency():
+        """
+        Conta i decorator @_register_tool( nel sorgente via regex,
+        estrae il valore nel commento Tools (N) e verifica che coincida.
+    
+        AP.3: il log "Tools registered: N total" deve essere dinamico in engine.py
+        (usa %d, non hardcoded) e sequence.py non deve avere il log hardcoded.
+    
+        NOTA: a partire da v3.0 il pattern di registrazione tool usa
+        l'helper @_register_tool("name") invece di @self._mcp.tool diretto.
+        NOTA D.1+: i tool factory (tools_resources.py e successivi) contribuiscono
+        al conteggio totale; vengono inclusi nel source concatenato.
+        """
+    
+        def _read(p: Path) -> str:
+            return p.read_text(encoding="utf-8") if p.exists() else ""
+    
+        source = (
+            _ENGINE_PATH.read_text(encoding="utf-8")
+            + "\n"
+            + _SEQUENCE_PATH.read_text(encoding="utf-8")
+            + "\n"
+            + _read(_TOOLS_RESOURCES_PATH)
+            + "\n"
+            + _read(_TOOLS_OVERRIDE_PATH)
+            + "\n"
+            + _read(_TOOLS_BOOTSTRAP_PATH)
+            + "\n"
+            + _read(_TOOLS_POLICY_PATH)
+            + "\n"
+            + _read(_TOOLS_PACKAGES_QUERY_PATH)
+            + "\n"
+            + _read(_TOOLS_PACKAGES_INSTALL_PATH)
+            + "\n"
+            + _read(_TOOLS_PACKAGES_UPDATE_PATH)
+            + "\n"
+            + _read(_TOOLS_PACKAGES_REMOVE_PATH)
+            + "\n"
+            + _read(_TOOLS_PACKAGES_DIAGNOSTICS_PATH)
+            + "\n"
+            + _read(_TOOLS_PLUGINS_PATH)
+        )
+    
+        actual = len(re.findall(r"@_register_tool\(", source))
+    
+        comment_match = re.search(r"Tools \((\d+)\)", source)
+    
+        assert comment_match, "Commento 'Tools (N)' non trovato nel sorgente"
+    
+        comment_n = int(comment_match.group(1))
+    
+>       assert actual == comment_n, f"Tool reali: {actual}, commento: {comment_n}"
+E       AssertionError: Tool reali: 52, commento: 51
+E       assert 52 == 51
+
+tests\test_engine_coherence.py:73: AssertionError
+___________________ test_engine_version_changelog_alignment ___________________
+
+    def test_engine_version_changelog_alignment():
+        """
+        Verifica che ENGINE_VERSION nel sorgente coincida
+        con la prima voce versionale di CHANGELOG.md.
+    
+        Dopo Fase 0, la costante canonica vive in ``spark/core/constants.py``;
+        l'hub ``spark-framework-engine.py`` la re-esporta.
+        """
+        constants_source = _CONSTANTS.read_text(encoding="utf-8")
+        version_match = re.search(r'ENGINE_VERSION: str = "([^"]+)"', constants_source)
+        assert version_match, "ENGINE_VERSION non trovata in spark/core/constants.py"
+        engine_ver = version_match.group(1)
+    
+        changelog = _CHANGELOG.read_text(encoding="utf-8")
+        # Salta [Unreleased] ù cerca la prima voce versionale numerica.
+        entry_match = re.search(r"## \[(\d[^\]]+)\]", changelog)
+        assert entry_match, "Nessuna voce versionale trovata in CHANGELOG.md"
+        changelog_ver = entry_match.group(1)
+    
+>       assert engine_ver == changelog_ver, (
+            f"ENGINE_VERSION={engine_ver} non allineata con CHANGELOG={changelog_ver}"
+        )
+E       AssertionError: ENGINE_VERSION=3.5.0 non allineata con CHANGELOG=3.4.0
+E       assert '3.5.0' == '3.4.0'
+E         
+E         - 3.4.0
+E         ?   ^
+E         + 3.5.0
+E         ?   ^
+
+tests\test_engine_coherence.py:109: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_engine_coherence.py::test_tool_counter_consistency - Assert...
+FAILED tests/test_engine_coherence.py::test_engine_version_changelog_alignment
+2 failed, 560 passed, 1 skipped in 8.66s

@@ -11,10 +11,12 @@ definiti a livello di modulo per essere importabili da altri sub-moduli (D.2).
 """
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from spark.core.constants import _REGISTRY_CACHE_FILENAME
 from spark.core.models import FrameworkFile
 from spark.inventory import EngineInventory, FrameworkInventory
 from spark.registry import McpResourceRegistry
@@ -78,6 +80,56 @@ def _ensure_registry(inventory: FrameworkInventory, engine_root: Path) -> McpRes
         inventory.populate_mcp_registry(engine_manifest=engine_manifest)
     assert inventory.mcp_registry is not None  # noqa: S101
     return inventory.mcp_registry
+
+
+def _build_u2_registry_hint(ff: FrameworkFile, github_root: Path) -> dict[str, Any] | None:
+    """Return a registry hint dict for a U2 resource, or None if unavailable.
+
+    Reads the local registry cache (no network call) and compares the installed
+    ``scf_version`` from the file's frontmatter against the ``latest_version``
+    from the registry entry for the same ``scf_owner`` package.
+
+    Args:
+        ff: FrameworkFile for the U2 resource.
+        github_root: Workspace .github/ root (where cache resides).
+
+    Returns:
+        Dict with ``update_available``, ``installed_version``, ``latest_version``
+        and ``registry_package``, or None if no registry data is available.
+    """
+    cache_path = github_root / _REGISTRY_CACHE_FILENAME
+    if not cache_path.is_file():
+        return None
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    packages: list[dict[str, Any]] = cache.get("packages", [])
+    if not packages:
+        return None
+
+    scf_owner = str(ff.metadata.get("scf_owner", "")).strip()
+    if not scf_owner:
+        return None
+
+    registry_entry = next(
+        (p for p in packages if str(p.get("id", "")).strip() == scf_owner), None
+    )
+    if registry_entry is None:
+        return None
+
+    installed_version = str(ff.metadata.get("scf_version", "")).strip()
+    latest_version = str(registry_entry.get("latest_version", "")).strip()
+    update_available = bool(
+        installed_version and latest_version and installed_version != latest_version
+    )
+    return {
+        "update_available": update_available,
+        "installed_version": installed_version,
+        "latest_version": latest_version,
+        "registry_package": scf_owner,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +322,9 @@ def register_resource_tools(
                 else:
                     result["universe"] = "U2"
                     result["source_package"] = "workspace"
+                    hint = _build_u2_registry_hint(ff, inventory._ctx.github_root)
+                    if hint is not None:
+                        result["registry_hint"] = hint
                 # AP.1 — rileva divergenza silenziosa tra scf_get_agent e scf_get_agent_resource.
                 # scf_get_agent_resource risolve via McpResourceRegistry.resolve(uri) che
                 # copre solo override e store; se l'agente è solo nel workspace fisico
@@ -355,6 +410,9 @@ def register_resource_tools(
                 else:
                     result["universe"] = "U2"
                     result["source_package"] = "workspace"
+                    hint = _build_u2_registry_hint(ff, inventory._ctx.github_root)
+                    if hint is not None:
+                        result["registry_hint"] = hint
                 return result
         return {
             "success": False,

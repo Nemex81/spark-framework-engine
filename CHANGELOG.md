@@ -10,6 +10,25 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — registry: U2 dynamic fetch from scf-registry (ENGINE_VERSION 3.5.0)
+
+- `RegistryClient.is_cache_fresh(ttl_seconds=3600)` — verifica se la cache locale
+  è dentro il TTL (default 1h) tramite `stat().st_mtime`. Ritorna `False` se assente.
+- `RegistryClient.fetch_if_stale(ttl_seconds=3600)` — usa la cache se fresca,
+  esegue fetch remoto HTTPS se scaduta; fallback su cache stale in caso di errore rete.
+- `scf_plugin_list_remote(force_refresh=False)` — nuovo tool MCP che elenca tutti i
+  pacchetti del registry remoto `Nemex81/scf-registry` con annotazione `universe`
+  (`"U1"` = `mcp_only`, `"U2"` = installabili); TTL 1h; separazione per `u1_count`/`u2_count`.
+- `_build_u2_registry_hint(ff, github_root)` — helper in `tools_resources.py` che
+  legge la cache locale del registry e confronta `scf_version` (frontmatter file) con
+  `latest_version` del pacchetto; nessuna chiamata di rete nel path MCP.
+- Dispatcher U2 registry hint: `scf_get_agent` e `scf_get_prompt` includono
+  `registry_hint` (con `update_available`, `installed_version`, `latest_version`)
+  per risorse U2 quando la cache locale è disponibile.
+- `tests/test_registry_u2_client.py` — 16 test: `is_cache_fresh`, `fetch_if_stale`,
+  `_build_u2_registry_hint`, annotazione U1/U2 `scf_plugin_list_remote`.
+- ENGINE_VERSION bump: `3.4.0` → `3.5.0`.
+
 ### Added — universe: v3.0 core spark-ops MCP distribution
 
 - `packages/spark-ops/package-manifest.json` v1.2.0: aggiunto `orchestrate`
@@ -153,6 +172,28 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `test_scenario_7_6_dropdown_agenti_equivalente_indice_agents`.
 - Suite post-audit: `553 passed, 1 skipped` (era `550 passed, 9 skipped`).
   Unico skip rimasto: `test_mcp_initialize_via_stdio` (env-gate `SPARK_SMOKE_TEST=1`, by design).
+
+## [3.5.0] - 2026-05-13
+
+### Added
+
+- `RegistryClient.is_cache_fresh(ttl_seconds=3600)` — controlla se la cache locale è dentro il TTL tramite `stat().st_mtime`. Ritorna `False` se il file non esiste.
+- `RegistryClient.fetch_if_stale(ttl_seconds=3600)` — usa la cache se fresca, fetch HTTPS se scaduta; fallback su cache stale in caso di errore rete.
+- `scf_plugin_list_remote(force_refresh=False)` — nuovo tool MCP che lista tutti i pacchetti del registry remoto `Nemex81/scf-registry` con campo `universe` (`"U1"` = `mcp_only`, `"U2"` = installabili). TTL 1h, contatori `u1_count`/`u2_count`, campo `from_cache`.
+- `_build_u2_registry_hint(ff, github_root)` in `tools_resources.py` — legge cache locale registry e aggiunge `registry_hint` (`update_available`, `installed_version`, `latest_version`) alle risorse U2 in `scf_get_agent` e `scf_get_prompt`.
+- `tests/test_registry_u2_client.py` — 16 test per TTL cache, fetch_if_stale, dispatcher U2 hint, annotazione universe.
+- Universe V3.0: `packages/spark-ops/package-manifest.json` v1.2.0 — aggiunto `orchestrate`, `workspace_files` con sentinelle bootstrap.
+- Dispatcher U1/U2 in `scf_get_agent`/`scf_get_prompt` — campo `universe` e `source_package`.
+- Boot transfer idempotente: `_ensure_spark_ops_workspace_files()` in `spark/boot/sequence.py`.
+- `tests/test_universe_v3_distribution.py` — 4 test Universe V3.
+
+### Changed
+
+- ENGINE_VERSION: `3.4.0` → `3.5.0`.
+- Tool counter: `Tools (51)` → `Tools (52)` (`scf_plugin_list_remote` aggiunto).
+- `spark/registry/client.py`: aggiunto import `time` per TTL check.
+
+---
 
 ## [3.4.0] - 2026-05-10
 

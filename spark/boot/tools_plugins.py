@@ -390,6 +390,93 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
         return response
 
     # -----------------------------------------------------------------------
+    # U2 Remote Registry: elenco diretto da scf-registry con TTL cache
+    # -----------------------------------------------------------------------
+
+    @_register_tool("scf_plugin_list_remote")
+    async def scf_plugin_list_remote(force_refresh: bool = False) -> dict[str, Any]:
+        """List packages available in the remote SCF registry (Universe U2).
+
+        Uses a TTL-based cache (1h) to avoid unnecessary GitHub requests.
+        Each entry is annotated with ``universe`` and ``delivery_mode``.
+        Packages with ``delivery_mode == "mcp_only"`` are Universe U1 (served
+        locally by the engine); all others are Universe U2 (installable from
+        remote).
+
+        Args:
+            force_refresh: If True, bypass the TTL cache and fetch fresh data.
+
+        Returns:
+            A dict with keys:
+              - ``status``: ``"ok"`` or ``"error"``
+              - ``packages``: Annotated list of packages with ``universe`` field
+              - ``u1_count``: Count of mcp_only (U1) packages in registry
+              - ``u2_count``: Count of installable (U2) packages in registry
+              - ``from_cache``: True if data was served from local cache
+              - ``message``: Human-readable summary
+        """
+        _log.info("[SPARK-ENGINE][INFO] scf_plugin_list_remote: start force_refresh=%s", force_refresh)
+        try:
+            registry_client = _make_registry_client(engine, ctx.github_root)
+            ttl = 0 if force_refresh else 3600
+            try:
+                data = registry_client.fetch_if_stale(ttl_seconds=ttl)
+                from_cache = not force_refresh and registry_client.is_cache_fresh(ttl)
+            except RuntimeError as exc:
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] scf_plugin_list_remote: registry non raggiungibile: %s", exc
+                )
+                return {
+                    "status": "error",
+                    "packages": [],
+                    "u1_count": 0,
+                    "u2_count": 0,
+                    "from_cache": False,
+                    "message": f"Registry non raggiungibile: {exc}",
+                }
+
+            raw_packages: list[dict[str, Any]] = data.get("packages", [])
+            annotated: list[dict[str, Any]] = []
+            u1_count = 0
+            u2_count = 0
+            for pkg in raw_packages:
+                delivery = str(pkg.get("delivery_mode", "managed")).strip()
+                if delivery == "mcp_only":
+                    universe = "U1"
+                    u1_count += 1
+                else:
+                    universe = "U2"
+                    u2_count += 1
+                annotated.append({**pkg, "universe": universe, "delivery_mode": delivery})
+
+        except Exception as exc:  # noqa: BLE001
+            _log.error("[SPARK-ENGINE][ERROR] scf_plugin_list_remote: %s", exc)
+            return {
+                "status": "error",
+                "packages": [],
+                "u1_count": 0,
+                "u2_count": 0,
+                "from_cache": False,
+                "message": str(exc),
+            }
+
+        _log.info(
+            "[SPARK-ENGINE][INFO] scf_plugin_list_remote: done total=%d u1=%d u2=%d from_cache=%s",
+            len(annotated), u1_count, u2_count, from_cache,
+        )
+        return {
+            "status": "ok",
+            "packages": annotated,
+            "u1_count": u1_count,
+            "u2_count": u2_count,
+            "from_cache": from_cache,
+            "message": (
+                f"{len(annotated)} pacchetti nel registry "
+                f"({u1_count} U1 mcp_only, {u2_count} U2 installabili)."
+            ),
+        }
+
+    # -----------------------------------------------------------------------
     # TASK-4 — Dual-Mode Architecture: tool per download diretto (no store)
     # -----------------------------------------------------------------------
 

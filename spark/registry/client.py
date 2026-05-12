@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -69,6 +70,38 @@ class RegistryClient:
             return list(self.fetch().get("packages", []))
         except RuntimeError:
             return []
+
+    def is_cache_fresh(self, ttl_seconds: int = 3600) -> bool:
+        """Return True if the local cache file exists and is younger than ttl_seconds.
+
+        Args:
+            ttl_seconds: Max age in seconds for the cache to be considered fresh.
+                Default is 3600 (1 hour).
+
+        Returns:
+            True if cache file exists and mtime is within ttl_seconds.
+        """
+        if not self._cache_path.is_file():
+            return False
+        age = time.time() - self._cache_path.stat().st_mtime
+        return age < ttl_seconds
+
+    def fetch_if_stale(self, ttl_seconds: int = 3600) -> dict[str, Any]:
+        """Return registry data from cache if fresh, otherwise fetch remote.
+
+        Falls back to cache (stale) on network failure. Raises RuntimeError
+        only when both remote and cache are unavailable.
+
+        Args:
+            ttl_seconds: TTL in seconds. Default 3600 (1 hour).
+
+        Returns:
+            Registry dict with 'packages' list.
+        """
+        if self.is_cache_fresh(ttl_seconds):
+            _log.debug("Registry cache fresh (< %ds), skipping remote fetch.", ttl_seconds)
+            return self._load_cache()
+        return self.fetch()
 
     # ------------------------------------------------------------------
     # Private helpers
