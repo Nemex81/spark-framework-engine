@@ -83,6 +83,47 @@ class FakeRegistryClient:
         }
 
 
+class FakeRemoteInstallRegistryClient:
+    """Registry client fixture for scf_plugin_install_remote tests."""
+
+    def __init__(self, entry: dict[str, Any], manifest: dict[str, Any]) -> None:
+        self._entry = entry
+        self._manifest = manifest
+
+    def fetch_if_stale(self, ttl_seconds: int = 3600) -> dict[str, Any]:
+        return {"packages": [self._entry]}
+
+    def fetch_package_manifest(self, repo_url: str) -> dict[str, Any]:
+        assert repo_url == self._entry["repo_url"]
+        return self._manifest
+
+
+class FakeRemoteListRegistryClient:
+    """Registry client fixture for scf_plugin_list_remote telemetry tests."""
+
+    def __init__(self, *, fresh_before_fetch: bool, cache_age_seconds: float) -> None:
+        self._fresh_before_fetch = fresh_before_fetch
+        self._cache_age_seconds = cache_age_seconds
+
+    def is_cache_fresh(self, ttl_seconds: int = 3600) -> bool:
+        return self._fresh_before_fetch
+
+    def cache_age_seconds(self) -> float:
+        return self._cache_age_seconds
+
+    def fetch_if_stale(self, ttl_seconds: int = 3600) -> dict[str, Any]:
+        return {
+            "packages": [
+                {
+                    "id": "remote-plugin",
+                    "latest_version": "1.0.0",
+                    "delivery_mode": "managed",
+                    "repo_url": "https://github.com/Test/remote-plugin",
+                }
+            ]
+        }
+
+
 from spark.plugins import PluginManagerFacade
 from spark.plugins.schema import PluginNotFoundError, PluginNotInstalledError
 
@@ -217,6 +258,109 @@ def test_scf_plugin_list_response_keys(workspace: Path) -> None:
     assert "message" in response
     assert isinstance(response["installed"], list)
     assert isinstance(response["available"], list)
+
+
+def test_scf_plugin_install_remote_rejects_absolute_manifest_path(workspace: Path) -> None:
+    """scf_plugin_install_remote rifiuta path assoluti che uscirebbero da .github/."""
+    fake_mcp = FakeMCP()
+    tool_names: list[str] = []
+    entry = {
+        "id": "remote-plugin",
+        "latest_version": "1.0.0",
+        "delivery_mode": "managed",
+        "repo_url": "https://github.com/Test/remote-plugin",
+    }
+    manifest = {
+        "version": "1.0.0",
+        "plugin_files": ["C:/evil.txt"],
+    }
+    engine = SimpleNamespace(
+        _ctx=SimpleNamespace(workspace_root=workspace, github_root=workspace / ".github"),
+        _registry_client=FakeRemoteInstallRegistryClient(entry, manifest),
+    )
+
+    register_plugin_tools(engine, fake_mcp, tool_names)
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        result = asyncio.run(
+            fake_mcp.tools["scf_plugin_install_remote"]("remote-plugin")
+        )
+
+    mock_urlopen.assert_not_called()
+    assert result["status"] == "error"
+    assert result["files_written"] == []
+    assert any("Path non sicuro" in item for item in result["errors"])
+
+
+def test_scf_plugin_list_remote_reports_cache_hit_and_age(workspace: Path) -> None:
+    """scf_plugin_list_remote espone from_cache=True e cache_age_seconds su cache hit."""
+    fake_mcp = FakeMCP()
+    tool_names: list[str] = []
+    engine = SimpleNamespace(
+        _ctx=SimpleNamespace(workspace_root=workspace, github_root=workspace / ".github"),
+        _registry_client=FakeRemoteListRegistryClient(
+            fresh_before_fetch=True,
+            cache_age_seconds=12.5,
+        ),
+    )
+
+    register_plugin_tools(engine, fake_mcp, tool_names)
+
+    result = asyncio.run(fake_mcp.tools["scf_plugin_list_remote"]())
+
+    assert result["status"] == "ok"
+    assert result["from_cache"] is True
+    assert result["cache_age_seconds"] == pytest.approx(12.5)
+
+
+def test_scf_plugin_list_remote_reports_refresh_without_cache_hit(workspace: Path) -> None:
+    """scf_plugin_list_remote espone from_cache=False quando la richiesta ha fatto refresh."""
+    fake_mcp = FakeMCP()
+    tool_names: list[str] = []
+    engine = SimpleNamespace(
+        _ctx=SimpleNamespace(workspace_root=workspace, github_root=workspace / ".github"),
+        _registry_client=FakeRemoteListRegistryClient(
+            fresh_before_fetch=False,
+            cache_age_seconds=0.2,
+        ),
+    )
+
+    register_plugin_tools(engine, fake_mcp, tool_names)
+
+    result = asyncio.run(fake_mcp.tools["scf_plugin_list_remote"]())
+
+    assert result["status"] == "ok"
+    assert result["from_cache"] is False
+    assert result["cache_age_seconds"] == pytest.approx(0.2)
+
+
+def test_scf_plugin_install_remote_uses_target_workspace_cache_root(tmp_path: Path) -> None:
+    """scf_plugin_install_remote deve interrogare il registry usando il workspace target."""
+    fake_mcp = FakeMCP()
+    tool_names: list[str] = []
+    engine_workspace = tmp_path / "engine-ws"
+    engine_github = engine_workspace / ".github"
+    engine_github.mkdir(parents=True)
+    target_workspace = tmp_path / "target-ws"
+    target_github = target_workspace / ".github"
+    target_github.mkdir(parents=True)
+
+    engine = SimpleNamespace(
+        _ctx=SimpleNamespace(workspace_root=engine_workspace, github_root=engine_github),
+        _registry_client=MagicMock(_github_root=engine_github),
+    )
+    register_plugin_tools(engine, fake_mcp, tool_names)
+
+    with patch("spark.boot.tools_plugins.find_remote_package", return_value=None) as mock_find:
+        result = asyncio.run(
+            fake_mcp.tools["scf_plugin_install_remote"](
+                "remote-plugin",
+                workspace_root=str(target_workspace),
+            )
+        )
+
+    assert result["status"] == "error"
+    assert mock_find.call_args.kwargs["github_root"] == target_github
 
 
 # ---------------------------------------------------------------------------

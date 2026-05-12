@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,7 @@ _log = logging.getLogger("spark-framework-engine")
 
 # Tipi di risorse supportate — spec invariante condivisa con engine.py.
 _RESOURCE_TYPES: frozenset[str] = frozenset({"agents", "skills", "instructions", "prompts"})
+_SEMVER_RE: re.Pattern[str] = re.compile(r"^v?(?P<num>\d+(?:\.\d+)*)(?:[-+](?P<suffix>.+))?$")
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +84,31 @@ def _ensure_registry(inventory: FrameworkInventory, engine_root: Path) -> McpRes
     return inventory.mcp_registry
 
 
+def _is_registry_version_newer(installed_version: str, latest_version: str) -> bool:
+    """Return True when latest_version is newer than installed_version.
+
+    Supports simple semver strings like 1.2.3 and prerelease/build suffixes.
+    Falls back to plain inequality when one of the versions is not parseable.
+    """
+
+    def _parse(version: str) -> tuple[tuple[int, int, int], int, str] | None:
+        match = _SEMVER_RE.match(version.strip())
+        if match is None:
+            return None
+        raw_numbers = [int(part) for part in match.group("num").split(".")]
+        while len(raw_numbers) < 3:
+            raw_numbers.append(0)
+        suffix = match.group("suffix") or ""
+        stable_rank = 1 if not suffix else 0
+        return (raw_numbers[0], raw_numbers[1], raw_numbers[2]), stable_rank, suffix
+
+    installed_key = _parse(installed_version)
+    latest_key = _parse(latest_version)
+    if installed_key is None or latest_key is None:
+        return bool(installed_version and latest_version and installed_version != latest_version)
+    return latest_key > installed_key
+
+
 def _build_u2_registry_hint(ff: FrameworkFile, github_root: Path) -> dict[str, Any] | None:
     """Return a registry hint dict for a U2 resource, or None if unavailable.
 
@@ -122,7 +149,7 @@ def _build_u2_registry_hint(ff: FrameworkFile, github_root: Path) -> dict[str, A
     installed_version = str(ff.metadata.get("scf_version", "")).strip()
     latest_version = str(registry_entry.get("latest_version", "")).strip()
     update_available = bool(
-        installed_version and latest_version and installed_version != latest_version
+        installed_version and latest_version and _is_registry_version_newer(installed_version, latest_version)
     )
     return {
         "update_available": update_available,

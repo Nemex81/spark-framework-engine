@@ -18,7 +18,7 @@ su workspace arbitrari (utile in ambienti multi-root).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import urllib.error
@@ -89,7 +89,40 @@ def _make_facade(workspace_root_str: str, fallback: Path) -> PluginManagerFacade
 
 def _make_registry_client(engine: Any, github_root: Path) -> Any:
     """Return the engine registry client or create a fallback client."""
-    return engine._registry_client if engine._registry_client is not None else RegistryClient(github_root)
+    engine_client = getattr(engine, "_registry_client", None)
+    if engine_client is None:
+        return RegistryClient(github_root)
+
+    client_root = getattr(engine_client, "_github_root", github_root)
+    try:
+        same_root = Path(client_root).resolve() == github_root.resolve()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        same_root = client_root == github_root
+    if same_root:
+        return engine_client
+
+    registry_url = getattr(engine_client, "_registry_url", _REGISTRY_URL)
+    return RegistryClient(github_root, registry_url=registry_url)
+
+
+def _resolve_safe_github_destination(github_root: Path, file_path: str) -> Path | None:
+    """Return a safe destination inside .github/, or None for unsafe paths."""
+    github_rel = file_path.removeprefix(".github/").replace("\\", "/").strip()
+    if not github_rel or github_rel in {".", "/"}:
+        return None
+
+    rel_path = Path(github_rel)
+    if rel_path.is_absolute() or PureWindowsPath(github_rel).is_absolute():
+        return None
+    if ".." in rel_path.parts:
+        return None
+
+    dest = (github_root / rel_path).resolve()
+    try:
+        dest.relative_to(github_root.resolve())
+    except ValueError:
+        return None
+    return dest
 
 
 def _get_direct_plugin_entries(registry_client: Any) -> list[dict[str, Any]]:
@@ -419,16 +452,22 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
               - ``packages``: Annotated list of packages with ``universe`` field
               - ``u1_count``: Count of mcp_only (U1) packages in registry
               - ``u2_count``: Count of installable (U2) packages in registry
-              - ``from_cache``: True if data was served from local cache
+              - ``from_cache``: True if data was served from local cache before any refresh
+              - ``cache_age_seconds``: Age of the local cache file after the operation
               - ``message``: Human-readable summary
         """
         _log.info("[SPARK-ENGINE][INFO] scf_plugin_list_remote: start force_refresh=%s", force_refresh)
         try:
             registry_client = _make_registry_client(engine, ctx.github_root)
             ttl = 0 if force_refresh else 3600
+            cache_fresh_before_fetch = False if force_refresh else registry_client.is_cache_fresh(ttl)
             try:
                 data = registry_client.fetch_if_stale(ttl_seconds=ttl)
-                from_cache = not force_refresh and registry_client.is_cache_fresh(ttl)
+                from_cache = cache_fresh_before_fetch
+                cache_age_getter = getattr(registry_client, "cache_age_seconds", None)
+                cache_age_seconds = (
+                    cache_age_getter() if callable(cache_age_getter) else None
+                )
             except RuntimeError as exc:
                 _log.warning(
                     "[SPARK-ENGINE][WARNING] scf_plugin_list_remote: registry non raggiungibile: %s", exc
@@ -439,6 +478,7 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                     "u1_count": 0,
                     "u2_count": 0,
                     "from_cache": False,
+                    "cache_age_seconds": None,
                     "message": f"Registry non raggiungibile: {exc}",
                 }
 
@@ -464,6 +504,7 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 "u1_count": 0,
                 "u2_count": 0,
                 "from_cache": False,
+                "cache_age_seconds": None,
                 "message": str(exc),
             }
 
@@ -477,6 +518,7 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "u1_count": u1_count,
             "u2_count": u2_count,
             "from_cache": from_cache,
+            "cache_age_seconds": cache_age_seconds,
             "message": (
                 f"{len(annotated)} pacchetti nel registry "
                 f"({u1_count} U1 mcp_only, {u2_count} U2 installabili)."
@@ -537,9 +579,9 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
         github_root = workspace / ".github"
 
         try:
-            registry_client = _make_registry_client(engine, ctx.github_root)
+            registry_client = _make_registry_client(engine, github_root)
             entry = find_remote_package(
-                github_root=ctx.github_root,
+                github_root=github_root,
                 pkg_id=pkg_id,
                 engine=engine,
                 force_refresh=force_refresh,
@@ -652,13 +694,10 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 errors_list.append(f"Entry non valida nel manifest: {file_path!r}")
                 continue
 
-            # Path traversal guard.
-            github_rel = file_path.removeprefix(".github/")
-            if ".." in Path(github_rel).parts:
+            dest = _resolve_safe_github_destination(github_root, file_path)
+            if dest is None:
                 errors_list.append(f"Path non sicuro rifiutato: {file_path!r}")
                 continue
-
-            dest = github_root / github_rel
 
             if dest.is_file() and not overwrite:
                 files_skipped.append(file_path)

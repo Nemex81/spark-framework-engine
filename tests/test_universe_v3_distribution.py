@@ -163,3 +163,23 @@ def test_ensure_spark_ops_workspace_files_idempotent(tmp_path: Path) -> None:
     assert mtimes_before == mtimes_after, (
         "I file sono stati riscritti nella seconda chiamata (non idempotente)"
     )
+
+
+def test_ensure_spark_ops_workspace_files_skips_when_lock_exists(tmp_path: Path) -> None:
+    """Verifica che il transfer salti se un'altra copia bootstrap è già in corso."""
+    from spark.boot.sequence import _ensure_spark_ops_workspace_files
+
+    fake_github = tmp_path / ".github"
+    fake_github.mkdir()
+    (fake_github / ".spark-ops-copy.lock").mkdir()
+
+    context = MagicMock()
+    context.github_root = fake_github
+
+    _ensure_spark_ops_workspace_files(context, REPO_ROOT)
+
+    manifest = _load_manifest("spark-ops")
+    for rel_path in manifest["workspace_files"]:
+        within_github = rel_path[len(".github/"):] if rel_path.startswith(".github/") else rel_path
+        dest = fake_github / within_github
+        assert not dest.exists(), f"File non doveva essere copiato con lock attivo: {dest}"

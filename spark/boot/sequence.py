@@ -39,6 +39,7 @@ except ImportError as _import_exc:
     raise SystemExit(1) from _import_exc
 
 _log: logging.Logger = logging.getLogger("spark-framework-engine")
+_SPARK_OPS_COPY_LOCK_DIRNAME = ".spark-ops-copy.lock"
 
 
 def _migrate_runtime_to_engine_dir(github_root: Path, runtime_dir: Path) -> bool:
@@ -150,39 +151,59 @@ def _ensure_spark_ops_workspace_files(context: Any, engine_root: Path) -> None:
 
     ops_source_root = engine_root / "packages" / "spark-ops"
     github_root = context.github_root
+    github_root.mkdir(parents=True, exist_ok=True)
+    lock_dir = github_root / _SPARK_OPS_COPY_LOCK_DIRNAME
 
-    for rel_path in workspace_files:
-        # rel_path è relativo alla root del package, es. ".github/agents/spark-assistant.agent.md"
-        # Il dest è dentro github_root: strip del prefisso ".github/"
-        if rel_path.startswith(".github/"):
-            within_github = rel_path[len(".github/"):]
-        else:
-            within_github = rel_path
+    try:
+        lock_dir.mkdir(parents=False, exist_ok=False)
+    except FileExistsError:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] spark-ops workspace transfer già in corso, skip: %s",
+            lock_dir,
+        )
+        return
 
-        dest = github_root / within_github
-        source = ops_source_root / rel_path
+    try:
+        for rel_path in workspace_files:
+            # rel_path è relativo alla root del package, es. ".github/agents/spark-assistant.agent.md"
+            # Il dest è dentro github_root: strip del prefisso ".github/"
+            if rel_path.startswith(".github/"):
+                within_github = rel_path[len(".github/"):]
+            else:
+                within_github = rel_path
 
-        if dest.is_file():
-            _log.debug(
-                "[SPARK-ENGINE][DEBUG] spark-ops workspace file già presente, skip: %s",
+            dest = github_root / within_github
+            source = ops_source_root / rel_path
+
+            if dest.is_file():
+                _log.debug(
+                    "[SPARK-ENGINE][DEBUG] spark-ops workspace file già presente, skip: %s",
+                    dest,
+                )
+                continue
+
+            if not source.is_file():
+                _log.warning(
+                    "[SPARK-ENGINE][WARNING] spark-ops source file non trovato, skip: %s",
+                    source,
+                )
+                continue
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(source), str(dest))
+            _log.info(
+                "[SPARK-ENGINE][INFO] spark-ops workspace file copiato: %s → %s",
+                source,
                 dest,
             )
-            continue
-
-        if not source.is_file():
+    finally:
+        try:
+            lock_dir.rmdir()
+        except OSError:
             _log.warning(
-                "[SPARK-ENGINE][WARNING] spark-ops source file non trovato, skip: %s",
-                source,
+                "[SPARK-ENGINE][WARNING] impossibile rimuovere bootstrap lock dir: %s",
+                lock_dir,
             )
-            continue
-
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(source), str(dest))
-        _log.info(
-            "[SPARK-ENGINE][INFO] spark-ops workspace file copiato: %s → %s",
-            source,
-            dest,
-        )
 
 
 def _build_app(engine_root: Path) -> FastMCP:

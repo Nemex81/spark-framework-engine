@@ -1,5 +1,14 @@
 # TODO - SPARK Dual-Mode Manifest v3.1
 
+## Addendum 2026-05-12 - DeepAudit v4.1 fixset
+
+- [x] Fix P0: containment path sicuro in `scf_plugin_install_remote` per path assoluti e drive-rooted.
+- [x] Fix P1: telemetria `from_cache` deterministica + `cache_age_seconds`.
+- [x] Fix P1: registry cache coerente con `workspace_root` target nei flussi remoti U2.
+- [x] Fix P1: `registry_hint.update_available` semver-aware.
+- [x] Fix P2: lock cross-platform su bootstrap transfer `spark-ops`.
+- [ ] Commit/PR delegato ad Agent-Git.
+
 > Generato da Copilot Agent il 2026-05-08 UTC.
 > Strategia: Dual-Mode Manifest - schema v3.1 + plugin_files
 > Baseline: 409 passed / 9 skipped / 0 failed -> 413 passed post-implementazione finale

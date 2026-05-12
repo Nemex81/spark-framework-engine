@@ -207,6 +207,64 @@ def test_u2_registry_hint_no_update_when_versions_match(tmp_path: Path) -> None:
     assert hint["update_available"] is False
 
 
+def test_u2_registry_hint_uses_semver_ordering_for_minor_versions(tmp_path: Path) -> None:
+    """_build_u2_registry_hint() non segnala update se installed 1.10.0 > latest 1.2.0."""
+    from spark.boot.tools_resources import _build_u2_registry_hint
+    from spark.core.models import FrameworkFile
+
+    cache_file = tmp_path / ".scf-registry-cache.json"
+    cache_file.write_text(
+        json.dumps(
+            {
+                "packages": [
+                    {"id": "acme-plugin", "latest_version": "1.2.0", "delivery_mode": "managed"}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ff = FrameworkFile(
+        name="acme-agent",
+        path=tmp_path / "acme.agent.md",
+        category="agents",
+        summary="",
+        metadata={"scf_owner": "acme-plugin", "scf_version": "1.10.0"},
+    )
+    hint = _build_u2_registry_hint(ff, tmp_path)
+    assert hint is not None
+    assert hint["update_available"] is False
+
+
+def test_u2_registry_hint_detects_stable_newer_than_prerelease(tmp_path: Path) -> None:
+    """_build_u2_registry_hint() tratta 1.2.0 come più nuova di 1.2.0-rc1."""
+    from spark.boot.tools_resources import _build_u2_registry_hint
+    from spark.core.models import FrameworkFile
+
+    cache_file = tmp_path / ".scf-registry-cache.json"
+    cache_file.write_text(
+        json.dumps(
+            {
+                "packages": [
+                    {"id": "acme-plugin", "latest_version": "1.2.0", "delivery_mode": "managed"}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ff = FrameworkFile(
+        name="acme-agent",
+        path=tmp_path / "acme.agent.md",
+        category="agents",
+        summary="",
+        metadata={"scf_owner": "acme-plugin", "scf_version": "1.2.0-rc1"},
+    )
+    hint = _build_u2_registry_hint(ff, tmp_path)
+    assert hint is not None
+    assert hint["update_available"] is True
+
+
 def test_u2_registry_hint_returns_none_for_unknown_package(tmp_path: Path) -> None:
     """_build_u2_registry_hint() ritorna None se il pacchetto non è nel registry."""
     from spark.boot.tools_resources import _build_u2_registry_hint

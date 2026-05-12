@@ -10,6 +10,31 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — DeepAudit v4.1 P0-P2 hardening
+
+- `spark/boot/tools_plugins.py` — hardening di `scf_plugin_install_remote`:
+  aggiunto containment check reale del path destinazione sotto `.github/`, con
+  rifiuto di path assoluti/drive-rooted oltre ai traversal `..`.
+- `spark/boot/tools_plugins.py` — `scf_plugin_list_remote` ora espone
+  `from_cache` deterministico (cache hit pre-fetch) e `cache_age_seconds` per
+  telemetria runtime più leggibile.
+- `spark/boot/tools_plugins.py` — i flussi U2 remoti che ricevono
+  `workspace_root` usano il cache root del workspace target invece del solo
+  contesto engine quando i due percorsi divergono.
+- `spark/boot/tools_resources.py` — `_build_u2_registry_hint()` usa confronto
+  semver-aware per `update_available`, evitando falsi positivi su versioni come
+  `1.10.0` vs `1.2.0`.
+- `spark/boot/sequence.py` — `_ensure_spark_ops_workspace_files()` protetto da
+  lock directory cross-platform per evitare copie concorrenti nel bootstrap;
+  il helper garantisce anche la creazione preventiva di `.github/` prima del lock.
+- `spark/registry/client.py` — aggiunto helper pubblico `cache_age_seconds()`.
+- Test aggiunti:
+  - `tests/test_plugin_manager_integration.py` — containment assoluto,
+    telemetria cache, lookup workspace-specific.
+  - `tests/test_registry_u2_client.py` — semver ordering per registry hint.
+  - `tests/test_universe_v3_distribution.py` — skip del transfer con lock attivo.
+- Suite locale non-live verificata post-fix: `585 passed`.
+
 ### Added — registry: U2 dynamic fetch from scf-registry (ENGINE_VERSION 3.5.0)
 
 - `RegistryClient.is_cache_fresh(ttl_seconds=3600)` — verifica se la cache locale

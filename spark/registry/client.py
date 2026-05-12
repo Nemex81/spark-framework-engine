@@ -86,6 +86,12 @@ class RegistryClient:
         age = time.time() - self._cache_path.stat().st_mtime
         return age < ttl_seconds
 
+    def cache_age_seconds(self) -> float | None:
+        """Return cache age in seconds, or None when no cache file exists."""
+        if not self._cache_path.is_file():
+            return None
+        return max(0.0, time.time() - self._cache_path.stat().st_mtime)
+
     def fetch_if_stale(self, ttl_seconds: int = 3600) -> dict[str, Any]:
         """Return registry data from cache if fresh, otherwise fetch remote.
 
