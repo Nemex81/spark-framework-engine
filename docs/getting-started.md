@@ -7,17 +7,72 @@ consulta il [README.md](../README.md).
 
 ***
 
-## Requisiti
+## Scelta di Percorso
 
-> Vedi la sezione [Requisiti](../README.md#requisiti) nel README.
+- **Preferisci eseguire da qualsiasi directory senza cd manuali?**
+  → Vedi [SCF Universal Launcher v5.1](#scf-universal-launcher-v51)
+
+- **Preferisci setup classico con script dedicato?**
+  → Vedi [Quick Start Classico](#quick-start-classico)
 
 ***
 
-## Quick Start (nuovo utente)
+## SCF Universal Launcher v5.1
 
-3 passi per iniziare da zero.
+**Esecuzione zero-touch da QUALSIASI directory:**
+
+```bash
+cd /qualsiasi/percorso/mio-progetto
+scf init
+```
+
+### Setup (una volta sola)
+
+**Linux/macOS:**
+
+```bash
+# Aggiungi a PATH
+ln -sf /path/to/spark-framework-engine/scripts/scf_universal.py /usr/local/bin/scf
+# Verifica
+which scf
+```
 
 **Windows (PowerShell):**
+
+```powershell
+# Opzione 1: Aggiungi a $PROFILE
+$env:PATH += ";C:\path\to\spark-framework-engine\scripts"
+
+# Opzione 2: Usa alias
+function scf {
+    python C:\path\to\spark-framework-engine\scripts\scf_universal.py @args
+}
+
+# Verifica
+scf --help  # (opzionale, il comando esiste)
+```
+
+### Come Funziona
+
+Il launcher `scf init`:
+1. Trova automaticamente il motore SPARK risalendo la directory tree
+2. Rileva il workspace attivo (cwd, env var, markers locali)
+3. Esegue la wizard interattiva 3-step
+4. Crea `.scf-init-done` al termine (idempotente)
+
+Per documenti dettagliato → [docs/SCF-GLOBAL.md](SCF-GLOBAL.md)
+
+***
+
+## Quick Start Classico
+
+### Requisiti
+
+- Python 3.11 o superiore
+- VS Code con estensione GitHub Copilot
+- Git
+
+### Nuovi Utenti — 3 Passi
 
 ```powershell
 # 1. Clona il repo engine (una volta sola)

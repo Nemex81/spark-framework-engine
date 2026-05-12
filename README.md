@@ -29,6 +29,33 @@ configurazione del workspace, consulta:
 
 → **[docs/getting-started.md](docs/getting-started.md)**
 
+### Quick Start — Launcher Globale (v5.1)
+
+Se vuoi una **esperienza zero-touch da qualsiasi directory**, usa il launcher SCF:
+
+```bash
+# Da QUALSIASI cartella (non solo spark-engine/)
+cd /mio-progetto
+scf init
+
+# Output: wizard interattiva 3-step
+```
+
+Configura il symlink una volta:
+
+**Linux/macOS:**
+```bash
+ln -sf /path/to/spark-framework-engine/scripts/scf_universal.py /usr/local/bin/scf
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:PATH += ";C:\path\to\spark-framework-engine\scripts"
+py scf_universal.py init
+```
+
+Per istruzioni complete → **[docs/SCF-GLOBAL.md](docs/SCF-GLOBAL.md)**
+
 ---
 
 ## Come Funziona

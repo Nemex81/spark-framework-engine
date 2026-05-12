@@ -10,6 +10,24 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — v5.1: scf universal launcher — global command anywhere
+
+- `scripts/scf_universal.py` — launcher globale auto-detect:
+  trovà engine risalendo directory tree, risolve workspace via
+  `WorkspaceLocator`, chiama `run_wizard(cwd=workspace_root)`.
+  Compatibile Windows/PowerShell (shebang + py launcher).
+- `docs/SCF-GLOBAL.md` — guida symlink + setup PATH per Linux/macOS/Windows.
+  Auto-discovery cascata: CLI flag → ENV var → local markers → fallback cwd.
+- `README.md` — sezione "Quick Start — Launcher Globale (v5.1)" con
+  symlink one-liner.
+- `docs/getting-started.md` — aggiunta sezione SCF Universal vs Quick Start classico.
+- Test aggiunti:
+  - `tests/test_scf_universal.py` — 5 test integrazione (engine discovery,
+    nested execution, script self-location, multiple engines, wizard import)
+  - `tests/test_scf_universal_strategy.py` — 2 test logica discovery
+    (nested dir, error handling)
+- Suite locale non-live verificata post-aggiunta: `603 passed`.
+
 ### Added — v5.0: scf init zero-touch wizard
 
 - `scripts/scf` — launcher eseguibile single-command; imposta `sys.path` e
