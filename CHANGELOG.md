@@ -180,8 +180,11 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `RegistryClient.is_cache_fresh(ttl_seconds=3600)` — controlla se la cache locale è dentro il TTL tramite `stat().st_mtime`. Ritorna `False` se il file non esiste.
 - `RegistryClient.fetch_if_stale(ttl_seconds=3600)` — usa la cache se fresca, fetch HTTPS se scaduta; fallback su cache stale in caso di errore rete.
 - `scf_plugin_list_remote(force_refresh=False)` — nuovo tool MCP che lista tutti i pacchetti del registry remoto `Nemex81/scf-registry` con campo `universe` (`"U1"` = `mcp_only`, `"U2"` = installabili). TTL 1h, contatori `u1_count`/`u2_count`, campo `from_cache`.
+- `scf_plugin_install_remote(pkg_id, workspace_root, overwrite, force_refresh)` — tool MCP U2 direct-download: TTL registry cache 1h, reject esplicito `mcp_only` (U1), path traversal guard, download HTTPS urllib, idempotent skip su file esistenti, no store tracking. Ritorna `files_written`, `files_skipped`, `errors`.
+- `spark/boot/tools_registry_client.py` — nuovo modulo helpers: `fetch_registry_data()`, `get_remote_packages()` (annotazione `universe` U1/U2), `find_remote_package()` (case-insensitive, reuse engine client).
 - `_build_u2_registry_hint(ff, github_root)` in `tools_resources.py` — legge cache locale registry e aggiunge `registry_hint` (`update_available`, `installed_version`, `latest_version`) alle risorse U2 in `scf_get_agent` e `scf_get_prompt`.
 - `tests/test_registry_u2_client.py` — 16 test per TTL cache, fetch_if_stale, dispatcher U2 hint, annotazione universe.
+- `tests/test_tools_registry_client.py` — 20 test per fetch_registry_data, get_remote_packages, find_remote_package, path traversal guard, U1/U2 validation.
 - Universe V3.0: `packages/spark-ops/package-manifest.json` v1.2.0 — aggiunto `orchestrate`, `workspace_files` con sentinelle bootstrap.
 - Dispatcher U1/U2 in `scf_get_agent`/`scf_get_prompt` — campo `universe` e `source_package`.
 - Boot transfer idempotente: `_ensure_spark_ops_workspace_files()` in `spark/boot/sequence.py`.
@@ -190,7 +193,8 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 ### Changed
 
 - ENGINE_VERSION: `3.4.0` → `3.5.0`.
-- Tool counter: `Tools (51)` → `Tools (52)` (`scf_plugin_list_remote` aggiunto).
+- Tool counter: `Tools (51)` → `Tools (53)` (`scf_plugin_list_remote` + `scf_plugin_install_remote` aggiunti).
+- `tools_plugins.py` docstring aggiornata: 7 → 9 tool registrati.
 - `spark/registry/client.py`: aggiunto import `time` per TTL check.
 
 ---

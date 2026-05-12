@@ -1,11 +1,14 @@
 """Plugin tools factory — Step 2 Full Decoupling + Dual-Mode Architecture.
 
-Registers 7 MCP tools:
+Registers 9 MCP tools:
   scf_plugin_install, scf_plugin_remove, scf_plugin_update, scf_plugin_list,
-    scf_get_plugin_info, scf_list_plugins, scf_install_plugin.
+    scf_get_plugin_info, scf_plugin_list_remote, scf_plugin_install_remote,
+    scf_list_plugins, scf_install_plugin.
 
 I primi 4 tool delegano a ``PluginManagerFacade`` (store-based, Universo A).
 ``scf_get_plugin_info`` legge i metadati plugin dal registry e dal manifest remoto.
+``scf_plugin_list_remote`` e ``scf_plugin_install_remote`` sono U2 direct-download
+con TTL cache (1h) via ``tools_registry_client`` helpers.
 Gli ultimi 2 tool sono compat legacy verso ``PluginManager`` / ``download_plugin``
 (download diretto senza store, TASK-4 Dual-Mode Architecture v1.0).
 
@@ -18,7 +21,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from spark.core.constants import ENGINE_VERSION
+import urllib.error
+import urllib.request
+
+from spark.boot.tools_registry_client import find_remote_package
+from spark.core.constants import ENGINE_VERSION, _REGISTRY_URL
 from spark.core.utils import _is_engine_version_compatible, _normalize_string_list
 from spark.packages import _get_registry_min_engine_version, _resolve_package_version
 from spark.plugins import PluginManagerFacade
@@ -473,6 +480,246 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             "message": (
                 f"{len(annotated)} pacchetti nel registry "
                 f"({u1_count} U1 mcp_only, {u2_count} U2 installabili)."
+            ),
+        }
+
+    # -----------------------------------------------------------------------
+    # U2 Remote Install: download diretto HTTPS con TTL cache
+    # -----------------------------------------------------------------------
+
+    @_register_tool("scf_plugin_install_remote")
+    async def scf_plugin_install_remote(
+        pkg_id: str,
+        workspace_root: str = "",
+        overwrite: bool = False,
+        force_refresh: bool = False,
+    ) -> dict[str, Any]:
+        """Download a Universe U2 plugin directly from its GitHub source into .github/.
+
+        Fetches the SCF registry with a 1-hour TTL cache to resolve ``pkg_id``
+        to a repo URL, then downloads each file declared in ``plugin_files``
+        via HTTPS into ``workspace_root/.github/``.
+
+        Only packages with ``delivery_mode != "mcp_only"`` are supported —
+        ``mcp_only`` (U1) packages are served by the engine MCP store and do
+        not need to be installed in the workspace.
+
+        This tool does **not** register anything in ``.spark-plugins`` or the
+        engine manifest — the downloaded files are owned entirely by the user.
+        For tracked lifecycle management, use ``scf_plugin_install`` instead.
+
+        Args:
+            pkg_id: Registry identifier of the package to install
+                (e.g. ``"scf-master-codecrafter"``).
+            workspace_root: Absolute path to the target workspace root. Defaults
+                to the engine's active workspace if empty.
+            overwrite: If True, overwrite files that already exist in .github/.
+                Default False (idempotent skip).
+            force_refresh: If True, bypass the TTL cache and fetch a fresh
+                registry copy before resolving the package.
+
+        Returns:
+            A dict with keys:
+              - ``status``: ``"ok"`` or ``"error"``
+              - ``pkg_id``: Package identifier echoed back
+              - ``universe``: Always ``"U2"`` on success
+              - ``version``: Resolved version from registry
+              - ``files_written``: List of files written to .github/
+              - ``files_skipped``: List of files skipped (already exist, overwrite=False)
+              - ``errors``: List of per-file error messages
+              - ``message``: Human-readable summary
+        """
+        _log.info(
+            "[SPARK-ENGINE][INFO] scf_plugin_install_remote: start pkg=%s overwrite=%s force_refresh=%s",
+            pkg_id, overwrite, force_refresh,
+        )
+        workspace = Path(workspace_root).resolve() if workspace_root else ctx.workspace_root
+        github_root = workspace / ".github"
+
+        try:
+            registry_client = _make_registry_client(engine, ctx.github_root)
+            entry = find_remote_package(
+                github_root=ctx.github_root,
+                pkg_id=pkg_id,
+                engine=engine,
+                force_refresh=force_refresh,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.error("[SPARK-ENGINE][ERROR] scf_plugin_install_remote registry: %s", exc)
+            return {
+                "status": "error",
+                "pkg_id": pkg_id,
+                "universe": "U2",
+                "version": "",
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [f"Registry non raggiungibile: {exc}"],
+                "message": str(exc),
+            }
+
+        if entry is None:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] scf_plugin_install_remote: '%s' non trovato", pkg_id
+            )
+            return {
+                "status": "error",
+                "pkg_id": pkg_id,
+                "universe": "U2",
+                "version": "",
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [f"Package '{pkg_id}' non trovato nel registry."],
+                "message": f"Package '{pkg_id}' non trovato nel registry.",
+            }
+
+        delivery = str(entry.get("delivery_mode", "managed")).strip()
+        if delivery == "mcp_only":
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] scf_plugin_install_remote: '%s' è mcp_only (U1) — usa scf_plugin_install",
+                pkg_id,
+            )
+            return {
+                "status": "error",
+                "pkg_id": pkg_id,
+                "universe": "U1",
+                "version": str(entry.get("latest_version", "")),
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [
+                    f"'{pkg_id}' è un pacchetto mcp_only (U1): non può essere installato "
+                    "direttamente nel workspace. Usa 'scf_plugin_install'."
+                ],
+                "message": (
+                    f"'{pkg_id}' è mcp_only (U1). Usa 'scf_plugin_install' per il ciclo di vita completo."
+                ),
+            }
+
+        repo_url = str(entry.get("repo_url", "")).strip()
+        version = str(entry.get("latest_version", "latest")).strip()
+
+        try:
+            pkg_manifest = registry_client.fetch_package_manifest(repo_url)
+        except Exception as exc:  # noqa: BLE001
+            _log.error("[SPARK-ENGINE][ERROR] scf_plugin_install_remote manifest: %s", exc)
+            return {
+                "status": "error",
+                "pkg_id": pkg_id,
+                "universe": "U2",
+                "version": version,
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [f"Impossibile scaricare il manifest: {exc}"],
+                "message": str(exc),
+            }
+
+        plugin_files: list[str] = list(pkg_manifest.get("plugin_files") or [])
+        if not plugin_files:
+            _log.info("[SPARK-ENGINE][INFO] scf_plugin_install_remote: nessun plugin_files dichiarato per '%s'", pkg_id)
+            return {
+                "status": "ok",
+                "pkg_id": pkg_id,
+                "universe": "U2",
+                "version": version,
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [],
+                "message": f"'{pkg_id}' non ha plugin_files dichiarati nel manifest.",
+            }
+
+        # Prefisso raw GitHub
+        if not repo_url.startswith("https://github.com/"):
+            return {
+                "status": "error",
+                "pkg_id": pkg_id,
+                "universe": "U2",
+                "version": version,
+                "files_written": [],
+                "files_skipped": [],
+                "errors": [f"URL repo non supportata: {repo_url!r}"],
+                "message": f"URL repo non supportata: {repo_url!r}",
+            }
+        raw_base = (
+            repo_url.replace("https://github.com/", "https://raw.githubusercontent.com/")
+            + "/main/"
+        )
+
+        files_written: list[str] = []
+        files_skipped: list[str] = []
+        errors_list: list[str] = []
+
+        for file_path in plugin_files:
+            if not isinstance(file_path, str) or not file_path:
+                errors_list.append(f"Entry non valida nel manifest: {file_path!r}")
+                continue
+
+            # Path traversal guard.
+            github_rel = file_path.removeprefix(".github/")
+            if ".." in Path(github_rel).parts:
+                errors_list.append(f"Path non sicuro rifiutato: {file_path!r}")
+                continue
+
+            dest = github_root / github_rel
+
+            if dest.is_file() and not overwrite:
+                files_skipped.append(file_path)
+                _log.info(
+                    "[SPARK-ENGINE][INFO] scf_plugin_install_remote: skipped existing %s",
+                    file_path,
+                )
+                continue
+
+            raw_url = raw_base + file_path
+            if not raw_url.startswith("https://raw.githubusercontent.com/"):
+                errors_list.append(f"URL non sicura rifiutata: {raw_url!r}")
+                continue
+
+            try:
+                req = urllib.request.Request(
+                    raw_url,
+                    headers={"User-Agent": f"spark-framework-engine/{ENGINE_VERSION}"},
+                )
+                _DOWNLOAD_TIMEOUT: int = 10
+                with urllib.request.urlopen(req, timeout=_DOWNLOAD_TIMEOUT) as resp:  # noqa: S310
+                    content = resp.read().decode("utf-8")
+            except (urllib.error.URLError, OSError, UnicodeDecodeError) as exc:
+                errors_list.append(f"{file_path}: download fallito ({exc})")
+                _log.error(
+                    "[SPARK-ENGINE][ERROR] scf_plugin_install_remote: %s download failed: %s",
+                    file_path, exc,
+                )
+                continue
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                dest.write_text(content, encoding="utf-8")
+                files_written.append(file_path)
+                _log.info(
+                    "[SPARK-ENGINE][INFO] scf_plugin_install_remote: written %s", file_path
+                )
+            except OSError as exc:
+                errors_list.append(f"{file_path}: scrittura fallita ({exc})")
+                _log.error(
+                    "[SPARK-ENGINE][ERROR] scf_plugin_install_remote: write %s failed: %s",
+                    file_path, exc,
+                )
+
+        success = not errors_list
+        _log.info(
+            "[SPARK-ENGINE][INFO] scf_plugin_install_remote: done pkg=%s written=%d skipped=%d errors=%d",
+            pkg_id, len(files_written), len(files_skipped), len(errors_list),
+        )
+        return {
+            "status": "ok" if success else "error",
+            "pkg_id": pkg_id,
+            "universe": "U2",
+            "version": version,
+            "files_written": files_written,
+            "files_skipped": files_skipped,
+            "errors": errors_list,
+            "message": (
+                f"{len(files_written)} file installati, {len(files_skipped)} saltati"
+                + (f", {len(errors_list)} errori" if errors_list else "")
+                + f" ({pkg_id} v{version})."
             ),
         }
 

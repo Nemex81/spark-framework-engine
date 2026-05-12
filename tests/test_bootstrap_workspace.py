@@ -277,7 +277,6 @@ class TestBootstrapWorkspace(unittest.TestCase):
             self.assertTrue(payload["update_policy"]["auto_update"])
             self.assertEqual(payload["update_policy"]["default_mode"], "integrative")
 
-    @unittest.skip("legacy installbase gone")
     def test_bootstrap_legacy_workspace_requires_authorization_before_policy_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace_root = Path(tmp)
