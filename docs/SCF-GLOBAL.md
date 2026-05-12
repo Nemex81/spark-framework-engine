@@ -1,4 +1,4 @@
-# SCF Universal Launcher v5.1 — Global Command Anywhere
+# SCF Universal Launcher v5.2 — Global Command Anywhere
 
 ## Panoramica
 
@@ -60,7 +60,35 @@ py scf.py init
 
 ## Utilizzo
 
-### Scenario 1: Primo Avvio (Newbie)
+### Scenario 1: Workspace Vuoto (v5.2 — Auto-Setup Deps)
+
+```powershell
+# Da un workspace completamente vuoto (nessun .venv, nessun mcp installato)
+cd C:\fightmanager
+python ..\spark-framework-engine\scripts\scf_universal.py init
+
+# Output automatico:
+# Dipendenze SPARK non trovate nell'ambiente corrente.
+# Configurazione automatica workspace: C:\fightmanager
+# Creazione ambiente virtuale in C:\fightmanager\.venv ...
+# Installazione dipendenze engine ...
+# Setup dipendenze completato!
+# Riavvio con ambiente configurato ...
+# ============================================================
+# SPARK Framework - Wizard di Onboarding v5.0
+# ...
+```
+
+Il launcher:
+1. Rileva che `mcp` non è disponibile
+2. Crea `.venv` locale nel workspace
+3. Installa deps engine (`requirements.txt` + editable install)
+4. Riavvia se stesso con il Python del venv
+5. Prosegue con la wizard
+
+Idempotente: il sentinel `.scf-deps-ready` + `.venv` prevenuto reinstallazioni.
+
+### Scenario 2: Primo Avvio (Ambiente con Deps)
 
 ```bash
 cd /any/path/MyProject
@@ -74,7 +102,7 @@ scf init
 # ...
 ```
 
-### Scenario 2: Workspace Esterno
+### Scenario 3: Workspace Esterno
 
 ```bash
 cd ~/Progetti/MyApp
@@ -83,7 +111,7 @@ scf init --target .github
 # Crea MyApp/.github/ + esegue wizard
 ```
 
-### Scenario 3: Nested Directory
+### Scenario 4: Nested Directory
 
 ```bash
 cd ~/Progetti/MyApp/src/components
@@ -95,7 +123,19 @@ scf init
 
 ---
 
-## Come Funziona
+## Come Funziona (v5.2)
+
+### Auto-Setup Dipendenze
+
+Prima di qualsiasi import pesante, il launcher v5.2 controlla se `mcp` è disponibile:
+
+1. `mcp` importabile → procede normalmente
+2. `mcp` assente + `.scf-deps-ready` + `.venv/python` → riavvia con venv Python
+3. `mcp` assente, nessun setup → crea `.venv`, installa deps, crea `.scf-deps-ready`, riavvia
+
+Sentinel files nel workspace utente:
+- `.scf-deps-ready` — dipendenze già installate
+- `.scf-init-done` — wizard già completata
 
 ### Auto-Detection Cascata
 

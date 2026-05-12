@@ -10,6 +10,31 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — v5.2: scf init da workspace vuoto — auto-setup deps
+
+- `scripts/scf_universal.py` v5.2 — auto-setup dipendenze engine da workspace
+  completamente vuoto (no `.venv`, no `mcp`/`pydantic` installati):
+  - `_check_engine_deps()` — verifica se `mcp` è importabile (gestisce
+    `ValueError` da MagicMock stub e `ModuleNotFoundError`)
+  - `_get_venv_python(venv_dir)` — path Python venv (Windows `Scripts/` o Unix `bin/`)
+  - `_get_venv_pip(venv_dir)` — path pip venv (Windows `Scripts/` o Unix `bin/`)
+  - `_setup_workspace_deps(workspace_cwd, engine_root)` — idempotente:
+    crea `.venv` locale via `venv` stdlib, installa `requirements.txt` +
+    editable install engine via `subprocess`/`pip`; crea sentinel `.scf-deps-ready`
+  - `_resolve_workspace()` — aggiunto fallback `ImportError` → usa `cwd`
+    invece di crashare quando `WorkspaceLocator` non è importabile
+  - `main()` — chiama `_setup_workspace_deps` prima del wizard; se venv creato,
+    riavvia con `subprocess.run([venv_python] + sys.argv)` e `sys.exit`
+- Zero nuove dipendenze esterne: solo `venv` e `subprocess` (stdlib)
+- Compatibile Windows/PowerShell e Linux/macOS
+- `docs/SCF-GLOBAL.md` — aggiornato a v5.2: nuovo Scenario 1 "Workspace Vuoto",
+  sezione "Auto-Setup Dipendenze", sentinel files documentati
+- Test aggiunti:
+  - `tests/test_scf_universal_deps.py` — 11 test unitari (mock venv+pip):
+    `_check_engine_deps`, `_get_venv_python/pip` (Win+Unix), idempotenza,
+    creazione venv, skip requirements.txt assente, fallback ImportError
+- Suite locale non-live verificata post-aggiunta: `614 passed` (era 603).
+
 ### Added — v5.1: scf universal launcher — global command anywhere
 
 - `scripts/scf_universal.py` — launcher globale auto-detect:
