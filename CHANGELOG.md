@@ -10,6 +10,23 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added — v5.0: scf init zero-touch wizard
+
+- `scripts/scf` — launcher eseguibile single-command; imposta `sys.path` e
+  delega a `spark.cli.main`. Compatibile shebang (Linux/macOS) e `py` launcher
+  (Windows). Idempotente via sentinel `.scf-init-done`.
+- `spark/boot/wizard.py` — wizard interattiva guidata in 3 passi:
+  lista pacchetti remoti, installazione `scf-master-codecrafter`, apertura
+  VSCode in Agent Mode. NVDA-accessibile: `print()` testuale puro, `input()`
+  numerato `(1/0/q)`. Parametro `_input` iniettabile per test unitari.
+- `spark/cli/__init__.py` — bridge CLI dispatcher; espone `main()` che
+  instrada `scf init` verso `run_wizard()`.
+- `tests/test_wizard_init.py` — 9 test: idempotenza, esecuzione passi,
+  skip, quit anticipato al passo 1 e 2, input non riconosciuto.
+- `docs/INIT-WIZARD.md` — guida utente completa con quickstart, tabella
+  passi, note accessibilita' NVDA e riferimento API per i test.
+- Suite locale non-live verificata post-aggiunta: `595 passed`.
+
 ### Fixed — DeepAudit v4.1 P0-P2 hardening
 
 - `spark/boot/tools_plugins.py` — hardening di `scf_plugin_install_remote`:
