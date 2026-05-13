@@ -1,6 +1,11 @@
-"""spark.boot.wizard — SPARK Zero-Touch Init Wizard.
+"""spark.boot.wizard — SPARK Zero-Touch Init Wizard legacy.
 
 Guided 3-step onboarding wizard for new SPARK workspaces.
+
+Deprecated:
+    Il boot path utente raccomandato converge ora verso ``spark.cli.startup``
+    e il menu principale del launcher. Questo modulo resta disponibile per
+    compatibilita' retroattiva, test dedicati ed esecuzione manuale esplicita.
 
 Idempotente: si interrompe immediatamente se il sentinel ``.scf-init-done``
 esiste nella directory di lavoro corrente.
@@ -62,6 +67,11 @@ def run_wizard(
     _input: Callable[[str], str] | None = None,
 ) -> dict[str, str]:
     """Esegue la wizard interattiva di onboarding SPARK.
+
+    Deprecated:
+        I launcher runtime del repository usano il boot path unificato basato
+        su ``spark.cli.startup`` e ``spark.cli.main``. Questa funzione resta
+        mantenuta per compatibilita' e test diretti.
 
     La funzione e' progettata per essere testabile: il parametro ``_input``
     permette di iniettare un sostituto di ``input()`` nei test unitari.

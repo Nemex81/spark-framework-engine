@@ -216,13 +216,30 @@ def main() -> None:
             result = _sp.run([str(venv_python)] + sys.argv)
             sys.exit(result.returncode)
 
-        # Importa run_wizard dal contesto del motore
+        # Il launcher universale deve convergere allo stesso boot path del
+        # launcher root, cosi' l'utente incontra sempre il menu principale.
         sys.path.insert(0, str(engine_root))
-        from spark.boot.wizard import run_wizard  # noqa: PLC0415
+        from spark.cli.main import main as cli_main  # noqa: PLC0415
+        from spark.cli.startup import is_startup_completed, run_startup_flow  # noqa: PLC0415
 
-        # Risolvi workspace ed esegui wizard
+        # Risolvi workspace e, se necessario, esegui il first-run introduttivo.
         workspace_root = _resolve_workspace(engine_root)
-        run_wizard(cwd=workspace_root)
+        startup_base = Path.home() / ".spark"
+
+        try:
+            if not is_startup_completed(startup_base):
+                run_startup_flow(
+                    engine_root=engine_root,
+                    workspace_root=workspace_root,
+                    base=startup_base,
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[SPARK-ENGINE][WARNING] Flusso di avvio non disponibile: {exc}",
+                file=sys.stderr,
+            )
+
+        cli_main()
 
     except RuntimeError as e:
         print(f"ERRORE: {e}", file=sys.stderr)

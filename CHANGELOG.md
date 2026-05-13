@@ -23,6 +23,22 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   dedicato, poi converge sempre verso il menu principale CLI; ai lanci
   successivi, con sentinel in `~/.spark/.scf-init-done`, apre direttamente il
   menu principale.
+- boot path unificato: `scripts/scf init` e `scripts/scf_universal.py`
+  convergono ora sullo stesso first-run di `spark.cli.startup` e poi sul menu
+  principale CLI.
+- `spark/cli/__init__.py` — il comando `init` non esegue più la wizard inline;
+  usa il boot path unificato e rende sempre raggiungibile il menu principale.
+
+### Added
+
+- `tests/test_startup.py` — suite diretta per `spark/cli/startup.py`: 8 test,
+  copertura granulare di `is_startup_completed` e `run_startup_flow`.
+
+### Deprecated
+
+- `spark/boot/wizard.py` — percorso legacy mantenuto per compatibilità,
+  test dedicati ed esecuzione manuale esplicita; i launcher runtime del repo
+  convergono ora sul boot path unificato basato su startup e menu CLI.
 
 ### Fixed — Debt Tecnico Boot + Onboarding
 

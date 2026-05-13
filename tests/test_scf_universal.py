@@ -205,33 +205,37 @@ print(f"FOUND:{result}")
     assert f"FOUND:{engine2}" in result.stdout
 
 
-def test_scf_universal_imports_run_wizard_from_engine(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_scf_universal_imports_unified_boot_path_from_engine(
+    tmp_path: Path,
 ) -> None:
-    """Test: scf_universal importa run_wizard dal motore corretto."""
+    """Test: scf_universal importa startup e cli_main dal motore corretto."""
     engine_root = tmp_path / "engine"
     engine_root.mkdir()
     (engine_root / "spark-framework-engine.py").touch()
 
-    # Setup spark.boot.wizard mock minimo
-    spark_boot = engine_root / "spark" / "boot"
-    spark_boot.mkdir(parents=True)
-    (spark_boot / "__init__.py").touch()
+    # Setup minimo del package spark.cli nel motore fake.
+    spark_cli = engine_root / "spark" / "cli"
+    spark_cli.mkdir(parents=True)
+    (spark_cli.parent / "__init__.py").touch()
+    (spark_cli / "__init__.py").touch()
 
-    wizard_code = """
-def run_wizard(cwd=None):
-    from pathlib import Path
-    ws = cwd or Path.cwd()
-    print(f"WIZARD_RUN_IN:{ws}")
-    sentinel = (ws / ".scf-init-done")
-    sentinel.touch()
+    startup_code = """
+def is_startup_completed(base=None):
+    return False
+
+def run_startup_flow(engine_root, workspace_root=None, *, base=None, _input=None):
+    print(f"STARTUP_RUN_IN:{workspace_root}")
+    return {"status": "completed"}
 """
-    (spark_boot / "wizard.py").write_text(wizard_code, encoding="utf-8")
+    (spark_cli / "startup.py").write_text(startup_code, encoding="utf-8")
 
-    # Setup spark/__init__.py
-    (spark_boot.parent / "__init__.py").touch()
+    main_code = """
+def main():
+    print("CLI_MAIN_CALLED")
+"""
+    (spark_cli / "main.py").write_text(main_code, encoding="utf-8")
 
-    # Crea scf_universal che importa run_wizard
+    # Crea scf_universal che importa il boot path unificato.
     scf_universal = engine_root / "scripts" / "scf_universal.py"
     scf_universal.parent.mkdir(exist_ok=True)
 
@@ -242,8 +246,13 @@ from pathlib import Path
 engine_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(engine_root))
 
-from spark.boot.wizard import run_wizard
-run_wizard()
+from spark.cli.main import main as cli_main
+from spark.cli.startup import is_startup_completed, run_startup_flow
+
+workspace_root = Path.cwd()
+if not is_startup_completed(Path.home() / ".spark"):
+    run_startup_flow(engine_root=engine_root, workspace_root=workspace_root, base=Path.home() / ".spark")
+cli_main()
 """
     scf_universal.write_text(code, encoding="utf-8")
 
@@ -256,5 +265,6 @@ run_wizard()
         cwd=tmp_path,
     )
 
-    # Output deve contenere WIZARD_RUN_IN
-    assert "WIZARD_RUN_IN" in result.stdout or result.returncode == 0
+    assert "STARTUP_RUN_IN" in result.stdout
+    assert "CLI_MAIN_CALLED" in result.stdout
+    assert result.returncode == 0

@@ -153,6 +153,86 @@ class TestRunMainRouting:
 class TestCliDispatch:
     """Test per il dispatch di comandi in spark.cli.main()."""
 
+    def test_dispatch_init_runs_startup_flow_then_cli_main(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Comando init usa il boot path unificato prima di aprire il menu."""
+        import spark.cli as cli_module
+
+        fake_home = tmp_path / "fakehome"
+        fake_home.mkdir(exist_ok=True)
+        fake_workspace = tmp_path / "workspace"
+        fake_workspace.mkdir(exist_ok=True)
+        events: list[str] = []
+
+        with (
+            patch("sys.argv", ["scf", "init"]),
+            patch.object(cli_module.Path, "home", return_value=fake_home),
+            patch.object(cli_module.Path, "cwd", return_value=fake_workspace),
+            patch.object(cli_module, "is_startup_completed", return_value=False),
+            patch.object(
+                cli_module,
+                "run_startup_flow",
+                side_effect=lambda **_kwargs: events.append("startup"),
+            ) as mock_startup,
+            patch.object(
+                cli_module,
+                "cli_main",
+                side_effect=lambda: events.append("cli"),
+            ) as mock_cli,
+        ):
+            cli_module.main()
+
+        expected_engine_root = Path(cli_module.__file__).resolve().parents[2]
+        mock_startup.assert_called_once_with(
+            engine_root=expected_engine_root,
+            workspace_root=fake_workspace,
+            base=fake_home / ".spark",
+        )
+        mock_cli.assert_called_once_with()
+        assert events == ["startup", "cli"]
+
+    def test_dispatch_init_skips_startup_when_sentinel_exists(
+        self,
+    ) -> None:
+        """Comando init salta il first-run se il sentinel è già presente."""
+        import spark.cli as cli_module
+
+        with (
+            patch("sys.argv", ["scf", "init"]),
+            patch.object(cli_module, "is_startup_completed", return_value=True),
+            patch.object(cli_module, "run_startup_flow") as mock_startup,
+            patch.object(cli_module, "cli_main") as mock_cli,
+        ):
+            cli_module.main()
+
+        mock_startup.assert_not_called()
+        mock_cli.assert_called_once_with()
+
+    def test_dispatch_init_logs_warning_and_calls_cli_main_on_startup_error(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Comando init non deve bloccare il menu se il first-run fallisce."""
+        import spark.cli as cli_module
+
+        with (
+            patch("sys.argv", ["scf", "init"]),
+            patch.object(cli_module, "is_startup_completed", return_value=False),
+            patch.object(
+                cli_module,
+                "run_startup_flow",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch.object(cli_module, "cli_main") as mock_cli,
+        ):
+            cli_module.main()
+
+        captured = capsys.readouterr()
+        assert "[SPARK-ENGINE][WARNING] Flusso di avvio non disponibile: boom" in captured.err
+        mock_cli.assert_called_once_with()
+
     def test_dispatch_cli_calls_cli_main(self) -> None:
         """Comando 'cli' chiama cli_main."""
         import spark.cli as cli_module
