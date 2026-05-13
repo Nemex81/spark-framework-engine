@@ -337,6 +337,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `spark/cli/__main__.py`: abilita `python -m spark.cli` come alternativa.
 - `tests/test_spark_launcher.py`: 7 test unitari per il launcher (struttura, versione, ImportError, KeyboardInterrupt).
 
+### Fixed — test_spark_launcher.py (2026-05-13)
+
+- `tests/test_spark_launcher.py`: `test_python_version_guard_exits_with_1` —
+  sostituito `sys.version_info.__class__(...)` (non istanziabile in CPython)
+  con `collections.namedtuple` che replica confronto tupla e accesso `.major`/`.minor`.
+
 ---
 
 ## [3.4.0] - 2026-05-10

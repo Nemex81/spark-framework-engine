@@ -11,6 +11,7 @@ Copertura:
 from __future__ import annotations
 
 import ast
+import collections
 import sys
 import types
 from pathlib import Path
@@ -165,7 +166,13 @@ class TestLauncherBehavior:
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Se la versione Python è < 3.10 deve uscire con 1 e indicare il requisito."""
-        fake_version_info = sys.version_info.__class__(2, 7, 18, "final", 0)
+        # sys.version_info.__class__ non è istanziabile in CPython (tipo C interno).
+        # Un namedtuple replica sia il confronto tupla < (3, 10) sia l'accesso
+        # per attributo (.major, .minor) usato dal launcher nel messaggio di errore.
+        _FakeVersionInfo = collections.namedtuple(
+            "version_info", ["major", "minor", "micro", "releaselevel", "serial"]
+        )
+        fake_version_info = _FakeVersionInfo(2, 7, 18, "final", 0)
 
         with (
             patch.object(sys, "version_info", fake_version_info),
