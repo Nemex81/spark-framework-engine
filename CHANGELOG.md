@@ -12,6 +12,18 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Fixed
 
+- `scf-registry/registry.json` (FIX-A) — corretto campo `engine_managed_resources`
+  per `spark-base`, `scf-master-codecrafter` e `scf-pycode-crafter` (da `true` a
+  `false`); i tre pacchetti sono ora visibili nei menu CLI user-facing di
+  `RegistryManager` senza modifiche al codice del filtro. `spark-ops` rimane
+  `engine_managed_resources: true` ed è escluso correttamente.
+
+- `spark/boot/sequence.py` — aggiunta `_optional_spark_base_install`: propone
+  l'installazione di `spark-base` come plugin indipendente al primo avvio se non
+  già presente nel manifest locale. Idempotente: skip silenzioso se spark-base è
+  installato, se il server gira in modalità non-interattiva (MCP stdio, CI, pipe)
+  o se il registro remoto non è raggiungibile. Il bootstrap non viene mai bloccato.
+
 - `spark/cli/registry_manager.py` — filtro `engine_managed_resources`: i pacchetti
   marcati `engine_managed_resources: true` nel registro remoto sono ora esclusi
   da tutte le operazioni user-facing (`_browse_plugins`, `_install_plugin`,
@@ -28,6 +40,10 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   non viene piu caricato automaticamente al lancio del launcher root.
 
 ### Changed
+
+- `spark/boot/sequence.py` — aggiunto `import sys` a livello modulo; in `_build_app`,
+  `_optional_spark_base_install` viene invocata con `interactive=sys.stdin.isatty()`
+  per rilevare automaticamente la modalità non-interattiva (MCP stdio, CI, pipe).
 
 - `spark/cli/registry_manager.py` — `run()`: aggiunto `os.system("cls"/"clear")`
   prima di ristampare il menu e `input("\nPremi Invio per continuare...")` dopo
@@ -54,6 +70,19 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Added
 
+- `spark/boot/sequence.py` — nuova funzione `_optional_spark_base_install`:
+  prompt interattivo opzionale per installare `spark-base` come plugin al primo
+  avvio; supporta due tentativi di input, graceful degradation su errori di rete
+  e parametro `interactive=False` per skip programmatico.
+- `tests/test_boot_spark_base_optional.py` — nuova suite, 6 test:
+  `test_salta_se_gia_installato`, `test_installa_se_risposta_si`,
+  `test_salta_se_risposta_no`, `test_non_interattivo_salta_silenziosamente`,
+  `test_input_non_valido_richiede_conferma_poi_no`,
+  `test_fallimento_download_non_blocca_bootstrap`.
+- `tests/test_cli_registry_manager.py` — aggiunta classe
+  `TestFiltroEngineMangedNomiReali` con test `test_spark_base_incluso_spark_ops_escluso`:
+  verifica che con nomi ID reali spark-base (false) sia incluso e spark-ops (true)
+  sia escluso dal filtro `_user_installable_packages`.
 - `tests/test_startup.py` — suite diretta per `spark/cli/startup.py`: 8 test,
   copertura granulare di `is_startup_completed` e `run_startup_flow`.
 - `tests/test_cli_registry_manager.py` — payload mock aggiornati alla struttura

@@ -567,3 +567,40 @@ class TestRunUX:
         ):
             mgr.run()
         mock_sys.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Test filtro con nomi reali del registro (spark-base / spark-ops)
+# ---------------------------------------------------------------------------
+
+_SAMPLE_REAL_REGISTRY: dict[str, object] = {
+    "packages": [
+        {
+            "id": "spark-base",
+            "display_name": "SPARK Base Layer",
+            "latest_version": "2.1.0",
+            "repo_url": "https://github.com/Nemex81/spark-base",
+            "engine_managed_resources": False,
+        },
+        {
+            "id": "spark-ops",
+            "display_name": "SPARK Ops Layer",
+            "latest_version": "1.1.0",
+            "repo_url": "https://github.com/Nemex81/spark-ops",
+            "engine_managed_resources": True,
+        },
+    ]
+}
+
+
+class TestFiltroEngineMangedNomiReali:
+    """Verifica il filtro con ID reali spark-base e spark-ops."""
+
+    def test_spark_base_incluso_spark_ops_escluso(self, tmp_path: Path) -> None:
+        """spark-base (engine_managed=false) è incluso; spark-ops (true) è escluso."""
+        mgr = _make_mgr(tmp_path)
+        result = mgr._user_installable_packages(_SAMPLE_REAL_REGISTRY)  # type: ignore[arg-type]
+        ids = [p["id"] for p in result]
+        assert "spark-base" in ids
+        assert "spark-ops" not in ids
+

@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -243,6 +244,139 @@ def _boot_repopulate_registry(app: Any, inventory: Any) -> None:
         )
 
 
+def _optional_spark_base_install(
+    context: Any,
+    engine_root: Path,
+    *,
+    interactive: bool = True,
+) -> None:
+    """Propone opzionalmente l'installazione di spark-base come plugin nel workspace.
+
+    Verifica se spark-base è già installato nel manifest locale; in caso negativo
+    e se ``interactive=True``, mostra un prompt testuale che invita l'utente a
+    installarlo dal repository remoto tramite ``RegistryManager``.
+
+    In modalità non-interattiva (``interactive=False``) o quando spark-base è già
+    presente, la funzione ritorna silenziosamente senza effetti collaterali.
+
+    Il bootstrap non viene mai bloccato da questo step: qualsiasi eccezione di rete
+    o di filesystem viene catturata e registrata come warning su stderr.
+
+    Args:
+        context: ``WorkspaceContext`` con ``github_root`` e ``workspace_root``.
+        engine_root: Radice del repository del motore SCF.
+        interactive: Se ``False``, salta silenziosamente il prompt.
+    """
+    # ------------------------------------------------------------------
+    # 1. Verifica presenza locale spark-base
+    # ------------------------------------------------------------------
+    try:
+        from spark.manifest.manifest import ManifestManager  # noqa: PLC0415
+
+        manifest = ManifestManager(context.github_root)
+        installed = manifest.get_installed_versions()
+        if "spark-base" in installed:
+            _log.debug(
+                "[SPARK-ENGINE][DEBUG] spark-base già installato, skip prompt opzionale.",
+            )
+            return
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Errore lettura manifest per check spark-base: %s",
+            exc,
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # 2. Skip silenzioso in modalità non-interattiva
+    # ------------------------------------------------------------------
+    if not interactive:
+        _log.debug(
+            "[SPARK-ENGINE][DEBUG] Modalità non-interattiva, skip prompt spark-base opzionale.",
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # 3. Carica registro remoto e cerca entry spark-base
+    # ------------------------------------------------------------------
+    from spark.cli.registry_manager import RegistryManager  # noqa: PLC0415
+
+    mgr = RegistryManager(context.github_root, engine_root)
+    registry = mgr._load_registry()
+    if registry is None:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Registro remoto non raggiungibile, skip prompt spark-base.",
+        )
+        return
+
+    spark_base_entry = next(
+        (p for p in registry.get("packages", []) if p.get("id") == "spark-base"),
+        None,
+    )
+    if spark_base_entry is None:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Voce spark-base non trovata nel registro remoto, skip.",
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # 4. Mostra prompt interattivo
+    # ------------------------------------------------------------------
+    _YES: frozenset[str] = frozenset(("s", "si", "sì", "y", "yes"))
+    _NO: frozenset[str] = frozenset(("n", "no"))
+    prompt_text = (
+        "\nspark-base non è installato nel tuo workspace.\n\n"
+        "Vuoi installarlo come plugin indipendente? (consigliato)\n"
+        "  [s] Sì  — installa spark-base dal repository remoto\n"
+        "  [n] No  — usa spark-base via MCP tramite gli agenti\n"
+        "            di spark-ops (nessuna copia locale)\n\n"
+        "Scegli [s/n]: "
+    )
+
+    answer = input(prompt_text).strip().lower()
+    if answer not in _YES and answer not in _NO:
+        answer = input("Risposta non riconosciuta. Scegli [s/n]: ").strip().lower()
+        if answer not in _YES and answer not in _NO:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] "
+                "Risposta non riconosciuta per prompt spark-base, trattato come 'no'.",
+            )
+            answer = "n"
+
+    if answer in _NO:
+        print(  # noqa: T201
+            "spark-base saltato, disponibile via MCP tramite gli agenti di spark-ops.",
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # 5. Installazione
+    # ------------------------------------------------------------------
+    print("Installazione spark-base in corso ...")  # noqa: T201
+    try:
+        result = mgr._download_and_install_plugin(spark_base_entry)
+        if result.get("success"):
+            print(  # noqa: T201
+                f"spark-base installato. File copiati: {result.get('files_copied', 0)}",
+            )
+        else:
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] Installazione spark-base fallita: %s",
+                result.get("error", "errore sconosciuto"),
+            )
+            print(  # noqa: T201
+                f"Installazione spark-base fallita: {result.get('error', 'errore sconosciuto')}",
+            )
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Errore imprevisto installazione spark-base: %s",
+            exc,
+        )
+        print(  # noqa: T201
+            f"Errore installazione spark-base, installazione saltata: {exc}",
+        )
+
+
 def _build_app(engine_root: Path) -> FastMCP:
     # Import here to avoid circular import at module level; engine.py imports
     # from spark.inventory and spark.workspace which are always safe.
@@ -294,6 +428,11 @@ def _build_app(engine_root: Path) -> FastMCP:
     # Idempotente: non sovrascrive file esistenti. Eseguito dopo ensure_minimal_bootstrap
     # affinché la dir .github/ esista già.
     _ensure_spark_ops_workspace_files(context, engine_root)
+
+    # Proponi installazione opzionale di spark-base se non ancora presente.
+    # Idempotente: skip silenzioso se spark-base è già installato o se il server è
+    # avviato in modalità non-interattiva (es. MCP stdio transport, CI, pipe).
+    _optional_spark_base_install(context, engine_root, interactive=sys.stdin.isatty())
 
     # Esegui onboarding completo al primo avvio (idempotente)
     from spark.boot.onboarding import OnboardingManager  # noqa: PLC0415
