@@ -26,14 +26,19 @@ if __name__ == "__main__":
         print(f"Errore importazione spark.cli ({exc}). Esegui: pip install -e .")
         sys.exit(1)
 
-    # Onboarding guidato per nuovi utenti: se il sentinel manca, avvia la
-    # wizard interattiva prima di mostrare il menu principale.
-    _SENTINEL = Path.cwd() / ".scf-init-done"
+    # Onboarding guidato per nuovi utenti: sentinel globale in ~/.spark/ per
+    # garantire che la wizard venga eseguita una sola volta per macchina,
+    # indipendentemente dalla directory di lavoro corrente.
+    _SPARK_HOME = Path.home() / ".spark"
+    # Crea la directory se assente — .touch() non crea parent dirs.
+    _SPARK_HOME.mkdir(parents=True, exist_ok=True)
+    _SENTINEL = _SPARK_HOME / ".scf-init-done"
     if not _SENTINEL.exists():
         try:
             from spark.boot.wizard import run_wizard  # type: ignore[import]  # noqa: PLC0415
 
-            run_wizard()
+            # Passa cwd=_SPARK_HOME: wizard controlla e scrive il sentinel li'.
+            run_wizard(cwd=_SPARK_HOME)
         except Exception as _exc:  # noqa: BLE001
             print(f"[SPARK-ENGINE][WARNING] Wizard non disponibile: {_exc}", file=sys.stderr)
 

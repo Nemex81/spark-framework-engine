@@ -11,7 +11,30 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGES_ROOT = REPO_ROOT / "packages"
 
 MIGRATED_AGENTS = {"Agent-FrameworkDocs", "Agent-Release", "spark-assistant", "spark-guide"}
+# Tutti i prompt esposti da spark-ops v1.2.0 (fonte di verità: package-manifest.json).
 MIGRATED_PROMPTS = {
+    "framework-changelog",
+    "framework-release",
+    "framework-update",
+    "orchestrate",
+    "release",
+    "scf-check-updates",
+    "scf-install",
+    "scf-list-available",
+    "scf-list-installed",
+    "scf-migrate-workspace",
+    "scf-package-info",
+    "scf-pre-implementation-audit",
+    "scf-remove",
+    "scf-status",
+    "scf-update",
+    "scf-update-batch",
+    "scf-update-policy",
+    "scf-update-single",
+}
+# Sottoinsieme esclusivo: prompts presenti SOLO in spark-ops, non in spark-base.
+# Usato per verificare che spark-base non li esponga più.
+_SPARK_OPS_EXCLUSIVE_PROMPTS = {
     "framework-changelog",
     "framework-release",
     "framework-update",
@@ -74,7 +97,9 @@ def test_spark_base_manifest_no_longer_exports_operational_resources() -> None:
 
     assert manifest["version"] == "2.1.0"
     assert set(resources["agents"]).isdisjoint(MIGRATED_AGENTS)
-    assert set(resources["prompts"]).isdisjoint(MIGRATED_PROMPTS)
+    # Usa il sottoinsieme esclusivo: i 13 scf-* sono condivisi tra spark-base
+    # e spark-ops per retrocompatibilità — non si verifica la disjointness su quelli.
+    assert set(resources["prompts"]).isdisjoint(_SPARK_OPS_EXCLUSIVE_PROMPTS)
     assert set(resources["skills"]).isdisjoint(MIGRATED_SKILLS)
     assert engine_skills.isdisjoint(MIGRATED_SKILLS)
 
@@ -82,7 +107,7 @@ def test_spark_base_manifest_no_longer_exports_operational_resources() -> None:
         assert f".github/agents/{agent}.md" not in file_paths
         assert f".github/agents/{agent}.md" not in metadata_paths
 
-    for prompt in MIGRATED_PROMPTS:
+    for prompt in _SPARK_OPS_EXCLUSIVE_PROMPTS:
         prompt_path = f".github/prompts/{prompt}.prompt.md"
         assert prompt_path not in file_paths
         assert prompt_path not in metadata_paths

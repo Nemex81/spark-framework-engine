@@ -186,30 +186,50 @@ class TestLauncherBehavior:
 
 
 # ---------------------------------------------------------------------------
-# Test: onboarding first-run (sentinel .scf-init-done)
+# Test: onboarding first-run (sentinel ~/.spark/.scf-init-done)
 # ---------------------------------------------------------------------------
 
 
 class TestLauncherOnboarding:
-    """Verifica il flusso wizard-before-menu per nuovi utenti."""
+    """Verifica il flusso wizard-before-menu per nuovi utenti.
+
+    Il sentinel è in Path.home() / '.spark' / '.scf-init-done' (globale per
+    macchina) — indipendente dalla directory di lavoro corrente. Nei test si
+    mocka Path.home() per isolare il filesystem reale dell'utente.
+    """
+
+    def _fake_home(self, tmp_path: Path) -> Path:
+        """Ritorna un home fittizio sotto tmp_path per i test."""
+        fake = tmp_path / "fakehome"
+        fake.mkdir(exist_ok=True)
+        return fake
 
     def test_wizard_called_when_no_sentinel(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """run_wizard() deve essere chiamata quando .scf-init-done è assente."""
-        monkeypatch.chdir(tmp_path)  # cwd senza sentinel
+        """run_wizard() deve essere chiamata quando .scf-init-done è assente.
 
-        wizard_calls: list[bool] = []
+        Il sentinel globale ~/.spark/.scf-init-done non esiste → wizard invocata
+        con cwd=Path.home() / '.spark'.
+        """
+        fake_home = self._fake_home(tmp_path)
+        # ~/.spark/ non esiste ancora → sentinel assente
+        wizard_calls: list[Path] = []
 
         fake_wizard = types.ModuleType("spark.boot.wizard")
-        fake_wizard.run_wizard = lambda: wizard_calls.append(True)  # type: ignore[attr-defined]
+
+        def _fake_run_wizard(cwd: Path | None = None, **_kw: object) -> dict:
+            wizard_calls.append(cwd if cwd is not None else Path.cwd())
+            return {}
+
+        fake_wizard.run_wizard = _fake_run_wizard  # type: ignore[attr-defined]
 
         fake_main_mod = types.ModuleType("spark.cli.main")
         fake_main_mod.main = MagicMock(side_effect=SystemExit(0))  # type: ignore[attr-defined]
 
         with (
+            patch.object(Path, "home", return_value=fake_home),
             patch.dict(
                 sys.modules,
                 {"spark.boot.wizard": fake_wizard, "spark.cli.main": fake_main_mod},
@@ -218,26 +238,36 @@ class TestLauncherOnboarding:
         ):
             _exec_launcher_guard({})
 
-        assert wizard_calls == [True], "run_wizard() non è stata chiamata"
+        assert len(wizard_calls) == 1, "run_wizard() non è stata chiamata"
+        # Il launcher deve passare cwd=~/.spark/ alla wizard
+        assert wizard_calls[0] == fake_home / ".spark", (
+            f"run_wizard() chiamata con cwd sbagliato: {wizard_calls[0]}"
+        )
 
     def test_wizard_skipped_when_sentinel_exists(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """run_wizard() NON deve essere chiamata se .scf-init-done esiste."""
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / ".scf-init-done").touch()  # sentinel presente
+        """run_wizard() NON deve essere chiamata se .scf-init-done esiste.
+
+        Il sentinel globale ~/.spark/.scf-init-done presente → wizard saltata.
+        """
+        fake_home = self._fake_home(tmp_path)
+        # Crea sentinel in ~/.spark/.scf-init-done
+        spark_home = fake_home / ".spark"
+        spark_home.mkdir(parents=True, exist_ok=True)
+        (spark_home / ".scf-init-done").touch()
 
         wizard_calls: list[bool] = []
 
         fake_wizard = types.ModuleType("spark.boot.wizard")
-        fake_wizard.run_wizard = lambda: wizard_calls.append(True)  # type: ignore[attr-defined]
+        fake_wizard.run_wizard = lambda *_a, **_kw: wizard_calls.append(True)  # type: ignore[attr-defined]
 
         fake_main_mod = types.ModuleType("spark.cli.main")
         fake_main_mod.main = MagicMock(side_effect=SystemExit(0))  # type: ignore[attr-defined]
 
         with (
+            patch.object(Path, "home", return_value=fake_home),
             patch.dict(
                 sys.modules,
                 {"spark.boot.wizard": fake_wizard, "spark.cli.main": fake_main_mod},

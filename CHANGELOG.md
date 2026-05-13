@@ -353,6 +353,32 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   sostituito `sys.version_info.__class__(...)` (non istanziabile in CPython)
   con `collections.namedtuple` che replica confronto tupla e accesso `.major`/`.minor`.
 
+### Fixed — spark_launcher: sentinel globale ~/.spark (TRACK-A) (2026-05-13)
+
+- `spark_launcher.py`: sentinel `.scf-init-done` spostato da `Path.cwd()` a
+  `Path.home() / ".spark"` (globale per macchina). La directory viene creata
+  automaticamente prima del check (`mkdir(parents=True, exist_ok=True)`).
+  `run_wizard()` riceve `cwd=_SPARK_HOME` per scrivere il sentinel nella stessa
+  posizione. Risolve il problema di re-esecuzione della wizard a ogni lancio da
+  directory di lavoro diversa.
+- `tests/test_spark_launcher.py`: `TestLauncherOnboarding` aggiornato —
+  mock `Path.home()` tramite `patch.object(Path, "home", return_value=...)`;
+  verifica che `run_wizard()` riceva `cwd=_SPARK_HOME`. Rimossa dipendenza da
+  `monkeypatch.chdir`.
+
+### Fixed — test_spark_ops_decoupling_manifest: MIGRATED_PROMPTS alignment (TRACK-B) (2026-05-13)
+
+- `tests/test_spark_ops_decoupling_manifest.py`: `MIGRATED_PROMPTS` allineato a
+  spark-ops v1.2.0 (18 prompt totali, erano 5). Aggiunti 13 prompt `scf-*`:
+  `scf-check-updates, scf-install, scf-list-available, scf-list-installed,
+  scf-migrate-workspace, scf-package-info, scf-pre-implementation-audit,
+  scf-remove, scf-status, scf-update, scf-update-batch, scf-update-policy,
+  scf-update-single`.
+- Aggiunta costante `_SPARK_OPS_EXCLUSIVE_PROMPTS` (5 prompt esclusivi di spark-ops,
+  non presenti in spark-base) per il check `isdisjoint` su spark-base manifest.
+  Risolve 1 test failure: `test_spark_ops_manifest_exposes_only_operational_resources`.
+  Suite: 669 passed / 1 failed → 670 passed / 0 failed.
+
 ---
 
 ## [3.4.0] - 2026-05-10
