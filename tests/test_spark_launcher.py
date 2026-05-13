@@ -183,3 +183,69 @@ class TestLauncherBehavior:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "3.10" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Test: onboarding first-run (sentinel .scf-init-done)
+# ---------------------------------------------------------------------------
+
+
+class TestLauncherOnboarding:
+    """Verifica il flusso wizard-before-menu per nuovi utenti."""
+
+    def test_wizard_called_when_no_sentinel(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """run_wizard() deve essere chiamata quando .scf-init-done è assente."""
+        monkeypatch.chdir(tmp_path)  # cwd senza sentinel
+
+        wizard_calls: list[bool] = []
+
+        fake_wizard = types.ModuleType("spark.boot.wizard")
+        fake_wizard.run_wizard = lambda: wizard_calls.append(True)  # type: ignore[attr-defined]
+
+        fake_main_mod = types.ModuleType("spark.cli.main")
+        fake_main_mod.main = MagicMock(side_effect=SystemExit(0))  # type: ignore[attr-defined]
+
+        with (
+            patch.dict(
+                sys.modules,
+                {"spark.boot.wizard": fake_wizard, "spark.cli.main": fake_main_mod},
+            ),
+            pytest.raises(SystemExit),
+        ):
+            _exec_launcher_guard({})
+
+        assert wizard_calls == [True], "run_wizard() non è stata chiamata"
+
+    def test_wizard_skipped_when_sentinel_exists(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """run_wizard() NON deve essere chiamata se .scf-init-done esiste."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".scf-init-done").touch()  # sentinel presente
+
+        wizard_calls: list[bool] = []
+
+        fake_wizard = types.ModuleType("spark.boot.wizard")
+        fake_wizard.run_wizard = lambda: wizard_calls.append(True)  # type: ignore[attr-defined]
+
+        fake_main_mod = types.ModuleType("spark.cli.main")
+        fake_main_mod.main = MagicMock(side_effect=SystemExit(0))  # type: ignore[attr-defined]
+
+        with (
+            patch.dict(
+                sys.modules,
+                {"spark.boot.wizard": fake_wizard, "spark.cli.main": fake_main_mod},
+            ),
+            pytest.raises(SystemExit),
+        ):
+            _exec_launcher_guard({})
+
+        assert wizard_calls == [], (
+            "run_wizard() non deve essere chiamata se il sentinel è presente"
+        )

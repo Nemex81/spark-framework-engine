@@ -337,6 +337,16 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `spark/cli/__main__.py`: abilita `python -m spark.cli` come alternativa.
 - `tests/test_spark_launcher.py`: 7 test unitari per il launcher (struttura, versione, ImportError, KeyboardInterrupt).
 
+### Fixed — spark_launcher: flusso nuovo utente e wizard onboarding (2026-05-13)
+
+- `spark_launcher.py`: aggiunto check sentinel `Path.cwd() / ".scf-init-done"` prima
+  del menu principale. Se il sentinel è assente (nuovo utente), `run_wizard()` viene
+  invocata prima di avviare il loop menu. Errori non critici della wizard non
+  interrompono il flusso — il menu viene comunque avviato.
+- `tests/test_spark_launcher.py`: aggiunti 2 test in `TestLauncherOnboarding`
+  (`test_wizard_called_when_no_sentinel`, `test_wizard_skipped_when_sentinel_exists`).
+  Suite: 7 → 9 test.
+
 ### Fixed — test_spark_launcher.py (2026-05-13)
 
 - `tests/test_spark_launcher.py`: `test_python_version_guard_exits_with_1` —
