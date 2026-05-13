@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -104,10 +105,12 @@ class OnboardingManager:
         """Esegue il ciclo di onboarding completo.
 
         Sequenza:
+        0. Crea workspace_root e github_root se non esistono (``_ensure_workspace_dir``).
         1. Verifica/esegue bootstrap Cat.A (``_ensure_bootstrap``).
         2. Verifica/popola store locale (``_ensure_store_populated``).
         3. Installa pacchetti da ``.github/spark-packages.json`` se esiste
            (``_install_declared_packages``).
+        4. Emette segnale di reload per VS Code (``_signal_workspace_reload``).
 
         Returns:
             Dict con chiavi:
@@ -116,6 +119,8 @@ class OnboardingManager:
             - ``steps_skipped``: lista nomi step saltati
             - ``packages_installed``: lista pacchetti installati in questa sessione
             - ``errors``: lista stringhe di errore non fatali
+            - ``workspace_created``: True se workspace_root o github_root sono stati creati
+            - ``reload_signaled``: True se il segnale di reload è stato emesso
         """
         result: dict[str, Any] = {
             "status": "completed",
@@ -123,9 +128,25 @@ class OnboardingManager:
             "steps_skipped": [],
             "packages_installed": [],
             "errors": [],
+            "workspace_created": False,
+            "reload_signaled": False,
         }
 
         _log.info("[SPARK-ENGINE][ONBOARDING] Avvio onboarding primo lancio.")
+
+        # Step 0 — Crea struttura workspace se assente
+        try:
+            workspace_created = self._ensure_workspace_dir()
+            result["workspace_created"] = workspace_created
+            if workspace_created:
+                result["steps_completed"].append("workspace_dir")
+            else:
+                result["steps_skipped"].append("workspace_dir")
+        except Exception as exc:  # noqa: BLE001
+            error_msg = f"Workspace dir step error: {exc}"
+            _log.warning("[SPARK-ENGINE][ONBOARDING] %s", error_msg)
+            result["errors"].append(error_msg)
+            result["steps_skipped"].append("workspace_dir")
 
         # Step 1 — Bootstrap Cat.A
         try:
@@ -167,6 +188,15 @@ class OnboardingManager:
             result["errors"].append(error_msg)
             result["steps_skipped"].append("declared_packages")
 
+        # Step 4 — Segnale di reload workspace (non concorre al gate "skipped")
+        try:
+            self._signal_workspace_reload()
+            result["reload_signaled"] = True
+        except Exception as exc:  # noqa: BLE001
+            error_msg = f"Reload signal step error: {exc}"
+            _log.warning("[SPARK-ENGINE][ONBOARDING] %s", error_msg)
+            result["errors"].append(error_msg)
+
         # Determina status finale
         if result["errors"]:
             result["status"] = "partial"
@@ -186,6 +216,54 @@ class OnboardingManager:
     # ------------------------------------------------------------------
     # Step interni
     # ------------------------------------------------------------------
+
+    def _ensure_workspace_dir(self) -> bool:
+        """Crea workspace_root e github_root se non esistono.
+
+        Idempotente: se entrambe le directory esistono già, ritorna ``False``
+        senza effetti collaterali. Se ``spark-packages.json`` non è presente
+        in ``github_root``, lo scrive con contenuto minimale.
+
+        Returns:
+            True se almeno una directory o il file spark-packages.json
+            sono stati creati; False se tutto era già presente.
+        """
+        created_something = False
+
+        workspace_root = self._ctx.workspace_root
+        if not workspace_root.is_dir():
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            _log.info(
+                "[SPARK-ENGINE][ONBOARDING] workspace_root creato: %s",
+                workspace_root,
+            )
+            created_something = True
+
+        github_root = self._ctx.github_root
+        if not github_root.is_dir():
+            github_root.mkdir(parents=True, exist_ok=True)
+            _log.info(
+                "[SPARK-ENGINE][ONBOARDING] github_root creato: %s",
+                github_root,
+            )
+            created_something = True
+
+        spark_packages_file = github_root / _SPARK_PACKAGES_FILE
+        if not spark_packages_file.is_file():
+            minimal_packages: dict = {
+                "packages": [_DEFAULT_BASE_PACKAGE, "spark-ops"],
+                "auto_install": True,
+            }
+            spark_packages_file.write_text(
+                json.dumps(minimal_packages, indent=2), encoding="utf-8"
+            )
+            _log.info(
+                "[SPARK-ENGINE][ONBOARDING] spark-packages.json minimale scritto: %s",
+                spark_packages_file,
+            )
+            created_something = True
+
+        return created_something
 
     def _ensure_bootstrap(self) -> bool:
         """Garantisce che ensure_minimal_bootstrap sia stato eseguito.
@@ -370,3 +448,26 @@ class OnboardingManager:
                 )
 
         return installed_this_session
+
+    def _signal_workspace_reload(self) -> None:
+        """Emette un segnale di reload del workspace per VS Code.
+
+        Scrive il file ``github_root/.spark-reload-requested`` con il timestamp
+        ISO corrente. I task watcher di VS Code possono intercettare la presenza
+        di questo file per proporre o eseguire un reload del workspace.
+
+        Il log a livello WARNING con tag ``[SPARK-RELOAD]`` è intenzionale:
+        permette a tool di monitoraggio esterno di intercettare il segnale
+        senza dover leggere i file su disco.
+
+        Idempotente: se il file esiste già viene sovrascritto con il timestamp
+        aggiornato (ogni chiamata aggiorna il segnale).
+        """
+        reload_marker = self._ctx.github_root / ".spark-reload-requested"
+        timestamp = datetime.now(timezone.utc).isoformat()
+        reload_marker.write_text(timestamp, encoding="utf-8")
+        _log.warning(
+            "[SPARK-RELOAD] Segnale reload emesso per workspace: %s — %s",
+            self._ctx.workspace_root,
+            timestamp,
+        )

@@ -10,6 +10,52 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed — Debt Tecnico Boot + Onboarding
+
+- `spark/boot/sequence.py` — P1: sostituito `sys.stderr.write()` con
+  `_log.info()` nelle ultime due righe di `_build_app()`.
+  Ora tutta l'output di avvio rispetta la policy MCP (solo `stderr` via logging).
+- `spark/boot/sequence.py` — P2: estratta funzione `_boot_repopulate_registry(app, inventory)`
+  a livello di modulo. Il blocco `try/except (OSError, ValueError)` era inline
+  in `_build_app()`; ora è una funzione documentata con docstring Google Style
+  e DEPRECATION note.
+- `spark/boot/onboarding.py` — P3: aggiunto metodo privato `_ensure_workspace_dir()`
+  che crea `workspace_root` / `github_root` e scrive `spark-packages.json`
+  minimale se assente. Chiamato come **Step 0** di `run_onboarding()`.
+  Idempotente. Il risultato viene tracciato in `result["workspace_created"]`.
+- `spark/boot/onboarding.py` — P4: aggiunto metodo privato `_signal_workspace_reload()`
+  che scrive `.github/.spark-reload-requested` con timestamp ISO.
+  Chiamato come **Step 4** di `run_onboarding()`.
+  Il segnale è tracciato in `result["reload_signaled"]`.
+
+### Changed — Onboarding result keys
+
+- `spark/boot/onboarding.py` — `run_onboarding()` ora include due nuove chiavi
+  nel dict di ritorno: `"workspace_created": bool` e `"reload_signaled": bool`.
+
+### Added — SPARK Framework CLI (P5–P7)
+
+- `spark/cli/init_manager.py` — `InitManager`: inizializzazione guidata workspace
+  interattiva (P6). Sequenza 4 step: chiede path, crea `.github/`,
+  trasferisce workspace_files di spark-ops con rollback atomico su errore,
+  scrive/aggiorna `.vscode/mcp.json`, emette segnale reload.
+- `spark/cli/package_manager.py` — `PackageManager`: sotto-menu CLI per
+  listare, installare, rimuovere e reinstallare pacchetti. Delega a
+  `SparkFrameworkEngine` via `asyncio.run()` senza avviare il server MCP.
+- `spark/cli/registry_manager.py` — `RegistryManager`: sfoglio e installazione
+  plugin remoti da `scf-registry` via `urllib.request` (P7).
+  Graceful degradation se il registro non è raggiungibile.
+  Verifica e applica aggiornamenti plugin installati.
+- `spark/cli/main.py` — Entry point CLI con menu principale (P5):
+  init, pacchetti, plugin, aggiornamenti, diagnostica.
+  Gestisce `KeyboardInterrupt` e `EOFError` con uscita pulita.
+- `spark/cli/__init__.py` — aggiunto `from spark.cli.main import main as cli_main`
+  e dispatch del comando `cli` nel `main()` esistente.
+- Test:
+  - `tests/test_cli_init_manager.py` — 14 test unitari (struttura, transfer, mcp.json, run)
+  - `tests/test_cli_registry_manager.py` — 11 test unitari (registry, install, update)
+  - `tests/test_cli_main.py` — 10 test unitari (routing, exit handling, dispatch)
+
 ### Added — v5.2: scf init da workspace vuoto — auto-setup deps
 
 - `scripts/scf_universal.py` v5.2 — auto-setup dipendenze engine da workspace

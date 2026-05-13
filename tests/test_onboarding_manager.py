@@ -343,6 +343,9 @@ def test_run_onboarding_skipped_when_no_steps_completed(tmp_path: Path) -> None:
     engine = tmp_path / "engine"
     engine.mkdir()
     (workspace / ".github").mkdir(parents=True)
+    # spark-packages.json presente con auto_install=False → _ensure_workspace_dir
+    # ritorna False (nulla da creare) e _install_declared_packages salta.
+    _write_spark_packages(workspace / ".github", ["spark-base"], auto_install=False)
 
     manager, _, app = _make_manager(workspace, engine)
     # Bootstrap già presente → step bootstrap saltato (returns False)
@@ -350,11 +353,12 @@ def test_run_onboarding_skipped_when_no_steps_completed(tmp_path: Path) -> None:
     sentinel.parent.mkdir(parents=True, exist_ok=True)
     sentinel.write_text("present", encoding="utf-8")
     app._minimal_bootstrap_required_paths.return_value = (sentinel,)
-    # Store assente, no spark-packages.json → tutti gli step skipped
+    # Store assente, auto_install=False → tutti gli step business skipped
 
     result = manager.run_onboarding()
     assert result["status"] == "skipped"
     assert result["steps_completed"] == []
+    assert "workspace_dir" in result["steps_skipped"]
     assert "bootstrap" in result["steps_skipped"]
     assert "store_populated" in result["steps_skipped"]
     assert "declared_packages" in result["steps_skipped"]

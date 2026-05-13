@@ -1,0 +1,175 @@
+"""spark.cli.main — Entry point del SPARK Framework CLI.
+
+Menu principale per l'inizializzazione workspace, gestione pacchetti
+e plugin remoti. Accessibile da tastiera, nessun output decorativo.
+"""
+from __future__ import annotations
+
+import logging
+import sys
+from pathlib import Path
+
+_log: logging.Logger = logging.getLogger("spark-framework-engine")
+
+_MENU_TEXT = """\
+=== SPARK Framework CLI ===
+1. Inizializza nuovo workspace (nuovo utente)
+2. Gestisci pacchetti installati
+3. Sfoglia e installa plugin dal registro
+4. Verifica e applica aggiornamenti
+5. Diagnostica e stato sistema
+0. Esci
+Scegli [0-5]:"""
+
+
+def main() -> None:
+    """Entry point del SPARK CLI.
+
+    Calcola automaticamente ``engine_root`` dalla posizione del file.
+    Richiede ``github_root`` all'utente se non è rilevabile automaticamente.
+    Gestisce ``KeyboardInterrupt`` e ``EOFError`` con uscita pulita.
+    """
+    try:
+        _run_main()
+    except (KeyboardInterrupt, EOFError):
+        print("\nUscita.")
+        sys.exit(0)
+
+
+def _run_main() -> None:
+    """Logica principale del menu CLI (separata da main() per testabilità)."""
+    # engine_root: spark/cli/main.py → spark/cli/ → spark/ → engine_root
+    engine_root = Path(__file__).resolve().parents[2]
+    github_root = _resolve_github_root(engine_root)
+
+    while True:
+        print(f"\n{_MENU_TEXT} ", end="")
+        try:
+            choice = input().strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nUscita.")
+            sys.exit(0)
+
+        if choice == "0":
+            print("Arrivederci.")
+            break
+        elif choice == "1":
+            _cmd_init(engine_root)
+        elif choice == "2":
+            _cmd_packages(github_root, engine_root)
+        elif choice == "3":
+            _cmd_registry(github_root, engine_root)
+        elif choice == "4":
+            _cmd_updates(github_root, engine_root)
+        elif choice == "5":
+            _cmd_diagnostics(github_root, engine_root)
+        else:
+            print("Scelta non valida. Inserisci un numero tra 0 e 5.")
+
+
+def _resolve_github_root(engine_root: Path) -> Path:
+    """Determina github_root del workspace utente corrente.
+
+    Usa ``WorkspaceLocator`` se disponibile; come fallback usa
+    la directory corrente / ``.github/``.
+
+    Args:
+        engine_root: Root del motore SPARK.
+
+    Returns:
+        Path assoluto di ``.github/`` del workspace utente.
+    """
+    try:
+        from spark.workspace import WorkspaceLocator  # noqa: PLC0415
+
+        locator = WorkspaceLocator(engine_root=engine_root)
+        context = locator.resolve()
+        return context.github_root
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("[SPARK-ENGINE][CLI] WorkspaceLocator fallback: %s", exc)
+        return Path.cwd() / ".github"
+
+
+def _cmd_init(engine_root: Path) -> None:
+    """Avvia l'inizializzazione guidata di un nuovo workspace.
+
+    Args:
+        engine_root: Root del motore SPARK.
+    """
+    from spark.cli.init_manager import InitManager  # noqa: PLC0415
+
+    InitManager(engine_root).run()
+
+
+def _cmd_packages(github_root: Path, engine_root: Path) -> None:
+    """Apre il sotto-menu di gestione pacchetti installati.
+
+    Args:
+        github_root: Root ``.github/`` del workspace.
+        engine_root: Root del motore SPARK.
+    """
+    from spark.cli.package_manager import PackageManager  # noqa: PLC0415
+
+    PackageManager(github_root, engine_root).run()
+
+
+def _cmd_registry(github_root: Path, engine_root: Path) -> None:
+    """Apre il sotto-menu di sfoglio e installazione plugin dal registro.
+
+    Args:
+        github_root: Root ``.github/`` del workspace.
+        engine_root: Root del motore SPARK.
+    """
+    from spark.cli.registry_manager import RegistryManager  # noqa: PLC0415
+
+    RegistryManager(github_root, engine_root).run()
+
+
+def _cmd_updates(github_root: Path, engine_root: Path) -> None:
+    """Verifica e applica aggiornamenti plugin disponibili.
+
+    Apre il RegistryManager e chiama direttamente ``_apply_updates()``.
+
+    Args:
+        github_root: Root ``.github/`` del workspace.
+        engine_root: Root del motore SPARK.
+    """
+    from spark.cli.registry_manager import RegistryManager  # noqa: PLC0415
+
+    mgr = RegistryManager(github_root, engine_root)
+    mgr._check_updates()
+    confirm = input("Applicare gli aggiornamenti? [s/N]: ").strip().lower()
+    if confirm in ("s", "si", "sì", "y", "yes"):
+        mgr._apply_updates()
+
+
+def _cmd_diagnostics(github_root: Path, engine_root: Path) -> None:
+    """Mostra diagnostica e stato del sistema SPARK.
+
+    Args:
+        github_root: Root ``.github/`` del workspace.
+        engine_root: Root del motore SPARK.
+    """
+    print("\nDiagnostica SPARK:")
+    print(f"  engine_root: {engine_root}")
+    print(f"  github_root: {github_root}")
+    print(f"  github_root esiste: {github_root.is_dir()}")
+
+    try:
+        from spark.manifest.manifest import ManifestManager  # noqa: PLC0415
+
+        manifest = ManifestManager(github_root)
+        installed = manifest.get_installed_versions()
+        print(f"  Pacchetti installati: {len(installed)}")
+        for pkg_id, version in sorted(installed.items()):
+            print(f"    - {pkg_id} ({version})")
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("[SPARK-ENGINE][CLI] Errore diagnostica manifest: %s", exc)
+        print(f"  Errore lettura manifest: {exc}")
+
+    try:
+        from spark.core.constants import ENGINE_VERSION  # noqa: PLC0415
+
+        print(f"  ENGINE_VERSION: {ENGINE_VERSION}")
+    except Exception:  # noqa: BLE001
+        pass

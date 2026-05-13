@@ -1,0 +1,324 @@
+"""tests.test_cli_registry_manager — Test unitari per spark.cli.registry_manager.
+
+Coprono: sfoglio plugin, installazione, verifica aggiornamenti,
+graceful degradation su registro non raggiungibile.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+from urllib.error import URLError
+
+import pytest
+
+from spark.cli.registry_manager import RegistryManager
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+_SAMPLE_REGISTRY = {
+    "schema_version": "1.0",
+    "plugins": [
+        {
+            "id": "my-plugin",
+            "version": "1.0.0",
+            "description": "Plugin di test",
+            "repo": "Nemex81/my-plugin",
+            "manifest_path": "package-manifest.json",
+        },
+        {
+            "id": "other-plugin",
+            "version": "2.3.0",
+            "description": "Altro plugin",
+            "repo": "Nemex81/other-plugin",
+            "manifest_path": "package-manifest.json",
+        },
+    ],
+}
+
+_SAMPLE_PLUGIN_MANIFEST = {
+    "package": "my-plugin",
+    "version": "1.0.0",
+    "workspace_files": [".github/agents/my-agent.md"],
+}
+
+
+def _make_mgr(tmp_path: Path) -> RegistryManager:
+    """Crea un RegistryManager con directories fittizie."""
+    github_root = tmp_path / ".github"
+    github_root.mkdir()
+    engine_root = tmp_path / "engine"
+    engine_root.mkdir()
+    return RegistryManager(github_root, engine_root)
+
+
+# ---------------------------------------------------------------------------
+# Test _load_registry
+# ---------------------------------------------------------------------------
+
+
+class TestLoadRegistry:
+    """Test per RegistryManager._load_registry."""
+
+    def test_returns_registry_on_success(self, tmp_path: Path) -> None:
+        """Ritorna il registro parsato quando il download ha successo."""
+        mgr = _make_mgr(tmp_path)
+        raw_bytes = json.dumps(_SAMPLE_REGISTRY).encode("utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = raw_bytes
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = mgr._load_registry()
+
+        assert result is not None
+        assert len(result["plugins"]) == 2
+
+    def test_returns_none_on_url_error(self, tmp_path: Path) -> None:
+        """Ritorna None e non lancia eccezione su URLError."""
+        mgr = _make_mgr(tmp_path)
+        with patch("urllib.request.urlopen", side_effect=URLError("offline")):
+            result = mgr._load_registry()
+
+        assert result is None
+
+    def test_returns_none_on_invalid_json(self, tmp_path: Path) -> None:
+        """Ritorna None se il JSON non è valido."""
+        mgr = _make_mgr(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = b"not-valid-json!!!"
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = mgr._load_registry()
+
+        assert result is None
+
+    def test_caches_registry_after_first_load(self, tmp_path: Path) -> None:
+        """La seconda chiamata usa la cache senza chiamare urlopen di nuovo."""
+        mgr = _make_mgr(tmp_path)
+        raw_bytes = json.dumps(_SAMPLE_REGISTRY).encode("utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = raw_bytes
+
+        with patch("urllib.request.urlopen", return_value=mock_resp) as mock_open:
+            mgr._load_registry()
+            mgr._load_registry()
+            assert mock_open.call_count == 1  # chiamato una sola volta
+
+
+# ---------------------------------------------------------------------------
+# Test _browse_plugins
+# ---------------------------------------------------------------------------
+
+
+class TestBrowsePlugins:
+    """Test per RegistryManager._browse_plugins."""
+
+    def test_prints_plugin_list(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        """Stampa la lista dei plugin quando il registro è disponibile."""
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_REGISTRY
+
+        mgr._browse_plugins()
+
+        out, _ = capsys.readouterr()
+        assert "my-plugin" in out
+        assert "other-plugin" in out
+
+    def test_graceful_degradation_when_registry_unavailable(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Stampa messaggio di errore senza crash quando registro non disponibile."""
+        mgr = _make_mgr(tmp_path)
+        with patch("urllib.request.urlopen", side_effect=URLError("offline")):
+            mgr._browse_plugins()
+
+        out, _ = capsys.readouterr()
+        assert "non raggiungibile" in out.lower() or "errore" in out.lower() or "connessione" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test _download_and_install_plugin
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadAndInstallPlugin:
+    """Test per RegistryManager._download_and_install_plugin."""
+
+    def test_installs_plugin_files(self, tmp_path: Path) -> None:
+        """Scarica e scrive i file del plugin nel github_root."""
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+
+        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        manifest_bytes = json.dumps(_SAMPLE_PLUGIN_MANIFEST).encode("utf-8")
+        file_bytes = b"AGENT-FILE-CONTENT"
+
+        def fake_urlopen(url: str, timeout: int = 10):
+            mock_resp = MagicMock()
+            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            if "package-manifest.json" in url:
+                mock_resp.read.return_value = manifest_bytes
+            else:
+                mock_resp.read.return_value = file_bytes
+            return mock_resp
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = mgr._download_and_install_plugin(plugin_entry)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 1
+        dest = github_root / "agents" / "my-agent.md"
+        assert dest.is_file()
+        assert dest.read_bytes() == file_bytes
+
+    def test_skips_existing_files_without_force(self, tmp_path: Path) -> None:
+        """Con force=False salta i file già presenti."""
+        github_root = tmp_path / ".github"
+        existing_dir = github_root / "agents"
+        existing_dir.mkdir(parents=True)
+        existing_file = existing_dir / "my-agent.md"
+        existing_file.write_text("EXISTING", encoding="utf-8")
+
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+
+        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        manifest_bytes = json.dumps(_SAMPLE_PLUGIN_MANIFEST).encode("utf-8")
+
+        def fake_urlopen(url: str, timeout: int = 10):
+            mock_resp = MagicMock()
+            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            mock_resp.read.return_value = manifest_bytes
+            return mock_resp
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = mgr._download_and_install_plugin(plugin_entry, force=False)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 0
+        assert existing_file.read_text(encoding="utf-8") == "EXISTING"
+
+    def test_overwrites_with_force(self, tmp_path: Path) -> None:
+        """Con force=True sovrascrive i file già presenti."""
+        github_root = tmp_path / ".github"
+        existing_dir = github_root / "agents"
+        existing_dir.mkdir(parents=True)
+        existing_file = existing_dir / "my-agent.md"
+        existing_file.write_text("OLD", encoding="utf-8")
+
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+
+        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        manifest_bytes = json.dumps(_SAMPLE_PLUGIN_MANIFEST).encode("utf-8")
+        new_content = b"NEW-CONTENT"
+
+        def fake_urlopen(url: str, timeout: int = 10):
+            mock_resp = MagicMock()
+            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            if "package-manifest.json" in url:
+                mock_resp.read.return_value = manifest_bytes
+            else:
+                mock_resp.read.return_value = new_content
+            return mock_resp
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = mgr._download_and_install_plugin(plugin_entry, force=True)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 1
+        assert existing_file.read_bytes() == new_content
+
+    def test_returns_error_when_manifest_unreachable(self, tmp_path: Path) -> None:
+        """Ritorna success=False se il manifest del plugin non è scaricabile."""
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+
+        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+
+        with patch("urllib.request.urlopen", side_effect=URLError("offline")):
+            result = mgr._download_and_install_plugin(plugin_entry)
+
+        assert result["success"] is False
+        assert "Impossibile scaricare manifest" in result.get("error", "")
+
+    def test_incomplete_plugin_entry_returns_error(self, tmp_path: Path) -> None:
+        """Ritorna success=False per entry registro con 'repo' mancante."""
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+
+        bad_entry: dict = {"id": "bad-plugin"}  # senza 'repo'
+
+        result = mgr._download_and_install_plugin(bad_entry)
+
+        assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Test _check_updates
+# ---------------------------------------------------------------------------
+
+
+class TestCheckUpdates:
+    """Test per RegistryManager._check_updates."""
+
+    def test_detects_available_update(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Mostra aggiornamento disponibile quando versione locale < remota."""
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+        mgr._registry_cache = _SAMPLE_REGISTRY
+
+        local_versions = {"my-plugin": "0.9.0"}
+        with patch.object(mgr, "_read_local_plugin_versions", return_value=local_versions):
+            mgr._check_updates()
+
+        out, _ = capsys.readouterr()
+        assert "my-plugin" in out
+        assert "1.0.0" in out
+
+    def test_reports_no_updates_when_all_current(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Mostra 'aggiornati' quando tutte le versioni coincidono."""
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        mgr = RegistryManager(github_root, engine_root)
+        mgr._registry_cache = _SAMPLE_REGISTRY
+
+        local_versions = {"my-plugin": "1.0.0", "other-plugin": "2.3.0"}
+        with patch.object(mgr, "_read_local_plugin_versions", return_value=local_versions):
+            mgr._check_updates()
+
+        out, _ = capsys.readouterr()
+        assert "aggiornati" in out.lower()

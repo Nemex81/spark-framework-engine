@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -206,6 +205,44 @@ def _ensure_spark_ops_workspace_files(context: Any, engine_root: Path) -> None:
             )
 
 
+def _boot_repopulate_registry(app: Any, inventory: Any) -> None:
+    """Ripopola il registry MCP al boot con risorse dai pacchetti installati.
+
+    Chiamata da ``_build_app`` dopo la costruzione dell'engine per garantire
+    che i pacchetti installati nel deposito ``engine_root/packages/<pkg>/``
+    siano registrati nel ``McpResourceRegistry`` fin dal primo avvio del server.
+
+    Note:
+        Senza questa chiamata, ``populate_mcp_registry`` viene invocata solo
+        con ``engine_manifest`` e i pacchetti del deposito non risultano
+        visibili a ``scf_get_agent`` / ``scf_get_skill`` / etc. dopo un
+        riavvio del server.
+
+    Note (Deprecation):
+        Il supporto per manifest schema 2.x privi di ``workspace_files`` è
+        mantenuto per retrocompatibilità (``_v3_repopulate_registry`` tollera
+        manifest legacy), ma sarà rimosso in v4.0. Tutti i nuovi pacchetti
+        devono dichiarare ``schema_version: "3.0"`` con ``workspace_files``
+        esplicito.
+
+    Args:
+        app: Istanza ``SparkFrameworkEngine`` già costruita.
+        inventory: ``FrameworkInventory`` associato all'engine.
+    """
+    try:
+        app._v3_repopulate_registry()
+        if inventory.mcp_registry is not None:
+            _log.info(
+                "[SPARK-ENGINE][INFO] MCP registry repopulated at boot: %d URI totali",
+                len(inventory.mcp_registry.list_all()),
+            )
+    except (OSError, ValueError) as exc:
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Boot registry repopulate failed: %s",
+            exc,
+        )
+
+
 def _build_app(engine_root: Path) -> FastMCP:
     # Import here to avoid circular import at module level; engine.py imports
     # from spark.inventory and spark.workspace which are always safe.
@@ -245,31 +282,7 @@ def _build_app(engine_root: Path) -> FastMCP:
     app.register_resources()
     app.register_tools()
 
-    # v3.0 FIX — Boot-time registry repopulate.
-    # Senza questa chiamata, ``populate_mcp_registry`` viene invocata solo con
-    # ``engine_manifest`` (sopra) e i pacchetti installati nel deposito
-    # ``engine_root/packages/<pkg>/`` non risultano registrati nel
-    # ``McpResourceRegistry`` finché non viene eseguita un'operazione
-    # install/remove (che chiama ``_v3_repopulate_registry``). Conseguenza
-    # pre-fix: ``scf_get_agent``/``scf_get_skill``/etc. ritornano risorse
-    # solo engine-side dopo un riavvio del server. Riusiamo il metodo già
-    # collaudato dell'engine per coerenza con il flusso lifecycle.
-    # DEPRECATION (Round 3): il supporto per manifest schema 2.x privi di
-    # ``workspace_files`` resta abilitato qui per retrocompat (``_v3_repopulate_registry``
-    # tollera manifest legacy), ma sarà rimosso in v4.0; tutti i nuovi pacchetti
-    # devono dichiarare ``schema_version: "3.0"`` con ``workspace_files`` esplicito.
-    try:
-        app._v3_repopulate_registry()
-        if inventory.mcp_registry is not None:
-            _log.info(
-                "[SPARK-ENGINE][INFO] MCP registry repopulated at boot: %d URI totali",
-                len(inventory.mcp_registry.list_all()),
-            )
-    except (OSError, ValueError) as exc:
-        _log.warning(
-            "[SPARK-ENGINE][WARNING] Boot registry repopulate failed: %s",
-            exc,
-        )
+    _boot_repopulate_registry(app, inventory)
 
     bootstrap_result = app.ensure_minimal_bootstrap()
     _log.info(
@@ -292,9 +305,9 @@ def _build_app(engine_root: Path) -> FastMCP:
             onboarding_result.get("status", "unknown"),
         )
 
-    sys.stderr.write("\n[SPARK] Inizializzazione completata.\n")
-    sys.stderr.write(
-        '[SPARK] Prossimo passo: apri VS Code e di\' a Copilot'
-        ' "inizializza il workspace SPARK"\n\n'
+    _log.info("[SPARK-ENGINE][INFO] Inizializzazione completata.")
+    _log.info(
+        "[SPARK-ENGINE][INFO] Prossimo passo: apri VS Code e di' a Copilot "
+        '"inizializza il workspace SPARK"'
     )
     return mcp
