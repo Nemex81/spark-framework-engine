@@ -10,6 +10,20 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Fixed
+
+- `spark_launcher.py` — eliminata l'attivazione automatica del menu legacy di
+  `spark.boot.wizard.run_wizard()` nel percorso di boot; il flusso indesiderato
+  non viene piu caricato automaticamente al lancio del launcher root.
+
+### Changed
+
+- `spark_launcher.py` — ridisegnato il menu di avvio come punto di accesso
+  principale per il nuovo utente: al primo lancio mostra un flusso introduttivo
+  dedicato, poi converge sempre verso il menu principale CLI; ai lanci
+  successivi, con sentinel in `~/.spark/.scf-init-done`, apre direttamente il
+  menu principale.
+
 ### Fixed — Debt Tecnico Boot + Onboarding
 
 - `spark/boot/sequence.py` — P1: sostituito `sys.stderr.write()` con

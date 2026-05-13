@@ -191,7 +191,7 @@ class TestLauncherBehavior:
 
 
 class TestLauncherOnboarding:
-    """Verifica il flusso wizard-before-menu per nuovi utenti.
+    """Verifica il flusso startup-before-menu per nuovi utenti.
 
     Il sentinel è in Path.home() / '.spark' / '.scf-init-done' (globale per
     macchina) — indipendente dalla directory di lavoro corrente. Nei test si
@@ -204,26 +204,71 @@ class TestLauncherOnboarding:
         fake.mkdir(exist_ok=True)
         return fake
 
-    def test_wizard_called_when_no_sentinel(
+    def test_startup_flow_called_when_no_sentinel(
         self,
         tmp_path: Path,
     ) -> None:
-        """run_wizard() deve essere chiamata quando .scf-init-done è assente.
+        """Il nuovo startup flow deve essere chiamato quando il sentinel manca.
 
-        Il sentinel globale ~/.spark/.scf-init-done non esiste → wizard invocata
-        con cwd=Path.home() / '.spark'.
+        Il sentinel globale ~/.spark/.scf-init-done non esiste → startup flow
+        invocato con engine_root, workspace_root e base coerenti.
         """
         fake_home = self._fake_home(tmp_path)
-        # ~/.spark/ non esiste ancora → sentinel assente
-        wizard_calls: list[Path] = []
+        fake_workspace = tmp_path / "workspace"
+        fake_workspace.mkdir(exist_ok=True)
+        startup_calls: list[dict[str, Path]] = []
 
-        fake_wizard = types.ModuleType("spark.boot.wizard")
+        fake_startup = types.ModuleType("spark.cli.startup")
+        fake_startup.is_startup_completed = lambda *_a, **_kw: False  # type: ignore[attr-defined]
 
-        def _fake_run_wizard(cwd: Path | None = None, **_kw: object) -> dict:
-            wizard_calls.append(cwd if cwd is not None else Path.cwd())
-            return {}
+        def _fake_run_startup_flow(
+            engine_root: Path,
+            workspace_root: Path | None = None,
+            *,
+            base: Path | None = None,
+            **_kw: object,
+        ) -> dict[str, str]:
+            startup_calls.append(
+                {
+                    "engine_root": engine_root,
+                    "workspace_root": workspace_root if workspace_root is not None else Path.cwd(),
+                    "base": base if base is not None else Path.home() / ".spark",
+                }
+            )
+            return {"status": "completed"}
 
-        fake_wizard.run_wizard = _fake_run_wizard  # type: ignore[attr-defined]
+        fake_startup.run_startup_flow = _fake_run_startup_flow  # type: ignore[attr-defined]
+
+        fake_main_mod = types.ModuleType("spark.cli.main")
+        fake_main_mod.main = MagicMock(side_effect=SystemExit(0))  # type: ignore[attr-defined]
+
+        with (
+            patch.object(Path, "home", return_value=fake_home),
+            patch.object(Path, "cwd", return_value=fake_workspace),
+            patch.dict(
+                sys.modules,
+                {"spark.cli.startup": fake_startup, "spark.cli.main": fake_main_mod},
+            ),
+            pytest.raises(SystemExit),
+        ):
+            _exec_launcher_guard({})
+
+        assert len(startup_calls) == 1, "run_startup_flow() non è stata chiamata"
+        assert startup_calls[0]["engine_root"] == _ROOT
+        assert startup_calls[0]["workspace_root"] == fake_workspace
+        assert startup_calls[0]["base"] == fake_home / ".spark"
+
+    def test_startup_flow_skipped_when_sentinel_exists(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Il nuovo startup flow NON deve partire se il sentinel esiste già."""
+        fake_home = self._fake_home(tmp_path)
+        startup_calls: list[bool] = []
+
+        fake_startup = types.ModuleType("spark.cli.startup")
+        fake_startup.is_startup_completed = lambda *_a, **_kw: True  # type: ignore[attr-defined]
+        fake_startup.run_startup_flow = lambda *_a, **_kw: startup_calls.append(True)  # type: ignore[attr-defined]
 
         fake_main_mod = types.ModuleType("spark.cli.main")
         fake_main_mod.main = MagicMock(side_effect=SystemExit(0))  # type: ignore[attr-defined]
@@ -232,33 +277,65 @@ class TestLauncherOnboarding:
             patch.object(Path, "home", return_value=fake_home),
             patch.dict(
                 sys.modules,
-                {"spark.boot.wizard": fake_wizard, "spark.cli.main": fake_main_mod},
+                {"spark.cli.startup": fake_startup, "spark.cli.main": fake_main_mod},
             ),
             pytest.raises(SystemExit),
         ):
             _exec_launcher_guard({})
 
-        assert len(wizard_calls) == 1, "run_wizard() non è stata chiamata"
-        # Il launcher deve passare cwd=~/.spark/ alla wizard
-        assert wizard_calls[0] == fake_home / ".spark", (
-            f"run_wizard() chiamata con cwd sbagliato: {wizard_calls[0]}"
+        assert startup_calls == [], (
+            "run_startup_flow() non deve essere chiamata se il sentinel è presente"
         )
 
-    def test_wizard_skipped_when_sentinel_exists(
+    def test_startup_exception_logged_and_main_called(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Un errore nello startup flow deve essere loggato e non bloccare main()."""
+        fake_home = self._fake_home(tmp_path)
+        main_mock = MagicMock(side_effect=SystemExit(0))
+
+        fake_startup = types.ModuleType("spark.cli.startup")
+        fake_startup.is_startup_completed = lambda *_a, **_kw: False  # type: ignore[attr-defined]
+
+        def _raise_startup_error(*_a: object, **_kw: object) -> dict[str, str]:
+            raise RuntimeError("boom")
+
+        fake_startup.run_startup_flow = _raise_startup_error  # type: ignore[attr-defined]
+
+        fake_main_mod = types.ModuleType("spark.cli.main")
+        fake_main_mod.main = main_mock  # type: ignore[attr-defined]
+
+        with (
+            patch.object(Path, "home", return_value=fake_home),
+            patch.dict(
+                sys.modules,
+                {"spark.cli.startup": fake_startup, "spark.cli.main": fake_main_mod},
+            ),
+            pytest.raises(SystemExit),
+        ):
+            _exec_launcher_guard({})
+
+        captured = capsys.readouterr()
+        assert "[SPARK-ENGINE][WARNING] Flusso di avvio non disponibile: boom" in captured.err
+        main_mock.assert_called_once_with()
+
+    def test_legacy_wizard_not_called_automatically_on_first_run(
         self,
         tmp_path: Path,
     ) -> None:
-        """run_wizard() NON deve essere chiamata se .scf-init-done esiste.
+        """La wizard legacy non deve più attivarsi automaticamente dal launcher.
 
-        Il sentinel globale ~/.spark/.scf-init-done presente → wizard saltata.
+        Il first-run passa dal nuovo startup flow; `spark.boot.wizard` resta
+        disponibile solo per percorsi espliciti come scripts/scf init.
         """
         fake_home = self._fake_home(tmp_path)
-        # Crea sentinel in ~/.spark/.scf-init-done
-        spark_home = fake_home / ".spark"
-        spark_home.mkdir(parents=True, exist_ok=True)
-        (spark_home / ".scf-init-done").touch()
-
         wizard_calls: list[bool] = []
+
+        fake_startup = types.ModuleType("spark.cli.startup")
+        fake_startup.is_startup_completed = lambda *_a, **_kw: False  # type: ignore[attr-defined]
+        fake_startup.run_startup_flow = lambda *_a, **_kw: {"status": "completed"}  # type: ignore[attr-defined]
 
         fake_wizard = types.ModuleType("spark.boot.wizard")
         fake_wizard.run_wizard = lambda *_a, **_kw: wizard_calls.append(True)  # type: ignore[attr-defined]
@@ -270,12 +347,16 @@ class TestLauncherOnboarding:
             patch.object(Path, "home", return_value=fake_home),
             patch.dict(
                 sys.modules,
-                {"spark.boot.wizard": fake_wizard, "spark.cli.main": fake_main_mod},
+                {
+                    "spark.boot.wizard": fake_wizard,
+                    "spark.cli.startup": fake_startup,
+                    "spark.cli.main": fake_main_mod,
+                },
             ),
             pytest.raises(SystemExit),
         ):
             _exec_launcher_guard({})
 
         assert wizard_calls == [], (
-            "run_wizard() non deve essere chiamata se il sentinel è presente"
+            "run_wizard() non deve più essere chiamata automaticamente dal launcher"
         )
