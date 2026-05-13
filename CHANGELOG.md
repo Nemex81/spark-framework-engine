@@ -12,11 +12,21 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Fixed
 
+- `spark/cli/registry_manager.py` — corretti mismatch chiavi JSON con scf-registry:
+  `"plugins"` → `"packages"`, `"version"` → `"latest_version"`, `"repo"` → `"repo_url"`.
+  La voce "Sfoglia plugin disponibili" ora mostra i pacchetti del registro remoto;
+  l'installazione legge correttamente `repo_url` per costruire l'URL raw GitHub.
+
 - `spark_launcher.py` — eliminata l'attivazione automatica del menu legacy di
   `spark.boot.wizard.run_wizard()` nel percorso di boot; il flusso indesiderato
   non viene piu caricato automaticamente al lancio del launcher root.
 
 ### Changed
+
+- `spark/cli/registry_manager.py` — variabili locali `plugins`/`plugin` rinominate
+  in `packages`/`package` per coerenza con la struttura del registro remoto v2.0;
+  `_download_and_install_plugin` ora accetta `repo_url` (URL completo) ed estrae
+  lo slug `owner/repo` per la costruzione degli URL raw GitHub.
 
 - `spark_launcher.py` — ridisegnato il menu di avvio come punto di accesso
   principale per il nuovo utente: al primo lancio mostra un flusso introduttivo
@@ -33,6 +43,10 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 - `tests/test_startup.py` — suite diretta per `spark/cli/startup.py`: 8 test,
   copertura granulare di `is_startup_completed` e `run_startup_flow`.
+- `tests/test_cli_registry_manager.py` — payload mock aggiornati alla struttura
+  registro v2.0 (`"packages"`, `"latest_version"`, `"repo_url"`);
+  aggiunti 3 test: `test_browse_plugins_shows_latest_version`,
+  `test_install_plugin_uses_repo_url`, `test_install_plugin_not_found_prints_message`.
 
 ### Deprecated
 

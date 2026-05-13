@@ -82,16 +82,16 @@ class RegistryManager:
         if registry is None:
             return
 
-        plugins: list[dict[str, Any]] = registry.get("plugins", [])
-        if not plugins:
+        packages: list[dict[str, Any]] = registry.get("packages", [])
+        if not packages:
             print("\nNessun plugin disponibile nel registro.")
             return
 
-        print(f"\nPlugin disponibili ({len(plugins)}):")
-        for plugin in plugins:
-            pid = plugin.get("id", "?")
-            version = plugin.get("version", "?")
-            desc = plugin.get("description", "")
+        print(f"\nPlugin disponibili ({len(packages)}):")
+        for package in packages:
+            pid = package.get("id", "?")
+            version = package.get("latest_version", "?")
+            desc = package.get("description", "")
             print(f"  - {pid} v{version}: {desc}")
 
     def _install_plugin(self) -> None:
@@ -104,14 +104,14 @@ class RegistryManager:
         if not plugin_id or plugin_id == "0":
             return
 
-        plugins: list[dict[str, Any]] = registry.get("plugins", [])
-        plugin = next((p for p in plugins if p.get("id") == plugin_id), None)
-        if plugin is None:
+        packages: list[dict[str, Any]] = registry.get("packages", [])
+        package = next((p for p in packages if p.get("id") == plugin_id), None)
+        if package is None:
             print(f"Plugin '{plugin_id}' non trovato nel registro.")
             return
 
-        print(f"Installazione plugin {plugin_id} v{plugin.get('version', '?')} ...")
-        result = self._download_and_install_plugin(plugin)
+        print(f"Installazione plugin {plugin_id} v{package.get('latest_version', '?')} ...")
+        result = self._download_and_install_plugin(package)
         if result["success"]:
             print(f"Plugin {plugin_id} installato. File copiati: {result['files_copied']}")
         else:
@@ -128,15 +128,15 @@ class RegistryManager:
             print("\nNessun plugin installato localmente.")
             return
 
-        plugins: list[dict[str, Any]] = registry.get("plugins", [])
-        remote_by_id = {p.get("id"): p for p in plugins if p.get("id")}
+        packages: list[dict[str, Any]] = registry.get("packages", [])
+        remote_by_id = {p.get("id"): p for p in packages if p.get("id")}
 
         updates_available: list[tuple[str, str, str]] = []
         for plugin_id, local_version in local_versions.items():
             remote = remote_by_id.get(plugin_id)
             if remote is None:
                 continue
-            remote_version = remote.get("version", "")
+            remote_version = remote.get("latest_version", "")
             if remote_version and remote_version != local_version:
                 updates_available.append((plugin_id, local_version, remote_version))
 
@@ -159,8 +159,8 @@ class RegistryManager:
             print("\nNessun plugin installato localmente.")
             return
 
-        plugins: list[dict[str, Any]] = registry.get("plugins", [])
-        remote_by_id = {p.get("id"): p for p in plugins if p.get("id")}
+        packages: list[dict[str, Any]] = registry.get("packages", [])
+        remote_by_id = {p.get("id"): p for p in packages if p.get("id")}
 
         updated = 0
         failed = 0
@@ -168,7 +168,7 @@ class RegistryManager:
             remote = remote_by_id.get(plugin_id)
             if remote is None:
                 continue
-            remote_version = remote.get("version", "")
+            remote_version = remote.get("latest_version", "")
             if not remote_version or remote_version == local_version:
                 continue
 
@@ -260,20 +260,20 @@ class RegistryManager:
 
     def _download_and_install_plugin(
         self,
-        plugin: dict[str, Any],
+        package: dict[str, Any],
         *,
         force: bool = False,
     ) -> dict[str, Any]:
-        """Scarica e installa un plugin dal registro nel workspace.
+        """Scarica e installa un pacchetto dal registro nel workspace.
 
         Per ogni file in ``workspace_files`` del manifest remoto, scarica
         il file raw e lo scrive in ``github_root``. Se ``force=True``
         sovrascrive i file esistenti.
 
-        Aggiorna il manifest locale con le informazioni del plugin installato.
+        Aggiorna il manifest locale con le informazioni del pacchetto installato.
 
         Args:
-            plugin: Entry del plugin nel registro remoto (id, version, repo, manifest_path).
+            package: Entry del pacchetto nel registro remoto (id, latest_version, repo_url, manifest_path).
             force: Se True, sovrascrive i file già presenti (usato per update).
 
         Returns:
@@ -281,12 +281,14 @@ class RegistryManager:
         """
         result: dict[str, Any] = {"success": False, "files_copied": 0, "error": ""}
 
-        repo = plugin.get("repo", "")
-        manifest_path = plugin.get("manifest_path", "package-manifest.json")
-        plugin_id = plugin.get("id", "")
+        # Estrai owner/repo slug dall'URL completo per costruire URL raw GitHub.
+        repo_url = package.get("repo_url", "")
+        repo = repo_url.removeprefix("https://github.com/").strip("/") if repo_url else ""
+        manifest_path = package.get("manifest_path", "package-manifest.json")
+        plugin_id = package.get("id", "")
 
         if not repo or not plugin_id:
-            result["error"] = "Entry registro incompleta (mancano 'repo' o 'id')."
+            result["error"] = "Entry registro incompleta (mancano 'repo_url' o 'id')."
             return result
 
         manifest = self._fetch_remote_manifest(repo, manifest_path)

@@ -19,20 +19,20 @@ from spark.cli.registry_manager import RegistryManager
 # ---------------------------------------------------------------------------
 
 _SAMPLE_REGISTRY = {
-    "schema_version": "1.0",
-    "plugins": [
+    "schema_version": "2.0",
+    "packages": [
         {
             "id": "my-plugin",
-            "version": "1.0.0",
+            "latest_version": "1.0.0",
             "description": "Plugin di test",
-            "repo": "Nemex81/my-plugin",
+            "repo_url": "https://github.com/Nemex81/my-plugin",
             "manifest_path": "package-manifest.json",
         },
         {
             "id": "other-plugin",
-            "version": "2.3.0",
+            "latest_version": "2.3.0",
             "description": "Altro plugin",
-            "repo": "Nemex81/other-plugin",
+            "repo_url": "https://github.com/Nemex81/other-plugin",
             "manifest_path": "package-manifest.json",
         },
     ],
@@ -76,7 +76,7 @@ class TestLoadRegistry:
             result = mgr._load_registry()
 
         assert result is not None
-        assert len(result["plugins"]) == 2
+        assert len(result["packages"]) == 2
 
     def test_returns_none_on_url_error(self, tmp_path: Path) -> None:
         """Ritorna None e non lancia eccezione su URLError."""
@@ -162,7 +162,7 @@ class TestDownloadAndInstallPlugin:
         engine_root.mkdir()
         mgr = RegistryManager(github_root, engine_root)
 
-        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        plugin_entry = _SAMPLE_REGISTRY["packages"][0]
         manifest_bytes = json.dumps(_SAMPLE_PLUGIN_MANIFEST).encode("utf-8")
         file_bytes = b"AGENT-FILE-CONTENT"
 
@@ -197,7 +197,7 @@ class TestDownloadAndInstallPlugin:
         engine_root.mkdir()
         mgr = RegistryManager(github_root, engine_root)
 
-        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        plugin_entry = _SAMPLE_REGISTRY["packages"][0]
         manifest_bytes = json.dumps(_SAMPLE_PLUGIN_MANIFEST).encode("utf-8")
 
         def fake_urlopen(url: str, timeout: int = 10):
@@ -226,7 +226,7 @@ class TestDownloadAndInstallPlugin:
         engine_root.mkdir()
         mgr = RegistryManager(github_root, engine_root)
 
-        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        plugin_entry = _SAMPLE_REGISTRY["packages"][0]
         manifest_bytes = json.dumps(_SAMPLE_PLUGIN_MANIFEST).encode("utf-8")
         new_content = b"NEW-CONTENT"
 
@@ -255,7 +255,7 @@ class TestDownloadAndInstallPlugin:
         engine_root.mkdir()
         mgr = RegistryManager(github_root, engine_root)
 
-        plugin_entry = _SAMPLE_REGISTRY["plugins"][0]
+        plugin_entry = _SAMPLE_REGISTRY["packages"][0]
 
         with patch("urllib.request.urlopen", side_effect=URLError("offline")):
             result = mgr._download_and_install_plugin(plugin_entry)
@@ -264,14 +264,14 @@ class TestDownloadAndInstallPlugin:
         assert "Impossibile scaricare manifest" in result.get("error", "")
 
     def test_incomplete_plugin_entry_returns_error(self, tmp_path: Path) -> None:
-        """Ritorna success=False per entry registro con 'repo' mancante."""
+        """Ritorna success=False per entry registro con 'repo_url' mancante."""
         github_root = tmp_path / ".github"
         github_root.mkdir()
         engine_root = tmp_path / "engine"
         engine_root.mkdir()
         mgr = RegistryManager(github_root, engine_root)
 
-        bad_entry: dict = {"id": "bad-plugin"}  # senza 'repo'
+        bad_entry: dict = {"id": "bad-plugin"}  # senza 'repo_url'
 
         result = mgr._download_and_install_plugin(bad_entry)
 
@@ -322,3 +322,81 @@ class TestCheckUpdates:
 
         out, _ = capsys.readouterr()
         assert "aggiornati" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test _browse_plugins — latest_version in output
+# ---------------------------------------------------------------------------
+
+
+class TestBrowsePluginsLatestVersion:
+    """Test aggiuntivi per _browse_plugins con struttura registro v2.0."""
+
+    def test_browse_plugins_shows_latest_version(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Mostra il valore di latest_version per ogni pacchetto nella lista.
+
+        Verifica che il campo ``latest_version`` venga letto e stampato
+        correttamente dopo la correzione del mismatch chiavi JSON.
+        """
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_REGISTRY
+
+        mgr._browse_plugins()
+
+        out, _ = capsys.readouterr()
+        assert "1.0.0" in out   # latest_version di my-plugin
+        assert "2.3.0" in out   # latest_version di other-plugin
+
+
+# ---------------------------------------------------------------------------
+# Test _install_plugin — repo_url passato a _download_and_install_plugin
+# ---------------------------------------------------------------------------
+
+
+class TestInstallPlugin:
+    """Test per RegistryManager._install_plugin."""
+
+    def test_install_plugin_uses_repo_url(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """_install_plugin passa l'entry con repo_url a _download_and_install_plugin.
+
+        Verifica che, dopo la selezione dell'ID via input(), il metodo chiami
+        ``_download_and_install_plugin`` con l'entry contenente ``repo_url``
+        (chiave corretta del registro v2.0).
+        """
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_REGISTRY  # packages[0].repo_url valorizzato
+
+        with (
+            patch("builtins.input", return_value="my-plugin"),
+            patch.object(
+                mgr,
+                "_download_and_install_plugin",
+                return_value={"success": True, "files_copied": 1, "error": ""},
+            ) as mock_install,
+        ):
+            mgr._install_plugin()
+
+        mock_install.assert_called_once()
+        call_package = mock_install.call_args[0][0]
+        assert call_package.get("repo_url") == "https://github.com/Nemex81/my-plugin"
+
+    def test_install_plugin_not_found_prints_message(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Stampa messaggio di errore se il plugin_id non è nel registro.
+
+        Verifica la graceful degradation quando l'utente inserisce un ID
+        non presente nella lista ``packages`` del registro.
+        """
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_REGISTRY
+
+        with patch("builtins.input", return_value="nonexistent-plugin"):
+            mgr._install_plugin()
+
+        out, _ = capsys.readouterr()
+        assert "non trovato" in out.lower()
