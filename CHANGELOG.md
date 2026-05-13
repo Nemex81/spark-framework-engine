@@ -327,6 +327,15 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - Tool counter: `Tools (51)` → `Tools (53)` (`scf_plugin_list_remote` + `scf_plugin_install_remote` aggiunti).
 - `tools_plugins.py` docstring aggiornata: 7 → 9 tool registrati.
 - `spark/registry/client.py`: aggiunto import `time` per TTL check.
+- `spark/boot/sequence.py`: rimosso `sys.stderr.write()` → `_log.info()` (P1); `_boot_repopulate_registry` estratta a livello di modulo (P2).
+- `spark/boot/onboarding.py`: `run_onboarding()` arricchito con chiavi `workspace_created` e `reload_signaled` (P3, P4).
+
+### Added — spark_launcher + SPARK CLI entry points (2026-05-13)
+
+- `spark_launcher.py`: entry point root per avvio diretto della SPARK CLI
+  da terminale con `python spark_launcher.py`.
+- `spark/cli/__main__.py`: abilita `python -m spark.cli` come alternativa.
+- `tests/test_spark_launcher.py`: 7 test unitari per il launcher (struttura, versione, ImportError, KeyboardInterrupt).
 
 ---
 
