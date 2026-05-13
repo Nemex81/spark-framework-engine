@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -46,18 +47,23 @@ class PackageManager:
     def run(self) -> None:
         """Avvia il sotto-menu di gestione pacchetti."""
         while True:
+            os.system("cls" if os.name == "nt" else "clear")
             print(f"\n{_MENU_TEXT}")
             choice = input("Scegli [0-4]: ").strip()
             if choice == "0":
                 break
             elif choice == "1":
                 self._list_installed()
+                input("\nPremi Invio per continuare...")
             elif choice == "2":
                 self._install_package()
+                input("\nPremi Invio per continuare...")
             elif choice == "3":
                 self._remove_package()
+                input("\nPremi Invio per continuare...")
             elif choice == "4":
                 self._reinstall_package()
+                input("\nPremi Invio per continuare...")
             else:
                 print("Scelta non valida. Inserisci un numero tra 0 e 4.")
 

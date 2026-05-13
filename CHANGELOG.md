@@ -12,6 +12,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Fixed
 
+- `spark/cli/registry_manager.py` — filtro `engine_managed_resources`: i pacchetti
+  marcati `engine_managed_resources: true` nel registro remoto sono ora esclusi
+  da tutte le operazioni user-facing (`_browse_plugins`, `_install_plugin`,
+  `_check_updates`, `_apply_updates`); nuovo helper privato
+  `_user_installable_packages(registry)` centralizza il filtro.
+
 - `spark/cli/registry_manager.py` — corretti mismatch chiavi JSON con scf-registry:
   `"plugins"` → `"packages"`, `"version"` → `"latest_version"`, `"repo"` → `"repo_url"`.
   La voce "Sfoglia plugin disponibili" ora mostra i pacchetti del registro remoto;
@@ -22,6 +28,13 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   non viene piu caricato automaticamente al lancio del launcher root.
 
 ### Changed
+
+- `spark/cli/registry_manager.py` — `run()`: aggiunto `os.system("cls"/"clear")`
+  prima di ristampare il menu e `input("\nPremi Invio per continuare...")` dopo
+  ogni operazione (branch elif 1-4); choice "0" e scelte non valide non
+  producono pausa.
+- `spark/cli/package_manager.py` — `run()`: stesso pattern di clear screen +
+  pausa applicato ai branch elif 1-4.
 
 - `spark/cli/registry_manager.py` — variabili locali `plugins`/`plugin` rinominate
   in `packages`/`package` per coerenza con la struttura del registro remoto v2.0;
@@ -46,7 +59,11 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `tests/test_cli_registry_manager.py` — payload mock aggiornati alla struttura
   registro v2.0 (`"packages"`, `"latest_version"`, `"repo_url"`);
   aggiunti 3 test: `test_browse_plugins_shows_latest_version`,
-  `test_install_plugin_uses_repo_url`, `test_install_plugin_not_found_prints_message`.
+  `test_install_plugin_uses_repo_url`, `test_install_plugin_not_found_prints_message`;
+  aggiunti 9 test per FIX-1 (`TestUserInstallablePackages`, `TestFiltroEngineManaged`)
+  e FIX-2 (`TestRunUX`).
+- `tests/test_cli_package_manager.py` — nuovo file; 3 test per `TestRunUX`
+  (clear screen, pausa, nessuna pausa su scelta invalida).
 
 ### Deprecated
 

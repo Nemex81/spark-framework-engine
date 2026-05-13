@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import urllib.error
 import urllib.request
@@ -57,18 +58,23 @@ class RegistryManager:
     def run(self) -> None:
         """Avvia il sotto-menu di gestione plugin remoti."""
         while True:
+            os.system("cls" if os.name == "nt" else "clear")
             print(f"\n{_MENU_TEXT}")
             choice = input("Scegli [0-4]: ").strip()
             if choice == "0":
                 break
             elif choice == "1":
                 self._browse_plugins()
+                input("\nPremi Invio per continuare...")
             elif choice == "2":
                 self._install_plugin()
+                input("\nPremi Invio per continuare...")
             elif choice == "3":
                 self._check_updates()
+                input("\nPremi Invio per continuare...")
             elif choice == "4":
                 self._apply_updates()
+                input("\nPremi Invio per continuare...")
             else:
                 print("Scelta non valida. Inserisci un numero tra 0 e 4.")
 
@@ -82,7 +88,7 @@ class RegistryManager:
         if registry is None:
             return
 
-        packages: list[dict[str, Any]] = registry.get("packages", [])
+        packages = self._user_installable_packages(registry)
         if not packages:
             print("\nNessun plugin disponibile nel registro.")
             return
@@ -104,7 +110,7 @@ class RegistryManager:
         if not plugin_id or plugin_id == "0":
             return
 
-        packages: list[dict[str, Any]] = registry.get("packages", [])
+        packages = self._user_installable_packages(registry)
         package = next((p for p in packages if p.get("id") == plugin_id), None)
         if package is None:
             print(f"Plugin '{plugin_id}' non trovato nel registro.")
@@ -128,7 +134,7 @@ class RegistryManager:
             print("\nNessun plugin installato localmente.")
             return
 
-        packages: list[dict[str, Any]] = registry.get("packages", [])
+        packages = self._user_installable_packages(registry)
         remote_by_id = {p.get("id"): p for p in packages if p.get("id")}
 
         updates_available: list[tuple[str, str, str]] = []
@@ -159,7 +165,7 @@ class RegistryManager:
             print("\nNessun plugin installato localmente.")
             return
 
-        packages: list[dict[str, Any]] = registry.get("packages", [])
+        packages = self._user_installable_packages(registry)
         remote_by_id = {p.get("id"): p for p in packages if p.get("id")}
 
         updated = 0
@@ -189,6 +195,27 @@ class RegistryManager:
     # ------------------------------------------------------------------
     # Helpers registro remoto
     # ------------------------------------------------------------------
+
+    def _user_installable_packages(
+        self, registry: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Ritorna solo i pacchetti del registro non gestiti dall'engine.
+
+        I pacchetti con ``engine_managed_resources=True`` sono gestiti
+        automaticamente durante il bootstrap e non devono essere visibili
+        né installabili dall'utente tramite il CLI.
+
+        Args:
+            registry: Dizionario del registro remoto.
+
+        Returns:
+            Lista di entry pacchetto con ``engine_managed_resources != True``.
+        """
+        all_packages: list[dict[str, Any]] = registry.get("packages", [])
+        return [
+            p for p in all_packages
+            if not p.get("engine_managed_resources", False)
+        ]
 
     def _load_registry(self) -> dict[str, Any] | None:
         """Scarica e ritorna il registro remoto (con cache in sessione).

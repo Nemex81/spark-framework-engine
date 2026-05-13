@@ -400,3 +400,170 @@ class TestInstallPlugin:
 
         out, _ = capsys.readouterr()
         assert "non trovato" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Fixture registri per test filtro engine_managed
+# ---------------------------------------------------------------------------
+
+_SAMPLE_ENGINE_MANAGED_REGISTRY = {
+    "schema_version": "2.0",
+    "packages": [
+        {
+            "id": "engine-pkg",
+            "latest_version": "1.0.0",
+            "description": "Gestito dall'engine",
+            "repo_url": "https://github.com/Nemex81/engine-pkg",
+            "manifest_path": "package-manifest.json",
+            "engine_managed_resources": True,
+        },
+    ],
+}
+
+_SAMPLE_MIXED_REGISTRY = {
+    "schema_version": "2.0",
+    "packages": [
+        {
+            "id": "user-plugin",
+            "latest_version": "1.5.0",
+            "description": "Plugin utente",
+            "repo_url": "https://github.com/Nemex81/user-plugin",
+            "manifest_path": "package-manifest.json",
+        },
+        {
+            "id": "engine-pkg",
+            "latest_version": "2.0.0",
+            "description": "Gestito dall'engine",
+            "repo_url": "https://github.com/Nemex81/engine-pkg",
+            "manifest_path": "package-manifest.json",
+            "engine_managed_resources": True,
+        },
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# Test _user_installable_packages
+# ---------------------------------------------------------------------------
+
+
+class TestUserInstallablePackages:
+    """Test per RegistryManager._user_installable_packages."""
+
+    def test_filtra_pacchetti_engine_managed(self, tmp_path: Path) -> None:
+        """Esclude i pacchetti con engine_managed_resources=True."""
+        mgr = _make_mgr(tmp_path)
+        result = mgr._user_installable_packages(_SAMPLE_MIXED_REGISTRY)
+        ids = [p["id"] for p in result]
+        assert "user-plugin" in ids
+        assert "engine-pkg" not in ids
+
+    def test_include_pacchetti_senza_campo(self, tmp_path: Path) -> None:
+        """Include i pacchetti che non dichiarano engine_managed_resources."""
+        mgr = _make_mgr(tmp_path)
+        result = mgr._user_installable_packages(_SAMPLE_REGISTRY)
+        ids = [p["id"] for p in result]
+        assert "my-plugin" in ids
+        assert "other-plugin" in ids
+
+    def test_lista_vuota_se_tutti_engine_managed(self, tmp_path: Path) -> None:
+        """Ritorna lista vuota se tutti i pacchetti sono engine_managed."""
+        mgr = _make_mgr(tmp_path)
+        result = mgr._user_installable_packages(_SAMPLE_ENGINE_MANAGED_REGISTRY)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Test filtro engine_managed nelle operazioni di menu
+# ---------------------------------------------------------------------------
+
+
+class TestFiltroEngineManaged:
+    """Verifica che i pacchetti engine_managed siano esclusi dalle operazioni CLI."""
+
+    def test_browse_plugins_esclude_engine_managed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """_browse_plugins mostra solo pacchetti non engine_managed."""
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_MIXED_REGISTRY
+
+        mgr._browse_plugins()
+
+        out, _ = capsys.readouterr()
+        assert "user-plugin" in out
+        assert "engine-pkg" not in out
+
+    def test_install_plugin_rifiuta_package_engine_managed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """_install_plugin non trova un pacchetto engine_managed anche se esiste nel registro."""
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_ENGINE_MANAGED_REGISTRY
+
+        with patch("builtins.input", return_value="engine-pkg"):
+            mgr._install_plugin()
+
+        out, _ = capsys.readouterr()
+        assert "non trovato" in out.lower()
+
+    def test_check_updates_ignora_pacchetti_engine_managed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """_check_updates non segnala aggiornamenti per pacchetti engine_managed."""
+        mgr = _make_mgr(tmp_path)
+        mgr._registry_cache = _SAMPLE_ENGINE_MANAGED_REGISTRY
+        # Simula la presenza locale di engine-pkg con versione obsoleta.
+        local_versions = {"engine-pkg": "0.9.0"}
+        with patch.object(mgr, "_read_local_plugin_versions", return_value=local_versions):
+            mgr._check_updates()
+
+        out, _ = capsys.readouterr()
+        # engine-pkg non deve apparire come aggiornamento disponibile.
+        assert "engine-pkg" not in out
+
+
+# ---------------------------------------------------------------------------
+# Test comportamento UX run() — FIX-2
+# ---------------------------------------------------------------------------
+
+
+class TestRunUX:
+    """Verifica clear screen e pausa interattiva in RegistryManager.run()."""
+
+    def test_run_chiama_pausa_dopo_operazione(self, tmp_path: Path) -> None:
+        """run() chiama input() per la pausa dopo ogni operazione (elif 1-4)."""
+        mgr = _make_mgr(tmp_path)
+        # Sequenza: "1" (scelta browse), "" (pausa), "0" (esci)
+        mock_input = MagicMock(side_effect=["1", "", "0"])
+        with (
+            patch("builtins.input", mock_input),
+            patch.object(mgr, "_browse_plugins"),
+            patch("os.system"),
+        ):
+            mgr.run()
+        # input() deve essere chiamato 3 volte: menu, pausa, menu-exit
+        assert mock_input.call_count == 3
+
+    def test_run_no_pausa_per_scelta_invalida(self, tmp_path: Path) -> None:
+        """run() non inserisce pausa per scelta non valida."""
+        mgr = _make_mgr(tmp_path)
+        # Sequenza: "9" (invalida), "0" (esci)
+        mock_input = MagicMock(side_effect=["9", "0"])
+        with (
+            patch("builtins.input", mock_input),
+            patch("os.system"),
+        ):
+            mgr.run()
+        # Nessuna pausa: solo 2 input() calls (menu + exit)
+        assert mock_input.call_count == 2
+
+    def test_run_esegue_clear_prima_del_menu(self, tmp_path: Path) -> None:
+        """run() chiama os.system per pulire lo schermo prima di ogni iterazione."""
+        mgr = _make_mgr(tmp_path)
+        with (
+            patch("builtins.input", side_effect=["0"]),
+            patch("os.system") as mock_sys,
+        ):
+            mgr.run()
+        mock_sys.assert_called_once()
