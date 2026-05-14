@@ -12,6 +12,30 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ### Fixed
 
+- `spark/cli/registry_manager.py` (PR-1 Fix B) — corretto falso positivo
+  idempotenza in `_download_and_install_plugin()`: guardia basata su sola
+  esistenza file sostituita con SHA-based check (`files_metadata[].sha256`);
+  distingue file invariati (`preserved`) da file aggiornati (`files_copied`).
+
+- `spark/cli/registry_manager.py` (PR-1 Fix C) — `plugin_files` ora inclusi
+  nel loop di installazione insieme a `workspace_files`; entrambi i gruppi
+  contribuiscono a `files_copied` e alla chiamata `ManifestManager.upsert_many()`.
+
+- `spark/cli/registry_manager.py` (PR-1 Fix A) — aggiunto guard
+  `delivery_mode: "mcp_only"`: i pacchetti che dichiarano questa modalità
+  nel manifest remoto vengono reindirizzati a Gestisci Pacchetti (opzione 2)
+  senza tentare la copia di file su disco.
+
+- `spark/cli/registry_manager.py` (PR-1 Fix D) — `.github/.scf-manifest.json`
+  aggiornato via `ManifestManager.upsert_many()` dopo ogni installazione che
+  scrive almeno un file (`files_copied > 0`); in caso di errore il manifest
+  è recuperabile rieseguendo l'installazione (nessun rollback dei file su disco).
+
+- `spark/cli/registry_manager.py` (PR-1) — output `_install_plugin()` e
+  `_apply_updates()` ora distinguono file installati (`files_copied`) da file
+  già aggiornati (`preserved`); il campo `errors` è ora una `list[str]` per
+  supportare avvisi non fatali multipli.
+
 - `scf-registry/registry.json` (FIX-A) — corretto campo `engine_managed_resources`
   per `spark-base`, `scf-master-codecrafter` e `scf-pycode-crafter` (da `true` a
   `false`); i tre pacchetti sono ora visibili nei menu CLI user-facing di

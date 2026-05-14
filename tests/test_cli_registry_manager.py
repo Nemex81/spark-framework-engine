@@ -5,6 +5,7 @@ graceful degradation su registro non raggiungibile.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -261,7 +262,9 @@ class TestDownloadAndInstallPlugin:
             result = mgr._download_and_install_plugin(plugin_entry)
 
         assert result["success"] is False
-        assert "Impossibile scaricare manifest" in result.get("error", "")
+        assert any(
+            "Impossibile scaricare manifest" in e for e in result.get("errors", [])
+        )
 
     def test_incomplete_plugin_entry_returns_error(self, tmp_path: Path) -> None:
         """Ritorna success=False per entry registro con 'repo_url' mancante."""
@@ -375,7 +378,7 @@ class TestInstallPlugin:
             patch.object(
                 mgr,
                 "_download_and_install_plugin",
-                return_value={"success": True, "files_copied": 1, "error": ""},
+                return_value={"success": True, "files_copied": 1, "preserved": 0, "errors": []},
             ) as mock_install,
         ):
             mgr._install_plugin()
@@ -603,4 +606,245 @@ class TestFiltroEngineMangedNomiReali:
         ids = [p["id"] for p in result]
         assert "spark-base" in ids
         assert "spark-ops" not in ids
+
+
+# ---------------------------------------------------------------------------
+# Costanti per test PR-1
+# ---------------------------------------------------------------------------
+
+_PR1_FILE_CONTENT = b"AGENT-FILE-CONTENT-PR1"
+_PR1_SHA_KNOWN = hashlib.sha256(_PR1_FILE_CONTENT).hexdigest()
+
+_PR1_PLUGIN_ENTRY: dict = {
+    "id": "my-plugin",
+    "latest_version": "1.0.0",
+    "repo_url": "https://github.com/Nemex81/my-plugin",
+    "manifest_path": "package-manifest.json",
+}
+
+_PR1_MANIFEST_WITH_META: dict = {
+    "package": "my-plugin",
+    "version": "1.0.0",
+    "workspace_files": [".github/agents/my-agent.md"],
+    "files_metadata": [
+        {"path": ".github/agents/my-agent.md", "sha256": _PR1_SHA_KNOWN},
+    ],
+}
+
+
+def _make_urlopen_ctx(content: bytes) -> MagicMock:
+    """Crea un mock di urlopen compatibile con context manager.
+
+    Args:
+        content: Bytes da restituire come corpo della risposta HTTP.
+
+    Returns:
+        MagicMock configurato per essere usato con ``with urlopen(...) as resp``.
+    """
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.read.return_value = content
+    return mock_resp
+
+
+# ---------------------------------------------------------------------------
+# Test _download_and_install_plugin — PR-1 fixes
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadAndInstallPluginPR1:
+    """Test per i fix PR-1 di _download_and_install_plugin.
+
+    Copre Fix A (delivery_mode mcp_only), Fix B (SHA-based idempotency),
+    Fix C (plugin_files loop), Fix D (upsert_many manifest update).
+    """
+
+    def test_scenario1_fresh_install(self, tmp_path: Path) -> None:
+        """Scenario 1 — Installazione da zero.
+
+        Prerequisiti: nessun file su disco, manifest con files_metadata e sha256.
+        Verifica che il file venga scritto e upsert_many chiamata con gli argomenti
+        corretti (plugin_id, version, lista file).
+
+        Asserzioni:
+            - success == True
+            - files_copied == 1
+            - preserved == 0
+            - errors == []
+            - upsert_many chiamata esattamente 1 volta
+        """
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        mgr = RegistryManager(github_root, tmp_path / "engine")
+
+        with (
+            patch.object(mgr, "_fetch_remote_manifest", return_value=_PR1_MANIFEST_WITH_META),
+            patch("urllib.request.urlopen", return_value=_make_urlopen_ctx(_PR1_FILE_CONTENT)),
+            patch("spark.manifest.manifest.ManifestManager") as mock_mm,
+        ):
+            result = mgr._download_and_install_plugin(_PR1_PLUGIN_ENTRY)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 1
+        assert result["preserved"] == 0
+        assert result["errors"] == []
+        mock_mm.return_value.upsert_many.assert_called_once()
+        call_args = mock_mm.return_value.upsert_many.call_args[0]
+        assert call_args[0] == "my-plugin"
+        assert call_args[1] == "1.0.0"
+        assert len(call_args[2]) == 1
+
+    def test_scenario2_idempotent_reinstall_sha_invariato(self, tmp_path: Path) -> None:
+        """Scenario 2 — Reinstallazione con SHA invariato (idempotenza).
+
+        Prerequisiti: file già presenti su disco, SHA identico al manifest remoto.
+        _sha256_file viene patchato per restituire il valore noto senza lettura disco.
+
+        Asserzioni:
+            - success == True
+            - files_copied == 0
+            - preserved == 1
+            - errors == []
+            - upsert_many NON chiamata (files_copied == 0)
+        """
+        github_root = tmp_path / ".github"
+        (github_root / "agents").mkdir(parents=True)
+        (github_root / "agents" / "my-agent.md").write_bytes(_PR1_FILE_CONTENT)
+        mgr = RegistryManager(github_root, tmp_path / "engine")
+
+        with (
+            patch.object(mgr, "_fetch_remote_manifest", return_value=_PR1_MANIFEST_WITH_META),
+            patch("spark.cli.registry_manager._sha256_file", return_value=_PR1_SHA_KNOWN),
+            patch("spark.manifest.manifest.ManifestManager") as mock_mm,
+        ):
+            result = mgr._download_and_install_plugin(_PR1_PLUGIN_ENTRY)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 0
+        assert result["preserved"] == 1
+        assert result["errors"] == []
+        mock_mm.return_value.upsert_many.assert_not_called()
+
+    def test_scenario3_partial_download_error(self, tmp_path: Path) -> None:
+        """Scenario 3 — Errore parziale download: primo file OK, secondo URLError.
+
+        URLError per singolo file non è fatale: l'operazione continua e
+        l'errore finisce in result["errors"] senza bloccare il successo globale.
+
+        Asserzioni:
+            - success == True
+            - files_copied == 1 (solo il primo file riuscito)
+            - errors contiene almeno una entry con 'Download fallito'
+            - upsert_many chiamata con 1 solo file
+        """
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        mgr = RegistryManager(github_root, tmp_path / "engine")
+
+        manifest_two_files: dict = {
+            "package": "my-plugin",
+            "version": "1.0.0",
+            "workspace_files": [
+                ".github/agents/file-a.md",
+                ".github/agents/file-b.md",
+            ],
+        }
+
+        call_count = 0
+
+        def _fake_urlopen(url: str, timeout: int = 10) -> MagicMock:
+            """Prima chiamata restituisce contenuto, seconda lancia URLError."""
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_urlopen_ctx(b"FILE-A-CONTENT")
+            raise URLError("network error")
+
+        with (
+            patch.object(mgr, "_fetch_remote_manifest", return_value=manifest_two_files),
+            patch("urllib.request.urlopen", side_effect=_fake_urlopen),
+            patch("spark.manifest.manifest.ManifestManager") as mock_mm,
+        ):
+            result = mgr._download_and_install_plugin(_PR1_PLUGIN_ENTRY)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 1
+        assert any("Download fallito" in e for e in result["errors"])
+        mock_mm.return_value.upsert_many.assert_called_once()
+        upsert_args = mock_mm.return_value.upsert_many.call_args[0]
+        assert len(upsert_args[2]) == 1
+
+    def test_scenario_bonus_mcp_only(self, tmp_path: Path) -> None:
+        """Scenario bonus — delivery_mode mcp_only: redirect a PackageManager.
+
+        Il pacchetto non viene installato via RegistryManager; viene stampato
+        un messaggio di reindirizzamento e il dict di ritorno indica fallimento.
+
+        Asserzioni:
+            - success == False
+            - files_copied == 0
+            - errors contiene entry con 'mcp_only'
+            - upsert_many NON chiamata
+        """
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        mgr = RegistryManager(github_root, tmp_path / "engine")
+
+        mcp_only_manifest: dict = {
+            "package": "my-plugin",
+            "version": "1.0.0",
+            "delivery_mode": "mcp_only",
+            "workspace_files": [".github/agents/my-agent.md"],
+        }
+
+        with (
+            patch.object(mgr, "_fetch_remote_manifest", return_value=mcp_only_manifest),
+            patch("spark.manifest.manifest.ManifestManager") as mock_mm,
+        ):
+            result = mgr._download_and_install_plugin(_PR1_PLUGIN_ENTRY)
+
+        assert result["success"] is False
+        assert result["files_copied"] == 0
+        assert any("mcp_only" in e for e in result["errors"])
+        mock_mm.return_value.upsert_many.assert_not_called()
+
+    def test_fix_c_plugin_files_inclusi_nel_loop(self, tmp_path: Path) -> None:
+        """Fix C — plugin_files elaborati insieme a workspace_files.
+
+        Verifica che i file in ``plugin_files`` vengano scaricati e scritti
+        esattamente come quelli in ``workspace_files``, contando verso
+        ``files_copied`` e passati a ``upsert_many``.
+
+        Asserzioni:
+            - files_copied == 2 (1 da workspace_files + 1 da plugin_files)
+            - success == True
+            - upsert_many chiamata con 2 file
+        """
+        github_root = tmp_path / ".github"
+        github_root.mkdir()
+        mgr = RegistryManager(github_root, tmp_path / "engine")
+
+        manifest_mixed: dict = {
+            "package": "my-plugin",
+            "version": "1.0.0",
+            "workspace_files": [".github/agents/workspace-agent.md"],
+            "plugin_files": [".github/agents/plugin-agent.md"],
+        }
+
+        with (
+            patch.object(mgr, "_fetch_remote_manifest", return_value=manifest_mixed),
+            patch(
+                "urllib.request.urlopen",
+                return_value=_make_urlopen_ctx(b"FILE-CONTENT"),
+            ),
+            patch("spark.manifest.manifest.ManifestManager") as mock_mm,
+        ):
+            result = mgr._download_and_install_plugin(_PR1_PLUGIN_ENTRY)
+
+        assert result["success"] is True
+        assert result["files_copied"] == 2
+        assert result["errors"] == []
+        upsert_args = mock_mm.return_value.upsert_many.call_args[0]
+        assert len(upsert_args[2]) == 2
 

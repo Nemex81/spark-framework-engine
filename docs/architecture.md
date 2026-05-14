@@ -54,6 +54,7 @@ Principi fondamentali verificati nel codice:
 | **Merge validators** | `spark/merge/validators.py` | Validatori post-merge (frontmatter, struttura) |
 | **Package lifecycle** | `spark/packages/lifecycle.py` | Download asincrono (ThreadPoolExecutor) + store install/remove |
 | **Plugins** | `spark/plugins/facade.py` → `PluginManagerFacade` | Install/remove/update plugin via `.github/.spark-plugins` |
+| **RegistryManager** | `spark/cli/registry_manager.py` → `RegistryManager` | Menu CLI per installazione plugin da registro remoto SCF |
 | **Onboarding** | `spark/boot/onboarding.py` → `OnboardingManager` | First-run automatico; idempotente, non-fatal |
 | **Boot tools** | `spark/boot/tools_*.py` (10 file) | Factory function che registrano i 51 tool MCP |
 | **Assets** | `spark/assets/phase6.py` | Bootstrap batch-write Cat. A con `write_many()` |
@@ -131,6 +132,76 @@ risolvono SEMPRE da `packages/` senza rete. Il fallback al registry remoto
 **File toccati:** `spark/boot/tools_bootstrap.py`, tutti i
 `packages/*/package-manifest.json` (campo `delivery_mode` aggiunto).
 **Test gate:** `tests/test_dual_universe_resolution.py` — 4 test, tutti PASS.
+
+---
+
+### 3.2 Pipeline Installazione Remota — RegistryManager CLI
+
+Il modulo `spark/cli/registry_manager.py` gestisce il menu CLI (opzioni 2 e 4)
+per installare e aggiornare plugin SCF scaricati dal registro remoto `Nemex81/scf-registry`.
+Il metodo centrale è `_download_and_install_plugin()`.
+
+#### Fix A — Guard `delivery_mode: "mcp_only"`
+
+Prima di qualsiasi operazione su file, il metodo legge `delivery_mode` dal
+manifest remoto. Se il valore è `"mcp_only"`, l'installazione via
+`RegistryManager` non è supportata: viene stampato un messaggio di
+reindirizzamento al menu Gestisci Pacchetti (opzione 2) e il metodo ritorna
+`success: False`.
+
+I pacchetti con `delivery_mode: "mcp_only"` (es. `spark-base`) devono essere
+installati tramite `scf_install_package()` o `scf_bootstrap_workspace()` via
+canale MCP.
+
+#### Fix B — Idempotenza SHA-based
+
+Prima di sovrascrivere un file già presente su disco, il metodo confronta il
+digest SHA-256 locale con il valore dichiarato in `files_metadata[].sha256`
+del manifest remoto:
+
+- SHA coincidenti e `force=False`: file preservato senza download (`preserved += 1`).
+- SHA differenti oppure `force=True`: file riscaricato e sovrascritto (`files_copied += 1`).
+- `files_metadata` assente per un file: skip conservativo con warning su stderr,
+  a meno che `force=True`.
+
+Questo elimina il falso positivo "File copiati: 0" che si verificava quando
+i file erano già presenti su disco ma non erano stati modificati dall'ultimo
+install.
+
+#### Fix C — Loop unificato `workspace_files` + `plugin_files`
+
+Il ciclo di installazione elabora entrambi i gruppi dichiarati nel manifest:
+
+- `workspace_files`: file nel workspace utente sotto `.github/`.
+- `plugin_files`: file agente specifici del plugin.
+
+Entrambi i gruppi contribuiscono a `files_copied`, `files_written` e al
+rollback in `copied_in_session`.
+
+#### Fix D — Aggiornamento manifest `.scf-manifest.json`
+
+Dopo aver scritto almeno un file su disco (`files_copied > 0`), il metodo
+aggiorna il manifest locale tramite:
+
+```python
+ManifestManager.upsert_many(plugin_id, version, files_written)
+```
+
+Se `upsert_many` fallisce, l'errore è non-fatale: i file sono già su disco
+e il manifest può essere ripristinato rieseguendo l'installazione. Nessun
+rollback dei file avviene in questo caso.
+
+#### Dict di ritorno di `_download_and_install_plugin()`
+
+- `success` (`bool`): `True` se l'operazione è completata senza errori fatali.
+- `files_copied` (`int`): file nuovi o aggiornati scritti su disco.
+- `preserved` (`int`): file già aggiornati (SHA invariato, skip).
+- `errors` (`list[str]`): messaggi di errore o avviso non fatali.
+
+**File toccati:** `spark/cli/registry_manager.py`.
+
+**Test gate:** `tests/test_cli_registry_manager.py::TestDownloadAndInstallPluginPR1`
+— 5 test (scenari 1–3, bonus mcp_only, fix_c), tutti PASS.
 
 ---
 
