@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,10 @@ class InitManager:
         # Step 4 — Segnale di reload
         print("[4/4] Emissione segnale reload ...")
         self._signal_reload(target)
+
+        # Step 5 (opzionale) — Apertura VS Code
+        print("[5/5] Apertura VS Code (opzionale) ...")
+        self._offer_vscode_open(target)
 
     # ------------------------------------------------------------------
     # Step interni
@@ -389,3 +394,32 @@ class InitManager:
             "\nWorkspace inizializzato. Ricarica VS Code per attivare il server SPARK MCP."
         )
         print(f"Workspace: {target}\n")
+
+    def _offer_vscode_open(self, target: Path) -> None:
+        """Propone l'apertura di VS Code sul workspace appena inizializzato.
+
+        Cerca il file .code-workspace in target/. Se trovato, chiede conferma
+        e lancia subprocess.run(["code", path]). Se non trovato, propone
+        apertura della cartella con subprocess.run(["code", str(target)]).
+        Se subprocess fallisce o code non è nel PATH, logga WARNING su stderr
+        senza propagare.
+
+        Args:
+            target: Root del workspace target.
+        """
+        workspaces = list(target.glob("*.code-workspace"))
+        vscode_path: str = str(workspaces[0]) if workspaces else str(target)
+
+        confirm = input("Aprire VS Code ora? [s/N]: ").strip().lower()
+        if confirm not in ("s", "si", "s\u00ec", "y", "yes"):
+            print("Apertura rimandata.")
+            return
+
+        try:
+            subprocess.run(["code", vscode_path], check=False)
+        except FileNotFoundError:
+            _log.warning("[SPARK-ENGINE][WARNING] code non trovato nel PATH")
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "[SPARK-ENGINE][WARNING] Apertura VS Code fallita: %s", exc
+            )

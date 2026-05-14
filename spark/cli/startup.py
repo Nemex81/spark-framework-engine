@@ -5,8 +5,12 @@ root ``spark_launcher.py`` viene eseguito da un progetto utente.
 """
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
 from typing import Callable
+
+_log: logging.Logger = logging.getLogger("spark-framework-engine")
 
 SENTINEL_FILE = ".scf-init-done"
 
@@ -45,6 +49,28 @@ def _mark_startup_completed(base: Path) -> None:
         base: Directory base del sentinel globale.
     """
     (base / SENTINEL_FILE).touch(exist_ok=True)
+
+
+def _save_workspace_config(base: Path, workspace_root: Path) -> None:
+    """Persiste il workspace_root scelto in ~/.spark/config.json.
+
+    Scrittura atomica: scrive su file temporaneo con suffisso .tmp,
+    poi rinomina. Se fallisce, logga WARNING su stderr senza propagare.
+
+    Args:
+        base: Directory base ~/.spark/.
+        workspace_root: Path assoluto del workspace utente scelto.
+    """
+    config_file = base / "config.json"
+    tmp_file = base / "config.json.tmp"
+    try:
+        payload = json.dumps({"workspace_root": str(workspace_root)})
+        tmp_file.write_text(payload, encoding="utf-8")
+        tmp_file.replace(config_file)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] Impossibile salvare config.json: %s", exc
+        )
 
 
 def run_startup_flow(
@@ -98,8 +124,20 @@ def run_startup_flow(
         print("Avvio iniziale rimandato. Apertura del menu principale...")
         return {"status": "deferred"}
 
-    # Il sentinel viene scritto solo dopo una conferma esplicita, cosi' un
-    # rinvio continua a riproporre la guida nelle esecuzioni successive.
+    # Passo A — wizard di inizializzazione workspace
+    try:
+        from spark.cli.init_manager import InitManager  # noqa: PLC0415
+
+        InitManager(engine_root).run()
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "[SPARK-ENGINE][WARNING] InitManager.run() fallito: %s", exc
+        )
+
+    # Passo B — persistenza workspace scelto
+    _save_workspace_config(startup_base, current_workspace)
+
+    # Passo C — sentinel e ritorno
     _mark_startup_completed(startup_base)
     print("Avvio iniziale completato. Apertura del menu principale...")
     return {"status": "completed"}

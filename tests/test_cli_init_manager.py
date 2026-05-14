@@ -348,8 +348,8 @@ class TestInitManagerRun:
 
         mgr = InitManager(engine_root)
 
-        # Simula: utente inserisce il path del workspace, poi nessun altro input
-        with patch("builtins.input", side_effect=[str(target)]):
+        # Side effects: (1) percorso workspace, (2) risposta a "Aprire VS Code? [s/N]"
+        with patch("builtins.input", side_effect=[str(target), "n"]):
             mgr.run()
 
         assert (target / ".github").is_dir()
@@ -367,3 +367,97 @@ class TestInitManagerRun:
             mgr.run()
 
         assert not target.exists()
+
+
+# ---------------------------------------------------------------------------
+# Test _offer_vscode_open (CICLO 5)
+# ---------------------------------------------------------------------------
+
+
+class TestOfferVscodeOpen:
+    """Test per InitManager._offer_vscode_open."""
+
+    def test_i1_utente_conferma_code_nel_path(self, tmp_path: Path) -> None:
+        """I1: utente dice 's', code nel PATH — subprocess.run chiamato con .code-workspace.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        target = tmp_path / "workspace"
+        target.mkdir()
+        ws_file = target / "mio-progetto.code-workspace"
+        ws_file.write_text("{}", encoding="utf-8")
+
+        mgr = InitManager(engine_root)
+
+        with (
+            patch("builtins.input", return_value="s"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mgr._offer_vscode_open(target)
+
+        mock_run.assert_called_once_with(["code", str(ws_file)], check=False)
+
+    def test_i2_utente_rifiuta_apertura(self, tmp_path: Path) -> None:
+        """I2: utente dice 'n' — subprocess.run non viene chiamato.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        target = tmp_path / "workspace"
+        target.mkdir()
+
+        mgr = InitManager(engine_root)
+
+        with (
+            patch("builtins.input", return_value="n"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mgr._offer_vscode_open(target)
+
+        mock_run.assert_not_called()
+
+    def test_i3_code_non_nel_path_file_not_found(self, tmp_path: Path) -> None:
+        """I3: code non nel PATH — FileNotFoundError non propaga, warning su stderr.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        target = tmp_path / "workspace"
+        target.mkdir()
+
+        mgr = InitManager(engine_root)
+
+        with (
+            patch("builtins.input", return_value="s"),
+            patch("subprocess.run", side_effect=FileNotFoundError("code not found")),
+        ):
+            # Non deve sollevare eccezioni
+            mgr._offer_vscode_open(target)
+
+    def test_i1_fallback_su_cartella_senza_workspace_file(self, tmp_path: Path) -> None:
+        """I1b: nessun .code-workspace — subprocess.run usa la cartella target.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        target = tmp_path / "workspace"
+        target.mkdir()
+
+        mgr = InitManager(engine_root)
+
+        with (
+            patch("builtins.input", return_value="s"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mgr._offer_vscode_open(target)
+
+        mock_run.assert_called_once_with(["code", str(target)], check=False)

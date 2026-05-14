@@ -5,6 +5,7 @@ e plugin remoti. Accessibile da tastiera, nessun output decorativo.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -67,11 +68,30 @@ def _run_main() -> None:
             print("Scelta non valida. Inserisci un numero tra 0 e 5.")
 
 
+def _load_workspace_config() -> Path | None:
+    """Carica il workspace_root da ~/.spark/config.json.
+
+    Returns:
+        Path assoluto di .github/ nel workspace salvato,
+        oppure None se il file non esiste, è malformato,
+        o il path non è più valido su disco.
+    """
+    config_file = Path.home() / ".spark" / "config.json"
+    try:
+        data = json.loads(config_file.read_text(encoding="utf-8"))
+        workspace_root = Path(data["workspace_root"])
+        if workspace_root.is_dir():
+            return workspace_root / ".github"
+        return None
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, OSError):
+        return None
+
+
 def _resolve_github_root(engine_root: Path) -> Path:
     """Determina github_root del workspace utente corrente.
 
-    Usa ``WorkspaceLocator`` se disponibile; come fallback usa
-    la directory corrente / ``.github/``.
+    Usa ``~/.spark/config.json`` come fonte prioritaria se presente e valido;
+    poi prova ``WorkspaceLocator``; come fallback usa la directory corrente / ``.github/``.
 
     Args:
         engine_root: Root del motore SPARK.
@@ -79,6 +99,12 @@ def _resolve_github_root(engine_root: Path) -> Path:
     Returns:
         Path assoluto di ``.github/`` del workspace utente.
     """
+    # Primo tentativo: config.json persistito dallo startup wizard
+    from_config = _load_workspace_config()
+    if from_config is not None:
+        return from_config
+
+    # Secondo tentativo: WorkspaceLocator
     try:
         from spark.workspace import WorkspaceLocator  # noqa: PLC0415
 

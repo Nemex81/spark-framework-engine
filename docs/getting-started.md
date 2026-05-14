@@ -223,6 +223,39 @@ prima di fare fallback sul `cwd`.
 
 ***
 
+## Wizard di Inizializzazione (Startup Wizard)
+
+Alla prima esecuzione di `scf init`, il launcher avvia automaticamente il wizard
+interattivo prima di aprire il menu principale.
+
+### Flusso
+
+1. **Rilevamento first-run**: se `~/.spark/.spark-startup-done` non esiste,
+   il wizard parte automaticamente.
+2. **Inizializzazione workspace**: il wizard (`InitManager`) guida in 4 step
+   la struttura del workspace target, il trasferimento dei pacchetti `spark-ops`,
+   la scrittura del file `mcp.json` e l'emissione del segnale di reload.
+3. **Persistenza**: al termine, il workspace scelto viene salvato in
+   `~/.spark/config.json` con formato `{"workspace_root": "<path assoluto>"}`.
+   La scrittura è atomica (file temporaneo + rename).
+4. **Apertura VS Code (opzionale)**: il wizard chiede se aprire VS Code
+   sul workspace appena inizializzato. Se confermato, esegue
+   `code <path>.code-workspace` (o `code <cartella>` se nessun file `.code-workspace`
+   è presente).
+5. **Agli avvii successivi**: `~/.spark/config.json` viene letto come fonte
+   prioritaria da `_resolve_github_root()`, così il launcher accede direttamente
+   al workspace salvato senza passare per il wizard.
+
+### Comportamento in caso di errore
+
+- Se il wizard fallisce, il launcher continua verso il menu principale
+  senza propagare l'eccezione (degradation graceful).
+- Se `code` non è nel PATH, il launcher logga un warning su stderr e
+  prosegue senza aprire VS Code.
+
+***
+
+
 ## Prima Configurazione
 
 Per usare SPARK la prima volta in un workspace utente:

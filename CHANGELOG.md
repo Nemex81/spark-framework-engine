@@ -10,6 +10,26 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added
+
+- **startup**: `run_startup_flow()` ora lancia `InitManager` al primo avvio
+  (`spark/cli/startup.py`): guida l'utente nella configurazione del workspace
+  in 4 step prima di completare la sentinella di first-run.
+
+- **startup**: aggiunto `_save_workspace_config(base, workspace_root)` —
+  persiste il workspace scelto in `~/.spark/config.json` con scrittura atomica
+  (file temporaneo + `rename`); formato `{"workspace_root": "<path assoluto>"}`.
+
+- **init_manager**: aggiunto step 5 opzionale `_offer_vscode_open(target)` —
+  propone l'apertura di VS Code sul workspace appena inizializzato via
+  `subprocess.run(["code", ...], check=False)`; gestisce gracefully
+  `FileNotFoundError` se `code` non è nel PATH.
+
+- **main**: `_resolve_github_root()` legge `~/.spark/config.json` come fonte
+  prioritaria tramite `_load_workspace_config()`; se il file è assente,
+  malformato o il path non è più valido su disco, cade in cascata su
+  `WorkspaceLocator` poi su `cwd/.github`.
+
 ### Fixed
 
 - `spark/cli/registry_manager.py` (PR-1 Fix B) — corretto falso positivo

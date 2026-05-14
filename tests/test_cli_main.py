@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from spark.cli.main import _resolve_github_root, _run_main, main
+from spark.cli.main import _load_workspace_config, _resolve_github_root, _run_main, main
 
 
 # ---------------------------------------------------------------------------
@@ -27,9 +27,10 @@ class TestResolveGithubRoot:
         engine_root = tmp_path / "engine"
         engine_root.mkdir()
 
-        with patch("spark.workspace.WorkspaceLocator", side_effect=Exception("no locator")):
-            with patch("pathlib.Path.cwd", return_value=tmp_path):
-                result = _resolve_github_root(engine_root)
+        with patch("spark.cli.main._load_workspace_config", return_value=None):
+            with patch("spark.workspace.WorkspaceLocator", side_effect=Exception("no locator")):
+                with patch("pathlib.Path.cwd", return_value=tmp_path):
+                    result = _resolve_github_root(engine_root)
 
         assert result == tmp_path / ".github"
 
@@ -45,6 +46,74 @@ class TestResolveGithubRoot:
         mock_locator.resolve.return_value = mock_context
 
         with patch("spark.workspace.WorkspaceLocator", return_value=mock_locator):
+            with patch("spark.cli.main._load_workspace_config", return_value=None):
+                result = _resolve_github_root(engine_root)
+
+        assert result == expected
+
+    def test_m1_config_json_presente_e_valido(self, tmp_path: Path) -> None:
+        """M1: config.json valido — usa il path salvato senza WorkspaceLocator.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        github_dir = tmp_path / "workspace" / ".github"
+        github_dir.mkdir(parents=True)
+
+        with (
+            patch("spark.cli.main._load_workspace_config", return_value=github_dir),
+            patch("spark.workspace.WorkspaceLocator") as mock_locator_cls,
+        ):
+            result = _resolve_github_root(engine_root)
+
+        assert result == github_dir
+        mock_locator_cls.assert_not_called()
+
+    def test_m2_config_json_assente_usa_workspace_locator(self, tmp_path: Path) -> None:
+        """M2: config.json assente — fallback a WorkspaceLocator.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        expected = tmp_path / "other" / ".github"
+
+        mock_context = MagicMock()
+        mock_context.github_root = expected
+        mock_locator = MagicMock()
+        mock_locator.resolve.return_value = mock_context
+
+        with (
+            patch("spark.cli.main._load_workspace_config", return_value=None),
+            patch("spark.workspace.WorkspaceLocator", return_value=mock_locator),
+        ):
+            result = _resolve_github_root(engine_root)
+
+        assert result == expected
+
+    def test_m3_config_json_path_non_valido_usa_workspace_locator(self, tmp_path: Path) -> None:
+        """M3: config.json con path non esistente — fallback a WorkspaceLocator.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        engine_root = tmp_path / "engine"
+        engine_root.mkdir()
+        expected = tmp_path / "ws" / ".github"
+
+        mock_context = MagicMock()
+        mock_context.github_root = expected
+        mock_locator = MagicMock()
+        mock_locator.resolve.return_value = mock_context
+
+        # _load_workspace_config ritorna None quando il path non è valido
+        with (
+            patch("spark.cli.main._load_workspace_config", return_value=None),
+            patch("spark.workspace.WorkspaceLocator", return_value=mock_locator),
+        ):
             result = _resolve_github_root(engine_root)
 
         assert result == expected
@@ -250,3 +319,74 @@ class TestCliDispatch:
             with pytest.raises(SystemExit) as exc_info:
                 cli_module.main()
         assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# Test _load_workspace_config (CICLO 5)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadWorkspaceConfig:
+    """Test per main._load_workspace_config."""
+
+    def test_m1_config_presente_e_valido(self, tmp_path: Path) -> None:
+        """Config presente con path valido — ritorna workspace/.github.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        workspace = tmp_path / "my_workspace"
+        workspace.mkdir()
+        spark_dir = tmp_path / ".spark"
+        spark_dir.mkdir()
+        (spark_dir / "config.json").write_text(
+            json.dumps({"workspace_root": str(workspace)}), encoding="utf-8"
+        )
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _load_workspace_config()
+
+        assert result == workspace / ".github"
+
+    def test_m2_config_assente_ritorna_none(self, tmp_path: Path) -> None:
+        """Nessun config.json — ritorna None silenziosamente.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _load_workspace_config()
+
+        assert result is None
+
+    def test_m3_config_con_path_non_esistente_ritorna_none(self, tmp_path: Path) -> None:
+        """Config con path non più valido su disco — ritorna None.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        spark_dir = tmp_path / ".spark"
+        spark_dir.mkdir()
+        (spark_dir / "config.json").write_text(
+            json.dumps({"workspace_root": str(tmp_path / "nonexistent")}), encoding="utf-8"
+        )
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _load_workspace_config()
+
+        assert result is None
+
+    def test_config_malformato_ritorna_none(self, tmp_path: Path) -> None:
+        """Config JSON malformato — ritorna None senza eccezioni.
+
+        Args:
+            tmp_path: Directory temporanea isolata del test.
+        """
+        spark_dir = tmp_path / ".spark"
+        spark_dir.mkdir()
+        (spark_dir / "config.json").write_text("{ invalid json }", encoding="utf-8")
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _load_workspace_config()
+
+        assert result is None
