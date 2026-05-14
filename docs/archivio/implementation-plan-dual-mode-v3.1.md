@@ -1,3 +1,8 @@
+> **STATO: COMPLETATO** — Archiviato il 2026-05-14 (ENGINE_VERSION 3.6.0).
+> Documento di sola lettura. Non modificare.
+
+***
+
 # Piano Tecnico - Dual-Mode Manifest v3.1
 
 ## Stato validazione proposta

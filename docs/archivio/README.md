@@ -29,6 +29,18 @@ I file seguono due convenzioni di nomenclatura:
 | [SPARK-ENGINE-TASK-SYNC-REGISTRY-WORKFLOW-IMPL-PLAN.md](./SPARK-ENGINE-TASK-SYNC-REGISTRY-WORKFLOW-IMPL-PLAN.md) | Implementazione | Workflow di sync task/registry |
 | [piano correttivo per spark.md](./piano%20correttivo%20per%20spark.md) | Correttivo | Piano correttivo iniziale SPARK |
 
+## Archiviati il 2026-05-14 (ENGINE_VERSION 3.6.0)
+
+- `FASE0-PIANO-TECNICO.md` — Refactoring Fase 0
+- `FASE1-PIANO-TECNICO.md` — Refactoring Fase 1
+- `FASE2-PIANO-TECNICO.md` — Refactoring Fase 2
+- `FASE3-PIANO-TECNICO.md` — Refactoring Fase 3
+- `FASE4-PIANO-TECNICO.md` — Refactoring Fase 4
+- `FASE5-PIANO-TECNICO.md` — Refactoring Fase 5
+- `SPARK-PLAN-Engine-Decoupling-v1.0.md` — Piano Engine Decoupling
+- `implementation-plan-dual-mode-v3.1.md` — Piano Dual-Mode v3.1
+- `refactoring-phase1-2.md` — Piano Refactoring Phase 1-2
+
 ## Regole di archiviazione
 
 1. Un piano viene spostato qui solo dopo che il relativo CHANGELOG riporta la voce corrispondente come completata.

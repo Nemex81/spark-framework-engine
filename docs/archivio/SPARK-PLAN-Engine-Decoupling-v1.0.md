@@ -1,3 +1,8 @@
+> **STATO: COMPLETATO** — Archiviato il 2026-05-14 (ENGINE_VERSION 3.6.0).
+> Documento di sola lettura. Non modificare.
+
+***
+
 <!-- markdownlint-disable MD022 MD032 MD036 MD060 -->
 
 # Piano Tecnico — Disaccoppiamento spark-base → spark-ops

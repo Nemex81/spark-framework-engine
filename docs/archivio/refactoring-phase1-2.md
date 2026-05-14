@@ -1,3 +1,8 @@
+> **STATO: COMPLETATO** — Archiviato il 2026-05-14 (ENGINE_VERSION 3.6.0).
+> Documento di sola lettura. Non modificare.
+
+***
+
 # Refactoring Phase 1-2 — engine.py Modularization
 
 ## Obiettivo

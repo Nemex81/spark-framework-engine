@@ -1,3 +1,8 @@
+> **STATO: COMPLETATO** — Archiviato il 2026-05-14 (ENGINE_VERSION 3.6.0).
+> Documento di sola lettura. Non modificare.
+
+***
+
 # FASE 5 — Consolidamento Finale e Verifica Contratti Architetturali
 <!-- version: 1.0.0 | stato: ATTIVO | autore: spark-engine-maintainer -->
 
