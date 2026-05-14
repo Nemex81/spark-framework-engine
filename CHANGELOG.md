@@ -26,6 +26,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `docs/todo.md`: sezione "Prossimo ciclo" ripulita da candidati
   già completati nel CICLO 5 (api.md sync e MULTI-REPO-1).
   Nessun candidato residuo al momento della pulizia.
+- `docs/api.md`: aggiunta sezione `## 11. CLI — Entry Points` per documentare
+  il layer CLI (spark_launcher, scf, scf_universal v5.2, InitManager,
+  PackageManager, RegistryManager). Chiude DOC-GAP-CLI.
+- `docs/`: audit completo allineamento documentazione a ENGINE_VERSION 3.6.0;
+  corretti contatori tool (51→53), versione README (3.3.0→3.6.0), riferimenti
+  launcher (v5.1→v5.2) e costanti stale in architecture.md.
 
 ***
 

@@ -22,6 +22,7 @@ Per l'architettura generale e il flusso di boot, vedi [architecture.md](architec
 | [Plugin](#8-plugin) | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_plugin_list_remote`, `scf_plugin_install_remote`, `scf_get_plugin_info` ✅  ·  `scf_list_plugins`, `scf_install_plugin` ⚠️ |
 | [Risorse](#9-risorse) | `scf_read_resource`, `scf_get_*_resource` (4), `scf_list_*` / `scf_get_*` (10) |
 | [Policy / Stato](#10-policy--stato) | `scf_get_project_profile`, `scf_get_global_instructions`, `scf_get_model_policy`, `scf_get_framework_version`, `scf_get_workspace_info`, `scf_get_runtime_state`, `scf_update_runtime_state`, `scf_get_update_policy`, `scf_set_update_policy` |
+| [CLI — Entry Points](#11-cli--entry-points) | `spark_launcher.py`, `python -m spark.cli`, `scripts/scf`, `scripts/scf_universal.py` |
 
 Legenda: ✅ Attivo  · ⚠️ Deprecated
 
@@ -956,6 +957,131 @@ Crea o aggiorna la policy di update del workspace in `user-prefs.json`.
 | `default_mode` | `str \| None` | `None` | `ask`, `integrative`, `replace`, `conservative` |
 | `mode_per_package` | `dict[str, str] \| None` | `None` | Override per pacchetto |
 | `mode_per_file_role` | `dict[str, str] \| None` | `None` | Override per ruolo file SCF |
+
+---
+
+## 11. CLI — Entry Points
+
+Il layer CLI fornisce accesso diretto al motore SPARK da terminale,
+indipendentemente dal canale MCP. Utile per inizializzazione workspace,
+gestione pacchetti e installazione plugin in ambienti senza VS Code attivo.
+Accessibile da tastiera, senza dipendenze decorative, compatibile con screen reader.
+
+### Entry Point Disponibili
+
+| Comando | File | Descrizione |
+|---------|------|-------------|
+| `python spark_launcher.py` | `spark_launcher.py` | Avvio diretto: flusso primo avvio e menu principale |
+| `python -m spark.cli` | `spark/cli/__init__.py` | Alternativa modulo Python; stesso comportamento di `spark_launcher.py` |
+| `python scripts/scf [init]` | `scripts/scf` | Launcher con shebang (`#!/usr/bin/env python3`); Linux/macOS diretto, Windows con `py scripts/scf` |
+| `python scripts/scf_universal.py` | `scripts/scf_universal.py` | Universal v5.2: auto-trova il motore risalendo la directory tree; gestisce setup venv automatico |
+
+---
+
+### Flusso Primo Avvio
+
+**File:** `spark/cli/startup.py`
+
+Il sentinel globale `~/.spark/.scf-init-done` determina se mostrare la guida
+introduttiva al primo lancio:
+
+- **Sentinel assente** → `run_startup_flow()` mostra il messaggio di benvenuto.
+  L'utente sceglie:
+  - `1` — salva il sentinel e accede al menu principale
+  - `0` — salta (sentinel non scritto; la guida viene riproposta al prossimo lancio)
+- **Sentinel presente** → accesso diretto al menu principale
+
+Il workspace scelto viene persistito in `~/.spark/config.json`
+(scrittura atomica tramite file `.tmp` + rename).
+
+---
+
+### Menu Principale
+
+**File:** `spark/cli/main.py`
+
+`KeyboardInterrupt` e `EOFError` vengono intercettati con uscita pulita
+(`\nUscita.` + `sys.exit(0)`).
+
+| Opzione | Azione | Delegato a |
+|---------|--------|------------|
+| `1` | Inizializza nuovo workspace | `InitManager` |
+| `2` | Gestisci pacchetti installati | `PackageManager` |
+| `3` | Sfoglia e installa plugin dal registro | `RegistryManager` |
+| `4` | Verifica e applica aggiornamenti | `_cmd_updates()` |
+| `5` | Diagnostica e stato sistema | `_cmd_diagnostics()` |
+| `0` | Esci | — |
+
+---
+
+### `InitManager` — Sequenza 4+1 Step
+
+**File:** `spark/cli/init_manager.py`
+
+Wizard di inizializzazione workspace. Richiede il path target (default: `cwd`;
+`0` = annulla; max 3 tentativi su percorso non scrivibile). Ogni operazione è
+idempotente: le strutture già presenti non vengono sovrascritte.
+
+| Step | Descrizione |
+|------|-------------|
+| `[1/4]` | Creazione struttura `.github/` nel workspace target |
+| `[2/4]` | Trasferimento `workspace_files` di spark-ops con rollback atomico su errore |
+| `[3/4]` | Scrittura/aggiornamento `.vscode/mcp.json` con configurazione server MCP |
+| `[4/4]` | Emissione segnale reload |
+| `[5/5]` (opzionale) | Proposta apertura VS Code tramite `subprocess` |
+
+---
+
+### `PackageManager` — Sotto-menu Pacchetti
+
+**File:** `spark/cli/package_manager.py`
+
+Chiama `os.system("cls"/"clear")` prima di ogni visualizzazione menu.
+Dopo ogni operazione (opzioni 1–4): `input("Premi Invio per continuare...")`.
+
+| Opzione | Azione |
+|---------|--------|
+| `1` | Elenca pacchetti installati |
+| `2` | Installa pacchetto da store locale |
+| `3` | Rimuovi pacchetto |
+| `4` | Reinstalla / forza aggiornamento |
+| `0` | Torna al menu principale |
+
+---
+
+### `RegistryManager` — Sotto-menu Plugin Remoti
+
+**File:** `spark/cli/registry_manager.py`
+
+Registry URL: `https://raw.githubusercontent.com/Nemex81/scf-registry/main/registry.json`
+(timeout HTTP: 10 s). Graceful degradation se il registro non è raggiungibile.
+Dopo ogni operazione (opzioni 1–4): `input("Premi Invio per continuare...")`.
+
+| Opzione | Azione |
+|---------|--------|
+| `1` | Sfoglia plugin disponibili (registry remoto) |
+| `2` | Installa plugin dal registro |
+| `3` | Verifica aggiornamenti plugin installati |
+| `4` | Applica aggiornamenti disponibili |
+| `0` | Torna al menu principale |
+
+---
+
+### `scf_universal.py` — Auto-detect Launcher v5.2
+
+**File:** `scripts/scf_universal.py`
+
+Launcher zero-touch per esecuzione da qualsiasi directory. Flusso di boot:
+
+1. Trova `spark-framework-engine.py` risalendo la directory tree
+2. Auto-setup `.venv` + dipendenze engine se non disponibili (stdlib: `venv` + `pip`)
+3. Se venv creato: riavvia con il Python del venv
+4. Aggiunge `engine_root` a `sys.path`
+5. Rileva `workspace_root` (esplicito, locale, fallback `cwd`)
+6. Chiama `run_wizard(cwd=workspace_root)`
+
+Idempotente: sentinel `.scf-init-done` previene wizard duplicate;
+`.scf-deps-ready` previene reinstallazione deps.
 
 ---
 

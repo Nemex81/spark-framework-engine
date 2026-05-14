@@ -55,8 +55,12 @@ Principi fondamentali verificati nel codice:
 | **Package lifecycle** | `spark/packages/lifecycle.py` | Download asincrono (ThreadPoolExecutor) + store install/remove |
 | **Plugins** | `spark/plugins/facade.py` → `PluginManagerFacade` | Install/remove/update plugin via `.github/.spark-plugins` |
 | **RegistryManager** | `spark/cli/registry_manager.py` → `RegistryManager` | Menu CLI per installazione plugin da registro remoto SCF |
+| **spark_launcher** | `spark_launcher.py` | Entry point CLI con flusso primo avvio e boot del menu principale |
+| **startup** | `spark/cli/startup.py` → `run_startup_flow()` | Flusso primo avvio; sentinel globale `~/.spark/.scf-init-done` |
+| **InitManager** | `spark/cli/init_manager.py` → `InitManager` | Wizard di inizializzazione workspace (4 step) |
+| **PackageManager** | `spark/cli/package_manager.py` → `PackageManager` | Menu CLI gestione pacchetti installati nel workspace |
 | **Onboarding** | `spark/boot/onboarding.py` → `OnboardingManager` | First-run automatico; idempotente, non-fatal |
-| **Boot tools** | `spark/boot/tools_*.py` (10 file) | Factory function che registrano i 51 tool MCP |
+| **Boot tools** | `spark/boot/tools_*.py` (10 file) | Factory function che registrano i 53 tool MCP |
 | **Assets** | `spark/assets/phase6.py` | Bootstrap batch-write Cat. A con `write_many()` |
 | **Workspace** | `spark/workspace/` | WorkspaceLocator e helper di risoluzione path |
 
@@ -334,11 +338,12 @@ spark-framework-engine/
 │   ├── registry/                  Client, McpResourceRegistry, Resolver, Store, V3Store
 │   ├── merge/                     MergeEngine, Sessions, Sections, Validators
 │   ├── packages/                  Package lifecycle (download asincrono)
+│   ├── cli/                       Entry point CLI: startup, main, InitManager, PackageManager, RegistryManager
 │   ├── plugins/                   PluginManagerFacade (legacy plugin workspace)
 │   ├── workspace/                 WorkspaceLocator e helper path
 │   └── assets/                    Phase6 bootstrap batch assets
 ├── docs/                          Documentazione tecnica e piani
-└── tests/                         Suite pytest (≥ 670 test, esclude test_integration_live.py)
+└── tests/                         Suite pytest (729 test, esclude test_integration_live.py)
 └── runtime/                       Directory locale engine (snapshots, merge-sessions, backups)
 ```
 
@@ -349,7 +354,7 @@ spark-framework-engine/
 ```python
 # spark/core/constants.py
 
-ENGINE_VERSION                 = "3.4.0"
+ENGINE_VERSION                 = "3.6.0"
 _MANIFEST_FILENAME             = ".scf-manifest.json"
 _MANIFEST_SCHEMA_VERSION       = "3.0"
 _SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {"1.0", "2.0", "2.1", "3.0"}

@@ -9,7 +9,7 @@ come Resources e Tools consumabili da GitHub Copilot in Agent mode.
 Il motore legge il `.github/` del progetto attivo dinamicamente —
 non contiene dati di dominio, si adatta a qualsiasi progetto.
 
-> **Versione corrente:** 3.3.0 (09 maggio 2026). Per le note di migrazione
+> **Versione corrente:** 3.6.0 (14 maggio 2026). Per le note di migrazione
 > consultare il [CHANGELOG.md](CHANGELOG.md).
 
 ---
@@ -29,7 +29,7 @@ configurazione del workspace, consulta:
 
 → **[docs/getting-started.md](docs/getting-started.md)**
 
-### Quick Start — Launcher Globale (v5.1)
+### Quick Start — Launcher Globale (v5.2)
 
 Se vuoi una **esperienza zero-touch da qualsiasi directory**, usa il launcher SCF:
 
@@ -92,7 +92,7 @@ scf://runtime-state
 > Il numero effettivo a runtime è superiore perché i pacchetti installati registrano
 > risorse aggiuntive al boot tramite `_v3_repopulate_registry()`.
 
-## Tools Disponibili (51)
+## Tools Disponibili (53)
 
 ```
 scf_list_overrides(resource_type=None)
@@ -137,6 +137,8 @@ scf_plugin_install(pkg_id)
 scf_plugin_remove(pkg_id)
 scf_plugin_update(pkg_id)
 scf_plugin_list()
+scf_plugin_list_remote(force_refresh=False)
+scf_plugin_install_remote(pkg_id, workspace_root="", overwrite=False, force_refresh=False)
 scf_list_plugins()
 scf_install_plugin(package_id, version="latest", workspace_root="", overwrite=False)
 ```
@@ -145,11 +147,10 @@ scf_install_plugin(package_id, version="latest", workspace_root="", overwrite=Fa
 
 I tool `scf_list_plugins()` e `scf_install_plugin()` sono **deprecati** a favore
 di `scf_plugin_list()` e `scf_plugin_install()` (introdotti nella v3.0).
-Rimangono disponibili per retrocompatibilità ma con la segnalazione nei payload
-`deprecated: true` e `removal_target_version: "3.4.0"` (due minor release dopo
-l'attuale 3.2.0). Il campo `migrate_to` nei return block specifica il tool
-sostitutivo esplicito. I client dovrebbero transitare verso i nuovi tool nelle
-prossime versioni.
+Rimangono disponibili per retrocompatibilità con la segnalazione nei payload
+`deprecated: true` e `removal_target_version: "3.4.0"`. Il campo `migrate_to`
+nei return block specifica il tool sostitutivo esplicito. I client dovrebbero
+transitare verso i nuovi tool nelle prossime versioni.
 
 ## Architettura — Pacchetti interni vs Plugin Workspace
 

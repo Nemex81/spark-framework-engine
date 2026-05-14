@@ -10,14 +10,14 @@ consulta il [README.md](../README.md).
 ## Scelta di Percorso
 
 - **Preferisci eseguire da qualsiasi directory senza cd manuali?**
-  → Vedi [SCF Universal Launcher v5.1](#scf-universal-launcher-v51)
+  → Vedi [SCF Universal Launcher v5.2](#scf-universal-launcher-v52)
 
 - **Preferisci setup classico con script dedicato?**
   → Vedi [Quick Start Classico](#quick-start-classico)
 
 ***
 
-## SCF Universal Launcher v5.1
+## SCF Universal Launcher v5.2
 
 **Esecuzione zero-touch da QUALSIASI directory:**
 
