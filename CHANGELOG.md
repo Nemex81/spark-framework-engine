@@ -23,6 +23,9 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `min_engine_version` bump da 3.4.0 a 3.6.0
   (repo `Nemex81/scf-pycode-crafter`, main branch).
 - `docs/todo.md`: sospesi DOC-GAP-CLI e MULTI-REPO-1 marcati come chiusi.
+- `docs/todo.md`: sezione "Prossimo ciclo" ripulita da candidati
+  già completati nel CICLO 5 (api.md sync e MULTI-REPO-1).
+  Nessun candidato residuo al momento della pulizia.
 
 ***
 
