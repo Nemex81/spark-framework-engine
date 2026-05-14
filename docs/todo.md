@@ -23,6 +23,9 @@ il 2026-05-14.
   in `scf-master-codecrafter` e `scf-pycode-crafter`
   (repo separati, fuori perimetro engine). Richiede agente
   con accesso multi-repo.
+- [x] **DEPRECATED-REMOVAL** — `tools_plugins.py`: `scf_list_plugins` e
+  `scf_install_plugin` rimossi. Costanti legacy e import orfano rimossi.
+  Tool count 53 → 51. Chiuso in ciclo post-3.6.0 — 2026-05-14.
 
 ***
 

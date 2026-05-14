@@ -1,7 +1,7 @@
 # API Reference — SPARK Framework Engine MCP Tools
 
 > **Versione documentata:** 3.6.0  
-> **Tool totali:** 53 (51 attivi + 2 deprecated)  
+> **Tool totali:** 51 (51 attivi)  
 > **Fonte:** `spark/boot/tools_*.py` — tutti i tool sono registrati con `@_register_tool("scf_*")`
 
 Per l'architettura generale e il flusso di boot, vedi [architecture.md](architecture.md).
@@ -19,12 +19,12 @@ Per l'architettura generale e il flusso di boot, vedi [architecture.md](architec
 | [Pacchetti — Update](#5-pacchetti--update) | `scf_check_updates`, `scf_update_package`, `scf_update_packages`, `scf_apply_updates` |
 | [Merge / Conflitti](#6-merge--conflitti) | `scf_resolve_conflict_ai`, `scf_approve_conflict`, `scf_reject_conflict`, `scf_finalize_update` |
 | [Override](#7-override) | `scf_list_overrides`, `scf_override_resource`, `scf_drop_override` |
-| [Plugin](#8-plugin) | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_plugin_list_remote`, `scf_plugin_install_remote`, `scf_get_plugin_info` ✅  ·  `scf_list_plugins`, `scf_install_plugin` ⚠️ |
+| [Plugin](#8-plugin) | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_plugin_list_remote`, `scf_plugin_install_remote`, `scf_get_plugin_info` |
 | [Risorse](#9-risorse) | `scf_read_resource`, `scf_get_*_resource` (4), `scf_list_*` / `scf_get_*` (10) |
 | [Policy / Stato](#10-policy--stato) | `scf_get_project_profile`, `scf_get_global_instructions`, `scf_get_model_policy`, `scf_get_framework_version`, `scf_get_workspace_info`, `scf_get_runtime_state`, `scf_update_runtime_state`, `scf_get_update_policy`, `scf_set_update_policy` |
 | [CLI — Entry Points](#11-cli--entry-points) | `spark_launcher.py`, `python -m spark.cli`, `scripts/scf`, `scripts/scf_universal.py` |
 
-Legenda: ✅ Attivo  · ⚠️ Deprecated
+Legenda: ✅ Attivo
 
 ---
 
@@ -67,7 +67,7 @@ pacchetti con le corrispondenti entry nel registry.
 **Risposta:**
 ```json
 {
-  "engine_version": "3.3.0",
+  "engine_version": "<versione engine corrente>",
   "packages_checked": 2,
   "issues": [],
   "warnings": [],
@@ -75,6 +75,9 @@ pacchetti con le corrispondenti entry nel registry.
   "is_coherent": true
 }
 ```
+
+> Nota: `engine_version` è dinamico — riflette `ENGINE_VERSION`
+> da `spark/core/constants.py` al momento dell'esecuzione.
 
 Campi `issues[].type` possibili: `"registry_stale"`, `"engine_min_mismatch"`.
 
@@ -186,7 +189,7 @@ sui file del manifest e compatibilità con il workspace attivo.
     "categories": { "agents": 0, "skills": 0, "instructions": 0 }
   },
   "compatibility": {
-    "engine_version": "3.3.0",
+    "engine_version": "<versione engine corrente>",
     "engine_compatible": true,
     "missing_dependencies": [],
     "present_conflicts": []
@@ -732,32 +735,6 @@ Restituisce i dettagli di un singolo plugin per ID (nome, versione, dipendenze,
 
 ---
 
-### `scf_list_plugins` ⚠️ Deprecated
-
-**File:** `spark/boot/tools_plugins.py:769`  
-**Sostituito da:** `scf_plugin_list`  
-**Rimosso in:** `3.4.0`
-
-Elenca i plugin disponibili per download diretto (esclude `mcp_only`).
-Il payload include `deprecated: true`, `removal_target_version`, `migrate_to`.
-
-**Parametri:** nessuno
-
----
-
-### `scf_install_plugin` ⚠️ Deprecated
-
-**File:** `spark/boot/tools_plugins.py:846`  
-**Sostituito da:** `scf_plugin_install`  
-**Rimosso in:** `3.4.0`
-
-Scarica un plugin direttamente in `.github/` senza tracciamento in `.spark-plugins`.
-Il payload include `deprecated: true`.
-
-**Parametri:** `package_id: str`, `version: str = "latest"`, `workspace_root: str = ""`, `overwrite: bool = False`
-
----
-
 ## 9. Risorse
 
 ### `scf_read_resource`
@@ -873,8 +850,11 @@ Restituisce la versione del motore e le versioni dei pacchetti installati.
 
 **Risposta:**
 ```json
-{ "engine_version": "3.3.0", "packages": { "spark-base": "1.7.3" } }
+{ "engine_version": "<versione engine corrente>", "packages": { "spark-base": "1.7.3" } }
 ```
+
+> Nota: `engine_version` è dinamico — riflette `ENGINE_VERSION`
+> da `spark/core/constants.py` al momento dell'esecuzione.
 
 ---
 
@@ -1113,11 +1093,4 @@ in `scf_get_runtime_state()`. Se `false`, il tool ritorna:
 
 Attiva con: `scf_update_runtime_state({"github_write_authorized": true})`
 
-### Tool deprecati
 
-| Tool (deprecated) | Sostituito da | Removal target |
-|-------------------|---------------|----------------|
-| `scf_list_plugins()` | `scf_plugin_list()` | `3.4.0` |
-| `scf_install_plugin()` | `scf_plugin_install()` | `3.4.0` |
-
-I tool deprecati restituiscono `deprecated: true` e `migrate_to` nel payload.

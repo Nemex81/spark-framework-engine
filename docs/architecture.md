@@ -60,7 +60,7 @@ Principi fondamentali verificati nel codice:
 | **InitManager** | `spark/cli/init_manager.py` → `InitManager` | Wizard di inizializzazione workspace (4 step) |
 | **PackageManager** | `spark/cli/package_manager.py` → `PackageManager` | Menu CLI gestione pacchetti installati nel workspace |
 | **Onboarding** | `spark/boot/onboarding.py` → `OnboardingManager` | First-run automatico; idempotente, non-fatal |
-| **Boot tools** | `spark/boot/tools_*.py` (10 file) | Factory function che registrano i 53 tool MCP |
+| **Boot tools** | `spark/boot/tools_*.py` (10 file) | Factory function che registrano i 51 tool MCP |
 | **Assets** | `spark/assets/phase6.py` | Bootstrap batch-write Cat. A con `write_many()` |
 | **Workspace** | `spark/workspace/` | WorkspaceLocator e helper di risoluzione path |
 

@@ -1,16 +1,13 @@
 """Plugin tools factory — Step 2 Full Decoupling + Dual-Mode Architecture.
 
-Registers 9 MCP tools:
+Registers 7 MCP tools:
   scf_plugin_install, scf_plugin_remove, scf_plugin_update, scf_plugin_list,
-    scf_get_plugin_info, scf_plugin_list_remote, scf_plugin_install_remote,
-    scf_list_plugins, scf_install_plugin.
+    scf_get_plugin_info, scf_plugin_list_remote, scf_plugin_install_remote.
 
 I primi 4 tool delegano a ``PluginManagerFacade`` (store-based, Universo A).
 ``scf_get_plugin_info`` legge i metadati plugin dal registry e dal manifest remoto.
 ``scf_plugin_list_remote`` e ``scf_plugin_install_remote`` sono U2 direct-download
 con TTL cache (1h) via ``tools_registry_client`` helpers.
-Gli ultimi 2 tool sono compat legacy verso ``PluginManager`` / ``download_plugin``
-(download diretto senza store, TASK-4 Dual-Mode Architecture v1.0).
 
 Tutti i tool accettano ``workspace_root: str`` per consentire operazioni
 su workspace arbitrari (utile in ambienti multi-root).
@@ -29,7 +26,7 @@ from spark.core.constants import ENGINE_VERSION, _REGISTRY_URL
 from spark.core.utils import _is_engine_version_compatible, _normalize_string_list
 from spark.packages import _get_registry_min_engine_version, _resolve_package_version
 from spark.plugins import PluginManagerFacade
-from spark.plugins.manager import download_plugin, list_available_plugins
+from spark.plugins.manager import list_available_plugins
 from spark.plugins.schema import (
     PluginInstallError,
     PluginNotFoundError,
@@ -40,31 +37,6 @@ from spark.registry.client import RegistryClient
 _log = logging.getLogger("spark-framework-engine")
 
 __all__ = ["register_plugin_tools"]
-
-# Marker uniforme per i tool legacy (TASK-4 Dual-Mode v1.0).
-# Esposto a Copilot via campi ``deprecated`` + ``deprecation_notice`` +
-# ``removal_target_version`` + ``migrate_to`` nei payload JSON dei tool
-# ``scf_list_plugins`` e ``scf_install_plugin`` per pilotarne l'uso solo
-# in workflow di compat (no tracking nello store).
-# TODO: centralizzare in spark/boot/_legacy_markers.py se altri tool
-# diventano legacy in moduli diversi (oggi: 2 tool in 1 solo modulo).
-_LEGACY_DEPRECATION_NOTICE: str = (
-    "Tool legacy senza tracking nello store. Preferire i tool store-based: "
-    "'scf_plugin_list' (al posto di 'scf_list_plugins') e "
-    "'scf_plugin_install' (al posto di 'scf_install_plugin'). "
-    "Rimozione pianificata in engine 3.4.0 (due minor release dopo 3.2.0)."
-)
-
-# Versione engine in cui i tool legacy verranno rimossi (R3 — DualUniverse).
-# Politica: due minor release dopo l'introduzione del marker deprecated.
-_LEGACY_REMOVAL_TARGET_VERSION: str = "3.4.0"
-
-# Mappa esplicita tool legacy -> tool store-based equivalente, esposta
-# nei payload come campo ``migrate_to`` per indirizzare i client MCP.
-_LEGACY_MIGRATION_MAP: dict[str, str] = {
-    "scf_list_plugins": "scf_plugin_list",
-    "scf_install_plugin": "scf_plugin_install",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -762,60 +734,6 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
             ),
         }
 
-    # -----------------------------------------------------------------------
-    # TASK-4 — Dual-Mode Architecture: tool per download diretto (no store)
-    # -----------------------------------------------------------------------
-
-    @_register_tool("scf_list_plugins")
-    async def scf_list_plugins() -> dict[str, Any]:
-        """List plugin packages available for direct download (excludes mcp_only).
-
-        DEPRECATED: use ``scf_plugin_list`` for tracked PluginManagerFacade
-        listing. This compatibility tool remains for direct-download legacy
-        workflows and will be removed after the documented migration window.
-
-        Returns the list of packages from the remote SCF registry that can be
-        downloaded directly into the workspace ```.github/`` directory without
-        passing through the engine's internal store.
-
-        Packages with ``delivery_mode == "mcp_only"`` are excluded: those are
-        served via MCP from the engine store and do not need to be downloaded.
-
-        Returns:
-            A dict with keys:
-              - ``status``: ``"ok"`` or ``"error"``
-              - ``plugins``: List of package dicts from the remote registry
-              - ``count``: Number of available packages
-              - ``message``: Human-readable summary
-        """
-        _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: start")
-        try:
-            registry_client = _make_registry_client(engine, ctx.github_root)
-            plugins = _get_direct_plugin_entries(registry_client)
-        except Exception as exc:  # noqa: BLE001
-            _log.error("[SPARK-ENGINE][ERROR] scf_list_plugins: %s", exc)
-            return {
-                "status": "error",
-                "plugins": [],
-                "count": 0,
-                "deprecated": True,
-                "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
-                "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
-                "migrate_to": _LEGACY_MIGRATION_MAP["scf_list_plugins"],
-                "message": str(exc),
-            }
-        _log.info("[SPARK-ENGINE][INFO] scf_list_plugins: done count=%d", len(plugins))
-        return {
-            "status": "ok",
-            "plugins": plugins,
-            "count": len(plugins),
-            "deprecated": True,
-            "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
-            "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
-            "migrate_to": _LEGACY_MIGRATION_MAP["scf_list_plugins"],
-            "message": f"{len(plugins)} plugin disponibili per il download diretto.",
-        }
-
     @_register_tool("scf_get_plugin_info")
     async def scf_get_plugin_info(plugin_id: str) -> dict[str, Any]:
         """Restituisce i dettagli di un singolo plugin Dual-Mode per ID.
@@ -842,97 +760,3 @@ def register_plugin_tools(engine: Any, mcp: Any, tool_names: list[str]) -> None:
                 "plugin_id": plugin_id,
                 "error": str(exc),
             }
-
-    @_register_tool("scf_install_plugin")
-    async def scf_install_plugin(
-        package_id: str,
-        version: str = "latest",
-        workspace_root: str = "",
-        overwrite: bool = False,
-    ) -> dict[str, Any]:
-        """Download a plugin directly into the workspace .github/ directory.
-
-        DEPRECATED: use ``scf_plugin_install`` for tracked PluginManagerFacade
-        installation. This compatibility tool remains for direct-download legacy
-        workflows and will be removed after the documented migration window.
-
-        Downloads ``plugin_files`` declared in the package manifest from the
-        GitHub source repo into ``target_workspace/.github/`` without registering
-        anything in the engine's internal store or ``.github/.spark-plugins``.
-
-        The user owns the downloaded files. The engine does not track them.
-
-        Args:
-            package_id: Identifier of the plugin to download.
-            version: Version to download. Use ``"latest"`` for the most recent.
-            workspace_root: Absolute path to the target workspace root. Defaults to
-                the engine's active workspace if empty.
-            overwrite: If ``True``, overwrite existing files. Default ``False``.
-
-        Returns:
-            A dict with keys:
-              - ``status``: ``"ok"`` or ``"error"``
-              - ``package_id``: Package identifier echoed back
-              - ``version``: Version effectively downloaded
-              - ``files_written``: List of files written
-              - ``files_skipped``: List of files skipped (already exist)
-              - ``errors``: List of errors encountered
-              - ``message``: Human-readable summary
-        """
-        _log.info("[SPARK-ENGINE][INFO] scf_install_plugin: start package_id=%s version=%s", package_id, version)
-        target = Path(workspace_root).resolve() if workspace_root.strip() else ctx.workspace_root
-        try:
-            registry_client = _make_registry_client(engine, ctx.github_root)
-            result = download_plugin(
-                package_id=package_id,
-                version=version,
-                target_dir=target,
-                registry_client=registry_client,
-                overwrite=overwrite,
-            )
-        except Exception as exc:  # noqa: BLE001
-            _log.error("[SPARK-ENGINE][ERROR] scf_install_plugin(%s): %s", package_id, exc)
-            return {
-                "status": "error",
-                "package_id": package_id,
-                "version": version,
-                "files_written": [],
-                "files_skipped": [],
-                "errors": [str(exc)],
-                "deprecated": True,
-                "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
-                "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
-                "migrate_to": _LEGACY_MIGRATION_MAP["scf_install_plugin"],
-                "message": str(exc),
-            }
-
-        status = "ok" if result.get("success") else "error"
-        written = result.get("files_written", [])
-        skipped = result.get("files_skipped", [])
-        errors = result.get("errors", [])
-        effective_version = result.get("version", version)
-
-        _log.info(
-            "[SPARK-ENGINE][INFO] scf_install_plugin: done package_id=%s version=%s written=%d",
-            package_id,
-            effective_version,
-            len(written),
-        )
-        return {
-            "status": status,
-            "package_id": package_id,
-            "version": effective_version,
-            "files_written": written,
-            "files_skipped": skipped,
-            "errors": errors,
-            "deprecated": True,
-            "deprecation_notice": _LEGACY_DEPRECATION_NOTICE,
-            "removal_target_version": _LEGACY_REMOVAL_TARGET_VERSION,
-            "migrate_to": _LEGACY_MIGRATION_MAP["scf_install_plugin"],
-            "message": (
-                f"Plugin '{package_id}' v{effective_version}: "
-                f"{len(written)} file scritti, {len(skipped)} saltati."
-                if status == "ok"
-                else f"Errore: {'; '.join(errors)}"
-            ),
-        }

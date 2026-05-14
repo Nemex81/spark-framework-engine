@@ -101,11 +101,10 @@ async def scf_nome_tool(...) -> dict[str, Any]:
 | `tools_packages_remove.py` | `scf_remove_package`, `scf_get_package_changelog` |
 | `tools_packages_diagnostics.py` | `scf_resolve_conflict_ai`, `scf_approve_conflict`, `scf_reject_conflict`, `scf_finalize_update` |
 | `tools_override.py` | `scf_list_overrides`, `scf_override_resource`, `scf_drop_override` |
-| `tools_plugins.py` | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_get_plugin_info`, `scf_list_plugins` ⚠️, `scf_install_plugin` ⚠️ |
+| `tools_plugins.py` | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_get_plugin_info`, `scf_plugin_list_remote`, `scf_plugin_install_remote` |
 | `tools_resources.py` | `scf_read_resource`, 4 `*_resource`, `scf_list_agents`, `scf_get_agent`, `scf_list_skills`, `scf_get_skill`, `scf_list_instructions`, `scf_get_instruction`, `scf_list_prompts`, `scf_get_prompt` |
 | `tools_policy.py` | `scf_get_project_profile`, `scf_get_global_instructions`, `scf_get_model_policy`, `scf_get_framework_version`, `scf_get_workspace_info`, `scf_get_runtime_state`, `scf_update_runtime_state`, `scf_get_update_policy`, `scf_set_update_policy` |
 
-⚠️ = deprecated (removal target 3.4.0)
 
 ---
 

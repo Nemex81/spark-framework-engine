@@ -10,6 +10,17 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Removed
+
+- `spark/boot/tools_plugins.py`: rimossi tool deprecated `scf_list_plugins` e
+  `scf_install_plugin` (scadenza rimozione `3.4.0` superata). Sostituiti da
+  `scf_plugin_list` e `scf_plugin_install`. Tool count: 53 → 51.
+- `spark/boot/tools_plugins.py`: rimosse costanti legacy `_LEGACY_DEPRECATION_NOTICE`,
+  `_LEGACY_REMOVAL_TARGET_VERSION`, `_LEGACY_MIGRATION_MAP` e import orfano
+  `download_plugin` da `spark.plugins.manager`.
+- `spark/boot/engine.py`: contatore `Tools (53)` → `Tools (51)` nella docstring
+  di `register_tools()`.
+
 ### Changed
 
 - `docs/architecture.md`: versione header aggiornata a 3.6.0.
@@ -32,6 +43,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 - `docs/`: audit completo allineamento documentazione a ENGINE_VERSION 3.6.0;
   corretti contatori tool (51→53), versione README (3.3.0→3.6.0), riferimenti
   launcher (v5.1→v5.2) e costanti stale in architecture.md.
+- `docs/api.md`: snippet JSON `scf_verify_system` e `scf_get_framework_version` —
+  `engine_version` da valore hardcoded `"3.3.0"` a placeholder
+  `"<versione engine corrente>"` con nota dinamica.
+- `docs/api.md`, `README.md`, `docs/architecture.md`, `spark/boot/README.md`:
+  contatori tool aggiornati 53 → 51; sezioni e righe relative a tool deprecated
+  rimossi.
 
 ***
 
