@@ -338,7 +338,7 @@ spark-framework-engine/
 │   ├── workspace/                 WorkspaceLocator e helper path
 │   └── assets/                    Phase6 bootstrap batch assets
 ├── docs/                          Documentazione tecnica e piani
-└── tests/                         Suite pytest (≥ 575 test, esclude test_integration_live.py)
+└── tests/                         Suite pytest (≥ 670 test, esclude test_integration_live.py)
 └── runtime/                       Directory locale engine (snapshots, merge-sessions, backups)
 ```
 

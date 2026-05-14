@@ -10,6 +10,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+<!-- nessuna modifica pendente -->
+
+***
+
+## [3.6.0] - 2026-05-14
+
 ### Added
 
 - **startup**: `run_startup_flow()` ora lancia `InitManager` al primo avvio
@@ -437,6 +443,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `test_scenario_7_6_dropdown_agenti_equivalente_indice_agents`.
 - Suite post-audit: `553 passed, 1 skipped` (era `550 passed, 9 skipped`).
   Unico skip rimasto: `test_mcp_initialize_via_stdio` (env-gate `SPARK_SMOKE_TEST=1`, by design).
+
+### Changed
+
+- `docs/`: gap CLI layer rilevato in fase di audit (verifica `[Unreleased]` pre-3.6.0);
+  documentato come debito tecnico da affrontare in ciclo futuro se necessario.
+  Nessuna modifica al codice runtime nella presente release.
 
 ## [3.5.0] - 2026-05-13
 

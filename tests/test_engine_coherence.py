@@ -109,3 +109,27 @@ def test_engine_version_changelog_alignment():
     assert engine_ver == changelog_ver, (
         f"ENGINE_VERSION={engine_ver} non allineata con CHANGELOG={changelog_ver}"
     )
+
+
+def test_changelog_unreleased_section_is_clean():
+    """Verifica che [Unreleased] non contenga voci di modifica.
+
+    La sezione deve contenere solo il commento placeholder
+    ``<!-- nessuna modifica pendente -->`` e nessuna sottovoce
+    ``### Added``, ``### Fixed`` o ``### Changed``.
+    """
+    changelog = _CHANGELOG.read_text(encoding="utf-8")
+
+    # Estrae il testo della sezione [Unreleased] fino alla prossima sezione ##
+    unreleased_match = re.search(
+        r"## \[Unreleased\](.*?)(?=^## \[)", changelog, re.DOTALL | re.MULTILINE
+    )
+    assert unreleased_match, "Sezione [Unreleased] non trovata in CHANGELOG.md"
+
+    unreleased_body = unreleased_match.group(1)
+
+    # Non deve contenere sottosezioni ### (Add/Fix/Change/...)
+    assert not re.search(r"^###\s", unreleased_body, re.MULTILINE), (
+        "[Unreleased] non deve contenere sottosezioni ### — "
+        "usare solo il commento placeholder '<!-- nessuna modifica pendente -->'"
+    )
