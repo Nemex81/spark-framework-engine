@@ -10,7 +10,19 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
-<!-- nessuna modifica pendente -->
+### Changed
+
+- `docs/architecture.md`: versione header aggiornata a 3.6.0.
+- `docs/api.md`: versione header aggiornata a 3.6.0, contatore tool allineato a 53
+  (51 attivi + 2 deprecated), schede `scf_plugin_list_remote` e
+  `scf_plugin_install_remote` aggiunte nella sezione Plugin.
+- `scf-master-codecrafter/package-manifest.json`:
+  `min_engine_version` bump da 3.4.0 a 3.6.0
+  (repo `Nemex81/scf-master-codecrafter`, main branch).
+- `scf-pycode-crafter/package-manifest.json`:
+  `min_engine_version` bump da 3.4.0 a 3.6.0
+  (repo `Nemex81/scf-pycode-crafter`, main branch).
+- `docs/todo.md`: sospesi DOC-GAP-CLI e MULTI-REPO-1 marcati come chiusi.
 
 ***
 

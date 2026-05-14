@@ -2,9 +2,9 @@
 
 # Architettura — SPARK Framework Engine
 
-> **Versione documentata:** 3.4.0  
+> **Versione documentata:** 3.6.0  
 > **Branch:** `workspace-slim-registry-sync-20260511`  
-> **Fonte:** `spark/core/constants.py:12` → `ENGINE_VERSION = "3.4.0"`
+> **Fonte:** `spark/core/constants.py:12` → `ENGINE_VERSION = "3.6.0"`
 
 ---
 

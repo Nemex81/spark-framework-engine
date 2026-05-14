@@ -1,7 +1,7 @@
 # API Reference — SPARK Framework Engine MCP Tools
 
-> **Versione documentata:** 3.3.0  
-> **Tool totali:** 51 (50 attivi + 1 funzione scoped)  
+> **Versione documentata:** 3.6.0  
+> **Tool totali:** 53 (51 attivi + 2 deprecated)  
 > **Fonte:** `spark/boot/tools_*.py` — tutti i tool sono registrati con `@_register_tool("scf_*")`
 
 Per l'architettura generale e il flusso di boot, vedi [architecture.md](architecture.md).
@@ -19,7 +19,7 @@ Per l'architettura generale e il flusso di boot, vedi [architecture.md](architec
 | [Pacchetti — Update](#5-pacchetti--update) | `scf_check_updates`, `scf_update_package`, `scf_update_packages`, `scf_apply_updates` |
 | [Merge / Conflitti](#6-merge--conflitti) | `scf_resolve_conflict_ai`, `scf_approve_conflict`, `scf_reject_conflict`, `scf_finalize_update` |
 | [Override](#7-override) | `scf_list_overrides`, `scf_override_resource`, `scf_drop_override` |
-| [Plugin](#8-plugin) | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_get_plugin_info` ✅  ·  `scf_list_plugins`, `scf_install_plugin` ⚠️ |
+| [Plugin](#8-plugin) | `scf_plugin_install`, `scf_plugin_remove`, `scf_plugin_update`, `scf_plugin_list`, `scf_plugin_list_remote`, `scf_plugin_install_remote`, `scf_get_plugin_info` ✅  ·  `scf_list_plugins`, `scf_install_plugin` ⚠️ |
 | [Risorse](#9-risorse) | `scf_read_resource`, `scf_get_*_resource` (4), `scf_list_*` / `scf_get_*` (10) |
 | [Policy / Stato](#10-policy--stato) | `scf_get_project_profile`, `scf_get_global_instructions`, `scf_get_model_policy`, `scf_get_framework_version`, `scf_get_workspace_info`, `scf_get_runtime_state`, `scf_update_runtime_state`, `scf_get_update_policy`, `scf_set_update_policy` |
 
@@ -654,6 +654,72 @@ Elenca i plugin installati e i pacchetti disponibili nel registry remoto.
 
 ---
 
+### `scf_plugin_list_remote` ✅
+
+**File:** `spark/boot/tools_plugins.py:436`
+
+Elenca i pacchetti disponibili nel registry SCF remoto (Universe U2) con cache TTL
+di 1 ora. Ogni voce include il campo `universe` e `delivery_mode`.
+I pacchetti `mcp_only` sono U1 (serviti localmente dall'engine); gli altri sono U2
+(installabili nel workspace).
+
+**Parametri:**
+
+| Parametro | Tipo | Default | Descrizione |
+|-----------|------|---------|-------------|
+| `force_refresh` | `bool` | `False` | Se `True`, bypassa la cache e scarica dati freschi dal registry |
+
+**Risposta:**
+
+```json
+{
+  "status": "ok",
+  "packages": [...],
+  "u1_count": 2,
+  "u2_count": 5,
+  "from_cache": true,
+  "cache_age_seconds": 120,
+  "message": "7 pacchetti nel registry (2 U1 mcp_only, 5 U2 installabili)."
+}
+```
+
+---
+
+### `scf_plugin_install_remote` ✅
+
+**File:** `spark/boot/tools_plugins.py:532`
+
+Scarica un plugin Universe U2 direttamente dal sorgente GitHub in `.github/`.
+Solo pacchetti con `delivery_mode != "mcp_only"` sono supportati.
+Non registra il plugin in `.spark-plugins`: per il ciclo di vita completo
+usare `scf_plugin_install`.
+
+**Parametri:**
+
+| Parametro | Tipo | Default | Descrizione |
+|-----------|------|---------|-------------|
+| `pkg_id` | `str` | — | ID del pacchetto nel registry (es. `"scf-master-codecrafter"`) |
+| `workspace_root` | `str` | `""` | Path assoluto al workspace; default: workspace engine attivo |
+| `overwrite` | `bool` | `False` | Se `True`, sovrascrive file già presenti in `.github/` |
+| `force_refresh` | `bool` | `False` | Se `True`, bypassa la cache registry prima di risolvere il pacchetto |
+
+**Risposta:**
+
+```json
+{
+  "status": "ok",
+  "pkg_id": "scf-master-codecrafter",
+  "universe": "U2",
+  "version": "2.3.0",
+  "files_written": [...],
+  "files_skipped": [],
+  "errors": [],
+  "message": "3 file scritti in .github/."
+}
+```
+
+---
+
 ### `scf_get_plugin_info` ✅
 
 **File:** `spark/boot/tools_plugins.py:447`
@@ -667,9 +733,9 @@ Restituisce i dettagli di un singolo plugin per ID (nome, versione, dipendenze,
 
 ### `scf_list_plugins` ⚠️ Deprecated
 
-**File:** `spark/boot/tools_plugins.py:397`  
+**File:** `spark/boot/tools_plugins.py:769`  
 **Sostituito da:** `scf_plugin_list`  
-**Removal target:** `3.4.0`
+**Rimosso in:** `3.4.0`
 
 Elenca i plugin disponibili per download diretto (esclude `mcp_only`).
 Il payload include `deprecated: true`, `removal_target_version`, `migrate_to`.
@@ -680,9 +746,9 @@ Il payload include `deprecated: true`, `removal_target_version`, `migrate_to`.
 
 ### `scf_install_plugin` ⚠️ Deprecated
 
-**File:** `spark/boot/tools_plugins.py:474`  
+**File:** `spark/boot/tools_plugins.py:846`  
 **Sostituito da:** `scf_plugin_install`  
-**Removal target:** `3.4.0`
+**Rimosso in:** `3.4.0`
 
 Scarica un plugin direttamente in `.github/` senza tracciamento in `.spark-plugins`.
 Il payload include `deprecated: true`.

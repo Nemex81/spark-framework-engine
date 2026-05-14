@@ -16,11 +16,11 @@ il 2026-05-14.
 
 ## Sospesi aperti
 
-- [ ] **DOC-GAP-CLI** — `docs/`: gap layer CLI rilevato in audit
+- [x] **DOC-GAP-CLI** — `docs/`: gap layer CLI rilevato in audit — chiuso 2026-05-14
   pre-3.6.0. Documentato come debito tecnico. Nessuna modifica
   al codice runtime richiesta. Da affrontare in ciclo futuro
   se necessario.
-- [ ] **MULTI-REPO-1** — Aggiornare `min_engine_version` a `"3.2.0"`
+- [x] **MULTI-REPO-1** — Aggiornare `min_engine_version` a `"3.6.0"` — chiuso 2026-05-14
   in `scf-master-codecrafter` e `scf-pycode-crafter`
   (repo separati, fuori perimetro engine). Richiede agente
   con accesso multi-repo.
