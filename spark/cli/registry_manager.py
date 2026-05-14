@@ -5,6 +5,7 @@ Graceful degradation se il registro non è raggiungibile.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -23,6 +24,23 @@ _REGISTRY_URL = (
 
 # Timeout HTTP in secondi.
 _HTTP_TIMEOUT = 10
+
+
+def _sha256_file(path: Path) -> str:
+    """Calcola il digest SHA-256 esadecimale del file indicato.
+
+    Args:
+        path: Path assoluto al file da leggere.
+
+    Returns:
+        Stringa esadecimale minuscola del digest SHA-256.
+    """
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65_536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
 
 _MENU_TEXT = """\
 Registro plugin remoti
@@ -119,9 +137,18 @@ class RegistryManager:
         print(f"Installazione plugin {plugin_id} v{package.get('latest_version', '?')} ...")
         result = self._download_and_install_plugin(package)
         if result["success"]:
-            print(f"Plugin {plugin_id} installato. File copiati: {result['files_copied']}")
+            print(
+                f"File installati: {result['files_copied']}, "
+                f"già aggiornati: {result['preserved']}"
+            )
+            if result["errors"]:
+                print(f"Avvisi: {'; '.join(result['errors'])}")
         else:
-            print(f"Installazione fallita: {result.get('error', 'errore sconosciuto')}")
+            errors = result.get("errors", [])
+            print(
+                f"Installazione fallita: "
+                f"{'; '.join(errors) if errors else 'errore sconosciuto'}"
+            )
 
     def _check_updates(self) -> None:
         """Verifica aggiornamenti per i plugin installati localmente."""
@@ -185,7 +212,11 @@ class RegistryManager:
                 print(f"  {plugin_id} aggiornato.")
             else:
                 failed += 1
-                print(f"  {plugin_id} FALLITO: {result.get('error', 'errore sconosciuto')}")
+                errors = result.get("errors", [])
+                print(
+                    f"  {plugin_id} FALLITO: "
+                    f"{'; '.join(errors) if errors else 'errore sconosciuto'}"
+                )
 
         if updated == 0 and failed == 0:
             print("\nNessun aggiornamento applicato.")
@@ -293,82 +324,158 @@ class RegistryManager:
     ) -> dict[str, Any]:
         """Scarica e installa un pacchetto dal registro nel workspace.
 
-        Per ogni file in ``workspace_files`` del manifest remoto, scarica
-        il file raw e lo scrive in ``github_root``. Se ``force=True``
-        sovrascrive i file esistenti.
-
-        Aggiorna il manifest locale con le informazioni del pacchetto installato.
+        Gestisce ``workspace_files`` e ``plugin_files`` dal manifest remoto.
+        Applica idempotenza SHA-based: i file con SHA invariato rispetto al
+        contenuto remoto vengono preservati senza sovrascrittura.
+        Aggiorna il manifest ``.scf-manifest.json`` per i file effettivamente
+        scritti. Se ``delivery_mode`` è ``"mcp_only"``, il pacchetto non viene
+        installato via RegistryManager; usare il menu Gestisci Pacchetti.
+        Se ``force=True`` sovrascrive i file esistenti ignorando il check SHA.
 
         Args:
-            package: Entry del pacchetto nel registro remoto (id, latest_version, repo_url, manifest_path).
+            package: Entry del pacchetto nel registro remoto (id,
+                latest_version, repo_url, manifest_path).
             force: Se True, sovrascrive i file già presenti (usato per update).
 
         Returns:
-            Dict con ``success``, ``files_copied``, ``error``.
+            Dict con:
+            - ``success`` (bool): True se l'operazione è completata senza
+              errori fatali.
+            - ``files_copied`` (int): File nuovi o aggiornati scritti su disco.
+            - ``preserved`` (int): File già aggiornati (SHA invariato, skip).
+            - ``errors`` (list[str]): Messaggi di errore/avviso non fatali.
         """
-        result: dict[str, Any] = {"success": False, "files_copied": 0, "error": ""}
+        result: dict[str, Any] = {
+            "success": False,
+            "files_copied": 0,
+            "preserved": 0,
+            "errors": [],
+        }
 
         # Estrai owner/repo slug dall'URL completo per costruire URL raw GitHub.
         repo_url = package.get("repo_url", "")
         repo = repo_url.removeprefix("https://github.com/").strip("/") if repo_url else ""
         manifest_path = package.get("manifest_path", "package-manifest.json")
         plugin_id = package.get("id", "")
+        version = package.get("latest_version", "")
 
         if not repo or not plugin_id:
-            result["error"] = "Entry registro incompleta (mancano 'repo_url' o 'id')."
+            result["errors"].append("Entry registro incompleta (mancano 'repo_url' o 'id').")
             return result
 
         manifest = self._fetch_remote_manifest(repo, manifest_path)
         if manifest is None:
-            result["error"] = f"Impossibile scaricare manifest per '{plugin_id}'."
+            result["errors"].append(f"Impossibile scaricare manifest per '{plugin_id}'.")
             return result
 
+        # Fix A — Guard delivery_mode: "mcp_only".
+        delivery_mode = manifest.get("delivery_mode", "managed")
+        if delivery_mode == "mcp_only":
+            _log.info(
+                "[SPARK-ENGINE][INFO] Pacchetto '%s' è mcp_only — "
+                "installazione via RegistryManager non supportata.",
+                plugin_id,
+            )
+            print(
+                "Pacchetto gestito dall'engine MCP. Usare opzione 2 — Gestisci "
+                "Pacchetti per installarlo correttamente."
+            )
+            result["errors"].append("mcp_only: usare PackageManager")
+            return result
+
+        # Fix B — Costruisce sha_map da files_metadata del manifest remoto.
+        raw_metadata = manifest.get("files_metadata", [])
+        sha_map: dict[str, str] = {}
+        if isinstance(raw_metadata, list):
+            for meta_entry in raw_metadata:
+                if isinstance(meta_entry, dict):
+                    meta_path = meta_entry.get("path", "")
+                    meta_sha = meta_entry.get("sha256", "")
+                    if meta_path and meta_sha:
+                        sha_map[meta_path] = meta_sha
+
         workspace_files: list[str] = manifest.get("workspace_files", [])
-        if not workspace_files:
+        plugin_files: list[str] = manifest.get("plugin_files", [])
+
+        if not workspace_files and not plugin_files:
             result["success"] = True
             return result
 
         copied_in_session: list[Path] = []
+        files_written: list[tuple[str, Path]] = []
 
         try:
-            for rel_path in workspace_files:
-                if rel_path.startswith(".github/"):
-                    within_github = rel_path[len(".github/"):]
-                else:
-                    within_github = rel_path
+            for file_group in (workspace_files, plugin_files):  # Fix C — include plugin_files.
+                for rel_path in file_group:
+                    if rel_path.startswith(".github/"):
+                        within_github = rel_path[len(".github/"):]
+                    else:
+                        within_github = rel_path
 
-                dest = self._github_root / within_github
+                    dest = self._github_root / within_github
 
-                if dest.is_file() and not force:
-                    _log.debug(
-                        "[SPARK-ENGINE][CLI] plugin file già presente, skip: %s",
+                    if dest.is_file():
+                        if rel_path in sha_map:
+                            if _sha256_file(dest) == sha_map[rel_path] and not force:
+                                result["preserved"] += 1
+                                continue
+                            # SHA differisce oppure force=True: sovrascrive.
+                        else:
+                            if not force:
+                                _log.warning(
+                                    "[SPARK-ENGINE][WARNING] sha256 non disponibile "
+                                    "per %s — skip conservativo",
+                                    rel_path,
+                                )
+                                result["preserved"] += 1
+                                continue
+
+                    file_url = (
+                        f"https://raw.githubusercontent.com/{repo}/main/{rel_path}"
+                    )
+                    try:
+                        with urllib.request.urlopen(file_url, timeout=_HTTP_TIMEOUT) as resp:
+                            file_bytes = resp.read()
+                    except urllib.error.URLError as exc:
+                        _log.warning(
+                            "[SPARK-ENGINE][CLI] Impossibile scaricare file plugin %s: %s",
+                            file_url,
+                            exc,
+                        )
+                        result["errors"].append(f"Download fallito: {rel_path}")
+                        continue
+
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(file_bytes)
+                    copied_in_session.append(dest)
+                    result["files_copied"] += 1
+                    files_written.append((within_github, dest))
+                    _log.info(
+                        "[SPARK-ENGINE][CLI] plugin file installato: %s",
                         dest,
                     )
-                    continue
 
-                file_url = (
-                    f"https://raw.githubusercontent.com/{repo}/main/{rel_path}"
-                )
+            # Fix D — Aggiorna il manifest per i file effettivamente scritti.
+            if result["files_copied"] > 0:
                 try:
-                    with urllib.request.urlopen(file_url, timeout=_HTTP_TIMEOUT) as resp:
-                        file_bytes = resp.read()
-                except urllib.error.URLError as exc:
-                    _log.warning(
-                        "[SPARK-ENGINE][CLI] Impossibile scaricare file plugin %s: %s",
-                        file_url,
-                        exc,
-                    )
-                    result["error"] += f"Download fallito: {rel_path}; "
-                    continue
+                    from spark.manifest.manifest import ManifestManager  # noqa: PLC0415
 
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(file_bytes)
-                copied_in_session.append(dest)
-                result["files_copied"] += 1
-                _log.info(
-                    "[SPARK-ENGINE][CLI] plugin file installato: %s",
-                    dest,
-                )
+                    manifest_mgr = ManifestManager(self._github_root)
+                    manifest_mgr.upsert_many(plugin_id, version, files_written)
+                    _log.info(
+                        "[SPARK-ENGINE][INFO] Manifest aggiornato per '%s' (%d file).",
+                        plugin_id,
+                        len(files_written),
+                    )
+                # I file sono già scritti su disco: il manifest è recuperabile
+                # rieseguendo l'installazione. Non si esegue rollback dei file.
+                except Exception as exc:  # noqa: BLE001
+                    _log.error(
+                        "[SPARK-ENGINE][ERROR] Aggiornamento manifest fallito per '%s': %s",
+                        plugin_id,
+                        str(exc),
+                    )
+                    result["errors"].append(f"Manifest non aggiornato: {exc}")
 
             result["success"] = True
 
@@ -383,7 +490,7 @@ class RegistryManager:
                     f.unlink()
                 except OSError:
                     pass
-            result["error"] = f"Errore installazione (rollback eseguito): {exc}"
+            result["errors"].append(f"Errore installazione (rollback eseguito): {exc}")
             result["success"] = False
             result["files_copied"] = 0
 
