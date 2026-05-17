@@ -112,11 +112,12 @@ def test_engine_version_changelog_alignment():
 
 
 def test_changelog_unreleased_section_is_clean():
-    """Verifica che [Unreleased] non contenga voci di modifica.
+    """Verifica che [Unreleased] non contenga sezioni ### duplicate.
 
-    La sezione deve contenere solo il commento placeholder
-    ``<!-- nessuna modifica pendente -->`` e nessuna sottovoce
-    ``### Added``, ``### Fixed`` o ``### Changed``.
+    La sezione può contenere il placeholder ``<!-- nessuna modifica pendente -->``
+    oppure voci strutturate (Added, Changed, Removed, Fixed, ...), ma non
+    deve mai contenere la stessa intestazione ### ripetuta due o più volte
+    nella stessa entry [Unreleased] (anomalia strutturale markdownlint MD024).
     """
     changelog = _CHANGELOG.read_text(encoding="utf-8")
 
@@ -128,8 +129,11 @@ def test_changelog_unreleased_section_is_clean():
 
     unreleased_body = unreleased_match.group(1)
 
-    # Non deve contenere sottosezioni ### (Add/Fix/Change/...)
-    assert not re.search(r"^###\s", unreleased_body, re.MULTILINE), (
-        "[Unreleased] non deve contenere sottosezioni ### — "
-        "usare solo il commento placeholder '<!-- nessuna modifica pendente -->'"
+    # Non deve contenere intestazioni ### duplicate nella stessa entry
+    headers = re.findall(r"^###\s+(\S.*)", unreleased_body, re.MULTILINE)
+    duplicates = [h for h in headers if headers.count(h) > 1]
+    assert not duplicates, (
+        f"[Unreleased] contiene sezioni ### duplicate: {sorted(set(duplicates))}. "
+        "Ogni sottosezione (Added, Changed, Removed, Fixed, ...) deve comparire "
+        "al massimo una volta per entry [Unreleased]."
     )

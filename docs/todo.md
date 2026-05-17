@@ -33,6 +33,11 @@ il 2026-05-14.
 
 Da definire. Nessun candidato residuo dal CICLO 5.
 
+Consolidamento post-CICLO 5 completato il 2026-05-17:
+sezione `### Changed` duplicata in `[Unreleased]` rimossa,
+costanti `_BOOTSTRAP_UPDATE_MODES` e `SparkToolResult` aggiunte,
+diagnostica CLI estesa. Tutti i sospesi aperti sono chiusi.
+
 I task già completati nel CICLO 5 e rimossi da questo elenco:
 
 - Verifica allineamento docs/api.md con tool aggiunti in 3.5.0
