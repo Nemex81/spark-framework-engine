@@ -990,6 +990,7 @@ Il workspace scelto viene persistito in `~/.spark/config.json`
 | `3` | Sfoglia e installa plugin dal registro | `RegistryManager` |
 | `4` | Verifica e applica aggiornamenti | `_cmd_updates()` |
 | `5` | Diagnostica e stato sistema | `_cmd_diagnostics()` |
+| `6` | Diagnostica avanzata workspace | `run_doctor()` |
 | `0` | Esci | — |
 
 ---
@@ -1058,10 +1059,10 @@ Launcher zero-touch per esecuzione da qualsiasi directory. Flusso di boot:
 3. Se venv creato: riavvia con il Python del venv
 4. Aggiunge `engine_root` a `sys.path`
 5. Rileva `workspace_root` (esplicito, locale, fallback `cwd`)
-6. Chiama `run_wizard(cwd=workspace_root)`
+6. Esegue `run_startup_flow()` per il primo avvio (sentinel `~/.spark/.scf-init-done`)
 
-Idempotente: sentinel `.scf-init-done` previene wizard duplicate;
-`.scf-deps-ready` previene reinstallazione deps.
+Idempotente: sentinel `~/.spark/.scf-init-done` previene la guida introduttiva
+duplicata; `.scf-deps-ready` previene reinstallazione deps.
 
 ---
 

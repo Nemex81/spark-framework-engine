@@ -78,6 +78,12 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `download_plugin` da `spark.plugins.manager`.
 - `spark/boot/engine.py`: contatore `Tools (53)` → `Tools (51)` nella docstring
   di `register_tools()`.
+- `spark/boot/wizard.py`: rimosso — deprecato dalla versione 3.6.0 (CICLO 6),
+  rimosso dopo verifica assenza referenze live. Alternativa raccomandata:
+  `spark.cli.startup.run_startup_flow()` e `spark.cli.main`.
+- `tests/test_wizard_init.py`: rimosso — tutti i 10 test erano dedicati
+  esclusivamente a `spark/boot/wizard.py`; nessun test riutilizzabile.
+- Prima applicazione formale della Deprecation Policy: `docs/deprecation-policy.md`.
 
 ### Fixed
 
@@ -89,13 +95,6 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   aggiornato per verificare assenza di sezioni `###` duplicate invece di
   richiedere `[Unreleased]` vuoto; la nuova semantica riflette il workflow
   in cui `[Unreleased]` è usato come staging area per la prossima release.
-
-### Deprecated
-
-- `spark/boot/wizard.py`: `run_wizard()` marcato deprecated dalla versione 3.6.0.
-  Emette `DeprecationWarning` a runtime. Il boot path raccomandato è
-  `spark.cli.startup` e `spark.cli.main`. Il modulo resta mantenuto per
-  compatibilità retroattiva e test dedicati.
 
 ***
 

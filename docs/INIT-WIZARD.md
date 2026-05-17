@@ -1,5 +1,9 @@
 # SPARK Init Wizard — Guida Utente
 
+> **NOTA:** `spark/boot/wizard.py` è stato rimosso nella versione 3.6.0 (CICLO 6/7).
+> Il boot path operativo raccomandato è `spark.cli.startup` e `spark.cli.main`.
+> Questo documento è mantenuto come riferimento storico.
+
 ## Panoramica
 
 `scf init` e' il comando zero-touch per inizializzare un workspace SPARK in meno di 2 minuti.

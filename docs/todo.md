@@ -1,8 +1,8 @@
 # TODO — SPARK Framework Engine
 
-> Coordinatore cicli di sviluppo. Aggiornato al: 2026-05-14 (pulizia post-CICLO 5)
+> Coordinatore cicli di sviluppo. Aggiornato al: 2026-05-17 (CICLO 6 + rimozione wizard)
 > ENGINE_VERSION corrente: 3.6.0
-> Suite test: 729 passed (baseline post-CICLO 5)
+> Suite test: 756 passed baseline CICLO 6 (→ 746 dopo rimozione test wizard)
 > Branch: workspace-slim-registry-sync-20260511
 
 ***
@@ -37,6 +37,14 @@ Consolidamento post-CICLO 5 completato il 2026-05-17:
 sezione `### Changed` duplicata in `[Unreleased]` rimossa,
 costanti `_BOOTSTRAP_UPDATE_MODES` e `SparkToolResult` aggiunte,
 diagnostica CLI estesa. Tutti i sospesi aperti sono chiusi.
+
+CICLO 6 completato il 2026-05-17: Lockfile Runtime (`scf-lock.json`),
+`SparkErrorResult`/`SparkDiagnosticResult`, `scf doctor` CLI (opzione 6),
+`wizard.py` marcato deprecated. 756 test passati.
+
+Rimozione `wizard.py` completata il 2026-05-17: `spark/boot/wizard.py` e
+`tests/test_wizard_init.py` eliminati. Prima applicazione della Deprecation Policy
+(`docs/deprecation-policy.md`). Suite: 746 test passati (756 − 10 test wizard).
 
 I task già completati nel CICLO 5 e rimossi da questo elenco:
 
