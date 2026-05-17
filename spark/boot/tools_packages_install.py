@@ -213,6 +213,36 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
             package_id, files, manifest, ctx.workspace_root, snapshots, file_policies
         )
 
+    def _update_install_lockfile(
+        workspace_root: Any,
+        package_id: str,
+        version: str,
+        dependencies: list[str],
+        installed_files: list[str],
+    ) -> None:
+        """Aggiorna il lockfile runtime dopo un install riuscito (non-bloccante)."""
+        try:
+            from spark.manifest.lockfile import LockfileManager  # noqa: PLC0415
+            from pathlib import Path as _Path  # noqa: PLC0415
+
+            mgr = LockfileManager(_Path(str(workspace_root)))
+            file_hashes = LockfileManager.compute_file_hashes(
+                _Path(str(workspace_root)), [str(f) for f in installed_files if f]
+            )
+            mgr.upsert(
+                package_id=package_id,
+                version=version,
+                source="U2",
+                dependencies=[str(d) for d in dependencies if d],
+                files=file_hashes or None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "[SPARK-ENGINE][LOCKFILE] Aggiornamento lockfile fallito per %s: %s",
+                package_id,
+                exc,
+            )
+
     # ── tool ─────────────────────────────────────────────────────────────── #
 
     @_register_tool("scf_install_package")
@@ -528,6 +558,14 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
                 v3_result.setdefault(
                     "_deprecated_note",
                     "Use workspace_files_written and plugin_files_installed instead",
+                )
+                # Aggiorna lockfile runtime dopo install v3 riuscito.
+                _update_install_lockfile(
+                    ctx.workspace_root,
+                    package_id,
+                    pkg_version,
+                    install_context.get("dependencies") or [],
+                    v3_result["installed"],
                 )
             return v3_result
         # Pacchetti legacy (< 3.0.0): warning su stderr e flusso v2 invariato.
@@ -1245,6 +1283,14 @@ def register_install_package_tools(engine: Any, mcp: Any, tool_names: list[str])
             validator_results=auto_validator_results if auto_validator_results else None,
             remaining_conflicts=len(merge_conflict) if merge_conflict else None,
             **flow_payload,
+        )
+        # Aggiorna lockfile runtime dopo install v2 riuscito.
+        _update_install_lockfile(
+            ctx.workspace_root,
+            package_id,
+            pkg_version,
+            install_context.get("dependencies") or [],
+            installed,
         )
         return success_result
 

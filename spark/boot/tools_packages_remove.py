@@ -28,6 +28,20 @@ def register_remove_package_tools(engine: Any, mcp: Any, tool_names: list[str]) 
         tool_names.append(name)
         return mcp.tool()
 
+    def _remove_lockfile_entry(workspace_root: Any, package_id: str) -> None:
+        """Rimuove l'entry dal lockfile runtime dopo un remove riuscito (non-bloccante)."""
+        try:
+            from spark.manifest.lockfile import LockfileManager  # noqa: PLC0415
+            from pathlib import Path as _Path  # noqa: PLC0415
+
+            LockfileManager(_Path(str(workspace_root))).remove(package_id)
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "[SPARK-ENGINE][LOCKFILE] Rimozione entry lockfile fallita per %s: %s",
+                package_id,
+                exc,
+            )
+
     @_register_tool("scf_remove_package")
     async def scf_remove_package(package_id: str) -> dict[str, Any]:
         """Remove an installed SCF package from the workspace.
@@ -68,9 +82,14 @@ def register_remove_package_tools(engine: Any, mcp: Any, tool_names: list[str]) 
             if isinstance(v3_result, dict):
                 v3_result["deleted_snapshots"] = deleted_snapshots
                 v3_result.setdefault("preserved_user_modified", [])
+            # Rimuovi entry lockfile se remove riuscito.
+            if isinstance(v3_result, dict) and v3_result.get("success") is True:
+                _remove_lockfile_entry(ctx.workspace_root, package_id)
             return v3_result
         preserved = manifest.remove_package(package_id)
         deleted_snapshots = snapshots.delete_package_snapshots(package_id)
+        # Rimuovi entry lockfile dopo remove v2 riuscito.
+        _remove_lockfile_entry(ctx.workspace_root, package_id)
         return {
             "success": True,
             "package": package_id,

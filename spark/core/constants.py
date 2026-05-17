@@ -48,6 +48,14 @@ _BOOTSTRAP_PACKAGE_ID: str = "scf-engine-bootstrap"
 
 
 # ---------------------------------------------------------------------------
+# Lockfile runtime
+# ---------------------------------------------------------------------------
+_SPARK_DIR: str = ".spark"
+_SCF_LOCK_FILENAME: str = ".spark/scf-lock.json"
+_SCF_LOCK_SCHEMA_VERSION: str = "1.0"
+
+
+# ---------------------------------------------------------------------------
 # Resource categories
 # ---------------------------------------------------------------------------
 _RESOURCE_TYPES: tuple[str, ...] = ("agents", "prompts", "skills", "instructions")

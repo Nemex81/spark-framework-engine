@@ -16,6 +16,7 @@ _TOOLS_PACKAGES_REMOVE_PATH = Path(__file__).parent.parent / "spark" / "boot" / 
 _TOOLS_PACKAGES_DIAGNOSTICS_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_packages_diagnostics.py"
 _TOOLS_PLUGINS_PATH = Path(__file__).parent.parent / "spark" / "boot" / "tools_plugins.py"
 _CONSTANTS = Path(__file__).parent.parent / "spark" / "core" / "constants.py"
+_MODELS = Path(__file__).parent.parent / "spark" / "core" / "models.py"
 _CHANGELOG = Path(__file__).parent.parent / "CHANGELOG.md"
 
 
@@ -137,3 +138,53 @@ def test_changelog_unreleased_section_is_clean():
         "Ogni sottosezione (Added, Changed, Removed, Fixed, ...) deve comparire "
         "al massimo una volta per entry [Unreleased]."
     )
+
+
+def test_tool_payload_models_defined():
+    """Verifica che SparkToolResult, SparkErrorResult e SparkDiagnosticResult
+    siano definiti in spark/core/models.py con i campi minimi richiesti."""
+    models_src = _MODELS.read_text(encoding="utf-8")
+
+    # SparkToolResult deve avere success e status
+    assert "class SparkToolResult" in models_src, (
+        "SparkToolResult non trovato in spark/core/models.py"
+    )
+    assert "success: bool" in models_src, (
+        "Campo 'success: bool' mancante in SparkToolResult"
+    )
+
+    # SparkErrorResult deve avere success ed error
+    assert "class SparkErrorResult" in models_src, (
+        "SparkErrorResult non trovato in spark/core/models.py — aggiungilo per TASK 2"
+    )
+    assert "error: str" in models_src, (
+        "Campo 'error: str' mancante in SparkErrorResult"
+    )
+
+    # SparkDiagnosticResult deve avere success e checks
+    assert "class SparkDiagnosticResult" in models_src, (
+        "SparkDiagnosticResult non trovato in spark/core/models.py — aggiungilo per TASK 2"
+    )
+    assert "checks: list" in models_src, (
+        "Campo 'checks: list' mancante in SparkDiagnosticResult"
+    )
+
+
+def test_tool_payload_success_and_error_fields():
+    """Verifica che i tool MCP chiave restituiscano sempre 'success' nei path di errore."""
+    # I tool che devono avere 'success' ed 'error' nei percorsi di fallimento:
+    tools_to_check = [
+        (_TOOLS_PACKAGES_INSTALL_PATH, "scf_install_package"),
+        (_TOOLS_PACKAGES_UPDATE_PATH, "scf_update_package"),
+        (_TOOLS_PACKAGES_REMOVE_PATH, "scf_remove_package"),
+        (_TOOLS_BOOTSTRAP_PATH, "scf_bootstrap_workspace"),
+        (_TOOLS_PACKAGES_DIAGNOSTICS_PATH, "scf_get_framework_version"),
+    ]
+    for tool_path, tool_name in tools_to_check:
+        src = tool_path.read_text(encoding="utf-8")
+        assert '"success": False' in src or '"success": True' in src, (
+            f"Tool {tool_name} in {tool_path.name} non usa il campo 'success' standard"
+        )
+        assert '"error"' in src or "'error'" in src, (
+            f"Tool {tool_name} in {tool_path.name} non usa il campo 'error' standard"
+        )

@@ -74,3 +74,33 @@ class SparkToolResult(TypedDict, total=False):
     warnings: list
     actions_required: list
     metadata: dict
+
+
+class SparkErrorResult(TypedDict, total=False):
+    """Payload standard per errori restituiti dai tool MCP SPARK.
+
+    Ogni campo è opzionale per retrocompatibilità, ma i tool devono
+    sempre popolare ``success`` (False) ed ``error``.
+    """
+
+    success: bool
+    error: str
+    code: str
+    package: str
+    details: dict
+
+
+class SparkDiagnosticResult(TypedDict, total=False):
+    """Payload standard per risultati diagnostici dei tool MCP SPARK.
+
+    Usato da ``scf_verify_system``, ``scf_verify_workspace`` e futuri
+    tool di diagnostica. Il campo ``checks`` contiene la lista delle
+    verifiche effettuate con il relativo esito.
+    """
+
+    success: bool
+    status: str
+    checks: list
+    errors: list
+    warnings: list
+    metadata: dict

@@ -20,6 +20,17 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   `_ALLOWED_UPDATE_MODES`, `_BOOTSTRAP_UPDATE_MODES`, `update_policy.json`
   e sentinelle bootstrap (Agent-Welcome.md, AGENTS.md). Ogni blocco è
   protetto da `try/except` per diagnostica parziale non fatale.
+- `spark/core/constants.py`: costanti `_SPARK_DIR`, `_SCF_LOCK_FILENAME`,
+  `_SCF_LOCK_SCHEMA_VERSION` per il lockfile runtime.
+- `spark/manifest/lockfile.py`: nuovo modulo `LockfileManager` — traccia versioni
+  risolte, hash SHA-256 file installati, sorgente (U1/U2) e dipendenze in
+  `.spark/scf-lock.json`. Aggiornato automaticamente dopo ogni install/remove.
+- `spark/core/models.py`: aggiunti `SparkErrorResult` e `SparkDiagnosticResult`
+  TypedDict — schemi standard per payload di errore e diagnostica dei tool MCP.
+- `spark/cli/doctor.py`: nuovo modulo `run_doctor()` — diagnostica avanzata con
+  6 verifiche (github_root, manifest, engine_version, update_policy, spark_dir,
+  lockfile). Supporta `fix=True` per riparazione automatica e `report=True`
+  per output JSON. Integrato nel menu CLI come opzione 6 (scf doctor).
 
 ### Changed
 
@@ -78,6 +89,13 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
   aggiornato per verificare assenza di sezioni `###` duplicate invece di
   richiedere `[Unreleased]` vuoto; la nuova semantica riflette il workflow
   in cui `[Unreleased]` è usato come staging area per la prossima release.
+
+### Deprecated
+
+- `spark/boot/wizard.py`: `run_wizard()` marcato deprecated dalla versione 3.6.0.
+  Emette `DeprecationWarning` a runtime. Il boot path raccomandato è
+  `spark.cli.startup` e `spark.cli.main`. Il modulo resta mantenuto per
+  compatibilità retroattiva e test dedicati.
 
 ***
 

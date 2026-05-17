@@ -19,8 +19,9 @@ _MENU_TEXT = """\
 3. Sfoglia e installa plugin dal registro
 4. Verifica e applica aggiornamenti
 5. Diagnostica e stato sistema
+6. scf doctor (diagnostica avanzata)
 0. Esci
-Scegli [0-5]:"""
+Scegli [0-6]:"""
 
 
 def main() -> None:
@@ -64,8 +65,10 @@ def _run_main() -> None:
             _cmd_updates(github_root, engine_root)
         elif choice == "5":
             _cmd_diagnostics(github_root, engine_root)
+        elif choice == "6":
+            _cmd_doctor(github_root, engine_root)
         else:
-            print("Scelta non valida. Inserisci un numero tra 0 e 5.")
+            print("Scelta non valida. Inserisci un numero tra 0 e 6.")
 
 
 def _load_workspace_config() -> Path | None:
@@ -238,3 +241,21 @@ def _cmd_diagnostics(github_root: Path, engine_root: Path) -> None:
         print(f"  ENGINE_VERSION: {ENGINE_VERSION}")
     except Exception:  # noqa: BLE001
         pass
+
+
+def _cmd_doctor(github_root: Path, engine_root: Path) -> None:
+    """Avvia la diagnostica avanzata scf doctor.
+
+    Args:
+        github_root: Root ``.github/`` del workspace.
+        engine_root: Root del motore SPARK.
+    """
+    print("\nSCF Doctor — avvio diagnostica...")
+    fix_input = input("Attivare modalità --fix (riparazione automatica)? [s/N]: ").strip().lower()
+    fix = fix_input in ("s", "si", "sì", "y", "yes")
+    report_input = input("Emettere report JSON su stdout? [s/N]: ").strip().lower()
+    report = report_input in ("s", "si", "sì", "y", "yes")
+
+    from spark.cli.doctor import run_doctor  # noqa: PLC0415
+
+    run_doctor(github_root, engine_root, fix=fix, report=report)

@@ -7,6 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Tutti i test in questo modulo sopprimono il DeprecationWarning prodotto da
+# run_wizard() (deprecato dalla 3.6.0) — eccetto test_wizard_emits_deprecation_warning.
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 # ---------------------------------------------------------------------------
 # Helper: ricarica il modulo per ogni test (evita stato condiviso tra test)
 # ---------------------------------------------------------------------------
@@ -156,3 +160,18 @@ def test_wizard_treats_unknown_input_as_skip(tmp_path: Path) -> None:
 
     assert result["step_1"] == "skipped"
     mock_os.system.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 5. DeprecationWarning (TASK 4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.filterwarnings("error::DeprecationWarning")
+def test_wizard_emits_deprecation_warning(tmp_path: Path) -> None:
+    """run_wizard() emette DeprecationWarning dalla versione 3.6.0."""
+    mod = _load_wizard()
+    (tmp_path / ".scf-init-done").touch()  # già inizializzato → ritorna subito
+
+    with pytest.warns(DeprecationWarning, match="3.6.0"):
+        mod.run_wizard(cwd=tmp_path)

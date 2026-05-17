@@ -69,6 +69,8 @@ def run_wizard(
     """Esegue la wizard interattiva di onboarding SPARK.
 
     Deprecated:
+        Deprecato dalla versione 3.6.0. Usa ``spark.cli.startup`` e
+        ``spark.cli.main`` come boot path raccomandato.
         I launcher runtime del repository usano il boot path unificato basato
         su ``spark.cli.startup`` e ``spark.cli.main``. Questa funzione resta
         mantenuta per compatibilita' e test diretti.
@@ -96,6 +98,14 @@ def run_wizard(
                 "step_3": ...,
             }
     """
+    import warnings  # noqa: PLC0415
+
+    warnings.warn(
+        "spark.boot.wizard.run_wizard è deprecato dalla versione 3.6.0. "
+        "Usa spark.cli.startup o spark.cli.main come boot path raccomandato.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     base: Path = cwd if cwd is not None else Path.cwd()
     get_input: Callable[[str], str] = _input if _input is not None else input
 
