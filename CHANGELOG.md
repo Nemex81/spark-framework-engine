@@ -10,6 +10,27 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com) e il versioning 
 
 ## [Unreleased]
 
+### Added
+
+- `spark/core/constants.py`: aggiunta costante `_BOOTSTRAP_UPDATE_MODES`
+  (sottoinsieme di `_ALLOWED_UPDATE_MODES` per `scf_bootstrap_workspace`).
+- `spark/core/models.py`: aggiunto `SparkToolResult` TypedDict come schema
+  dichiarativo standard per i payload restituiti dai tool MCP SPARK.
+- `spark/cli/main.py`: `_cmd_diagnostics()` estesa con verifica di
+  `_ALLOWED_UPDATE_MODES`, `_BOOTSTRAP_UPDATE_MODES`, `update_policy.json`
+  e sentinelle bootstrap (Agent-Welcome.md, AGENTS.md). Ogni blocco è
+  protetto da `try/except` per diagnostica parziale non fatale.
+
+### Changed
+
+- `spark/core/constants.py`: `_ALLOWED_UPDATE_MODES` allineata alla realtà
+  operativa: aggiunto `"ask_later"` (mancante, usato da `scf_bootstrap_workspace`).
+  Valore `"replace"` mantenuto per retrocompatibilità con `scf_install_package`
+  e `scf_update_package`. Valore `"selective"` mantenuto come riservato a tool futuri.
+- `spark/boot/tools_bootstrap.py`: blocco di validazione `update_mode` in
+  `scf_bootstrap_workspace` ora usa `_BOOTSTRAP_UPDATE_MODES` da
+  `spark.core.constants` invece di una lista inline locale.
+
 ### Removed
 
 - `spark/boot/tools_plugins.py`: rimossi tool deprecated `scf_list_plugins` e

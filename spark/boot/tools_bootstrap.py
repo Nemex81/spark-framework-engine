@@ -602,7 +602,8 @@ def register_bootstrap_tools(
                 ),
             }
         normalized_bootstrap_mode = update_mode.strip().lower()
-        allowed_bootstrap_modes = {"", "ask", "integrative", "conservative", "ask_later"}
+        from spark.core.constants import _BOOTSTRAP_UPDATE_MODES  # noqa: PLC0415
+        allowed_bootstrap_modes: frozenset[str] = _BOOTSTRAP_UPDATE_MODES | {""}
         if normalized_bootstrap_mode not in allowed_bootstrap_modes:
             return {
                 **base_result,

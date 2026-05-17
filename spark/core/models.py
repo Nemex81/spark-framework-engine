@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 
 @dataclass(frozen=True)
@@ -54,3 +54,23 @@ class MergeResult:
     merged_text: str
     conflicts: tuple[MergeConflict, ...] = ()
     sections: tuple[str | MergeConflict, ...] = ()
+
+
+class SparkToolResult(TypedDict, total=False):
+    """Envelope standard per i payload restituiti dai tool MCP SPARK.
+
+    Tutti i campi sono opzionali (total=False) per retrocompatibilità
+    con i tool esistenti. I nuovi tool devono popolare almeno:
+    success, status, message.
+
+    I tool esistenti migrano gradualmente verso questo schema nelle
+    release successive.
+    """
+
+    success: bool
+    status: str
+    message: str
+    data: dict
+    warnings: list
+    actions_required: list
+    metadata: dict

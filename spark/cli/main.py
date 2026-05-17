@@ -182,6 +182,45 @@ def _cmd_diagnostics(github_root: Path, engine_root: Path) -> None:
     print(f"  github_root esiste: {github_root.is_dir()}")
 
     try:
+        from spark.core.constants import (  # noqa: PLC0415
+            _ALLOWED_UPDATE_MODES,
+            _BOOTSTRAP_UPDATE_MODES,
+        )
+
+        print(f"  _ALLOWED_UPDATE_MODES: {sorted(_ALLOWED_UPDATE_MODES)}")
+        print(f"  _BOOTSTRAP_UPDATE_MODES: {sorted(_BOOTSTRAP_UPDATE_MODES)}")
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("[SPARK-ENGINE][CLI] Errore lettura update modes: %s", exc)
+
+    try:
+        import json  # noqa: PLC0415
+
+        policy_file = github_root / "runtime" / "update_policy.json"
+        if policy_file.is_file():
+            with policy_file.open(encoding="utf-8") as fh:
+                policy_data = json.load(fh)
+            print(f"  update_policy auto_update: {policy_data.get('auto_update')}")
+            print(f"  update_policy default_mode: {policy_data.get('default_mode')}")
+        else:
+            print("  update_policy.json: assente")
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("[SPARK-ENGINE][CLI] Errore lettura update_policy.json: %s", exc)
+
+    try:
+        sentinel_welcome = github_root / "agents" / "Agent-Welcome.md"
+        sentinel_agents = github_root / "AGENTS.md"
+        print(
+            "  .github/agents/Agent-Welcome.md: "
+            f"{'presente' if sentinel_welcome.is_file() else 'assente'}"
+        )
+        print(
+            "  .github/AGENTS.md: "
+            f"{'presente' if sentinel_agents.is_file() else 'assente'}"
+        )
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("[SPARK-ENGINE][CLI] Errore verifica sentinelle bootstrap: %s", exc)
+
+    try:
         from spark.manifest.manifest import ManifestManager  # noqa: PLC0415
 
         manifest = ManifestManager(github_root)

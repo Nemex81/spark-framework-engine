@@ -25,8 +25,18 @@ _USER_PREFS_FILENAME: str = "user-prefs.json"
 # Runtime directory configuration
 # ---------------------------------------------------------------------------
 _SPARK_RUNTIME_DIR_ENV: str = "SPARK_RUNTIME_DIR"
+
+# Fonte di verità per i modi di aggiornamento accettati dai tool MCP.
+# I tool devono validare i propri parametri update_mode contro questa
+# costante — nessuna lista inline locale è autorizzata.
 _ALLOWED_UPDATE_MODES: frozenset[str] = frozenset(
-    {"ask", "integrative", "replace", "conservative", "selective"}
+    {"ask", "integrative", "replace", "conservative", "ask_later", "selective"}
+)
+
+# Sottoinsieme accettato da scf_bootstrap_workspace (esclude "selective"
+# che è riservato a tool futuri e il valore vuoto "" gestito come default).
+_BOOTSTRAP_UPDATE_MODES: frozenset[str] = frozenset(
+    {"ask", "integrative", "conservative", "ask_later"}
 )
 
 
